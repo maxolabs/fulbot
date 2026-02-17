@@ -2,10 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, User, Settings, LogOut } from 'lucide-react'
+import { Menu, X, User, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils/cn'
-import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -35,15 +34,14 @@ export function Header({ user }: HeaderProps) {
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo */}
         <div className="flex items-center gap-2">
           <Link href="/groups" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
-              F
-            </div>
-            <span className="font-bold text-lg hidden sm:block">FUTBOT</span>
+            <span className="text-xl font-black tracking-tight">
+              ful<span className="text-primary">bot</span>
+            </span>
           </Link>
         </div>
 
@@ -54,9 +52,9 @@ export function Header({ user }: HeaderProps) {
               key={item.name}
               href={item.href}
               className={cn(
-                'text-sm font-medium transition-colors hover:text-primary',
+                'text-sm font-medium transition-colors hover:text-foreground',
                 pathname.startsWith(item.href)
-                  ? 'text-primary'
+                  ? 'text-foreground'
                   : 'text-muted-foreground'
               )}
             >
@@ -66,12 +64,12 @@ export function Header({ user }: HeaderProps) {
         </div>
 
         {/* User Menu */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {user ? (
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
               >
                 <Avatar
                   src={user.avatar_url}
@@ -86,8 +84,8 @@ export function Header({ user }: HeaderProps) {
                     className="fixed inset-0 z-10"
                     onClick={() => setUserMenuOpen(false)}
                   />
-                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-md bg-card border shadow-lg">
-                    <div className="px-4 py-3 border-b">
+                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl bg-card border border-border/50 shadow-lg shadow-black/20">
+                    <div className="px-4 py-3 border-b border-border/50">
                       <p className="text-sm font-medium">{user.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {user.email}
@@ -97,22 +95,14 @@ export function Header({ user }: HeaderProps) {
                       <Link
                         href="/profile"
                         onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-lg mx-1 transition-colors"
                       >
-                        <User className="h-4 w-4" />
+                        <User className="h-4 w-4 text-muted-foreground" />
                         Mi perfil
-                      </Link>
-                      <Link
-                        href="/settings"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent"
-                      >
-                        <Settings className="h-4 w-4" />
-                        Configuración
                       </Link>
                       <button
                         onClick={handleSignOut}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-accent rounded-lg mx-1 transition-colors"
                       >
                         <LogOut className="h-4 w-4" />
                         Cerrar sesión
@@ -123,23 +113,24 @@ export function Header({ user }: HeaderProps) {
               )}
             </div>
           ) : (
-            <Link href="/login">
-              <Button variant="outline" size="sm">
-                Iniciar sesión
-              </Button>
+            <Link
+              href="/login"
+              className="rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-card hover:border-border"
+            >
+              Iniciar sesión
             </Link>
           )}
 
           {/* Mobile menu button */}
           <button
             type="button"
-            className="md:hidden rounded-md p-2 hover:bg-accent"
+            className="md:hidden rounded-lg p-2 hover:bg-accent transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             ) : (
-              <Menu className="h-6 w-6" />
+              <Menu className="h-5 w-5" />
             )}
           </button>
         </div>
@@ -147,7 +138,7 @@ export function Header({ user }: HeaderProps) {
 
       {/* Mobile Navigation */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t">
+        <div className="md:hidden border-t border-border/50">
           <div className="space-y-1 px-4 py-3">
             {navigation.map((item) => (
               <Link
@@ -155,7 +146,7 @@ export function Header({ user }: HeaderProps) {
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
-                  'block rounded-md px-3 py-2 text-base font-medium',
+                  'block rounded-lg px-3 py-2.5 text-base font-medium transition-colors',
                   pathname.startsWith(item.href)
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-accent'

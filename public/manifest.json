@@ -1,6 +1,6 @@
 {
-  "name": "FUTBOT - Organiza tus partidos",
-  "short_name": "FUTBOT",
+  "name": "fulbot — Organiza tus partidos",
+  "short_name": "fulbot",
   "description": "Organiza partidos de fútbol amateur con tus amigos",
   "start_url": "/groups",
   "display": "standalone",
