@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { CopyButton } from '@/components/ui/copy-button'
 import { SignupList } from './signup-list'
 import { SignupActions } from './signup-actions'
 import { MatchAdminActions } from './match-admin-actions'
@@ -362,17 +363,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <code className="bg-muted px-3 py-1.5 rounded text-sm truncate max-w-[200px]">
                   {signupUrl}
                 </code>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined') {
-                      navigator.clipboard.writeText(signupUrl)
-                    }
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+                <CopyButton text={signupUrl} />
               </div>
             </div>
           </CardContent>

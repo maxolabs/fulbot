@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { CopyButton } from '@/components/ui/copy-button'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
@@ -261,17 +262,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
               <code className="bg-muted px-3 py-1.5 rounded text-sm truncate max-w-[200px]">
                 {inviteUrl}
               </code>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (typeof navigator !== 'undefined') {
-                    navigator.clipboard.writeText(inviteUrl)
-                  }
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
+              <CopyButton text={inviteUrl} />
             </div>
           </div>
         </CardContent>
