@@ -56,35 +56,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's player profile
-    const { data: playerProfile } = (await supabase
-      .from('player_profiles')
-      .select('id')
-      .eq('user_id', user.id)
-      .single()) as { data: { id: string } | null }
-
-    if (!playerProfile) {
-      return NextResponse.json(
-        { error: 'Perfil de jugador no encontrado' },
-        { status: 400 }
-      )
-    }
-
-    // Create the group
+    // Create group with admin membership via RPC (bypasses RLS)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: group, error: groupError } = await (supabase as any)
-      .from('groups')
-      .insert({
-        name,
-        slug,
-        description: description || null,
-        default_match_day: defaultMatchDay ?? 1, // Monday by default
-        default_match_time: defaultMatchTime || '21:00',
-        default_max_players: defaultMaxPlayers || 14,
-        created_by_user_id: user.id,
+      .rpc('create_group_with_admin', {
+        p_name: name,
+        p_slug: slug,
+        p_description: description || null,
+        p_default_match_day: defaultMatchDay ?? 1,
+        p_default_match_time: defaultMatchTime || '21:00',
+        p_default_max_players: defaultMaxPlayers || 14,
       })
-      .select()
-      .single()
 
     if (groupError) {
       console.error('Error creating group:', groupError)
@@ -93,33 +75,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-
-    // Add creator as admin
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: membershipError } = await (supabase as any)
-      .from('group_memberships')
-      .insert({
-        group_id: group.id,
-        player_id: playerProfile.id,
-        role: 'admin',
-      })
-
-    if (membershipError) {
-      console.error('Error creating membership:', membershipError)
-      // Try to delete the group if membership creation fails
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('groups').delete().eq('id', group.id)
-      return NextResponse.json(
-        { error: 'Error al crear la membresía' },
-        { status: 500 }
-      )
-    }
-
-    // Create default notification settings
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('notification_settings').insert({
-      group_id: group.id,
-    })
 
     return NextResponse.json({ group, slug: group.slug }, { status: 201 })
   } catch (error) {
