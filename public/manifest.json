@@ -1,0 +1,26 @@
+{
+  "name": "FUTBOT - Organiza tus partidos",
+  "short_name": "FUTBOT",
+  "description": "Organiza partidos de fútbol amateur con tus amigos",
+  "start_url": "/groups",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#22c55e",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
