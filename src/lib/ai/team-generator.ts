@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
 export interface PlayerInput {
   id: string
@@ -37,22 +37,6 @@ export interface GeneratedTeams {
   warnings: string[]
 }
 
-const POSITION_DESCRIPTIONS: Record<string, string> = {
-  GK: 'Goalkeeper - last line of defense',
-  CB: 'Center Back - central defender',
-  LB: 'Left Back - left side defender',
-  RB: 'Right Back - right side defender',
-  CDM: 'Defensive Midfielder - shields defense',
-  CM: 'Central Midfielder - box-to-box player',
-  CAM: 'Attacking Midfielder - creative playmaker',
-  LM: 'Left Midfielder - left side midfield',
-  RM: 'Right Midfielder - right side midfield',
-  LW: 'Left Winger - left attacking flank',
-  RW: 'Right Winger - right attacking flank',
-  ST: 'Striker - main goal scorer',
-  CF: 'Center Forward - target man',
-}
-
 function buildPrompt(
   players: PlayerInput[],
   rules: RuleInput[],
@@ -67,7 +51,7 @@ function buildPrompt(
   Rating: ${p.overallRating.toFixed(1)}/5 | Positions: ${positions} | ${foot}
   GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus}
   Stats: ${p.matchesPlayed} matches, ${p.goals} goals, ${p.assists} assists
-  ${p.isGuest ? '(Guest player - less known)' : ''}`
+  ${p.isGuest ? '(Guest player - less known, use average defaults)' : ''}`
   }).join('\n')
 
   const rulesDescription = rules.length > 0
@@ -140,19 +124,19 @@ export async function generateTeams(
   rules: RuleInput[] = [],
   teamSize?: number
 ): Promise<GeneratedTeams> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
+    throw new Error('OPENAI_API_KEY is not configured')
   }
 
-  const client = new Anthropic({ apiKey })
+  const client = new OpenAI({ apiKey })
 
   const calculatedTeamSize = teamSize || Math.floor(players.length / 2)
   const prompt = buildPrompt(players, rules, calculatedTeamSize)
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 2048,
     messages: [
       {
@@ -162,15 +146,14 @@ export async function generateTeams(
     ],
   })
 
-  // Extract text content from response
-  const textContent = message.content.find((block) => block.type === 'text')
-  if (!textContent || textContent.type !== 'text') {
-    throw new Error('No text response from Claude')
+  const textContent = response.choices[0]?.message?.content
+  if (!textContent) {
+    throw new Error('No text response from OpenAI')
   }
 
   // Parse JSON response
   try {
-    const result = JSON.parse(textContent.text) as GeneratedTeams
+    const result = JSON.parse(textContent) as GeneratedTeams
 
     // Validate the response
     if (!result.dark || !result.light || !Array.isArray(result.dark) || !Array.isArray(result.light)) {
@@ -193,7 +176,7 @@ export async function generateTeams(
 
     return result
   } catch (parseError) {
-    console.error('Failed to parse Claude response:', textContent.text)
+    console.error('Failed to parse OpenAI response:', textContent)
     throw new Error('Failed to parse team generation response')
   }
 }

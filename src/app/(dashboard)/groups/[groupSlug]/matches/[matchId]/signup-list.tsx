@@ -11,12 +11,18 @@ interface Signup {
   position_preference: string | null
   notes: string | null
   waitlist_position: number | null
+  player_id: string | null
+  guest_player_id: string | null
   player_profiles: {
     id: string
     display_name: string
     nickname: string | null
     main_position: string
     overall_rating: number
+  } | null
+  guest_players: {
+    id: string
+    display_name: string
   } | null
 }
 
@@ -61,9 +67,14 @@ export function SignupList({
     <div className="space-y-2">
       {signups.map((signup, index) => {
         const player = signup.player_profiles
-        if (!player) return null
+        const guest = signup.guest_players
 
-        const isCurrentUser = player.id === currentPlayerId
+        if (!player && !guest) return null
+
+        const isGuest = !!guest && !player
+        const displayName = player?.display_name || guest?.display_name || 'Desconocido'
+        const playerId = player?.id || guest?.id || ''
+        const isCurrentUser = !isGuest && player?.id === currentPlayerId
 
         return (
           <div
@@ -78,26 +89,35 @@ export function SignupList({
               </span>
             )}
 
-            <Avatar fallback={player.display_name} size="sm" />
+            <Avatar fallback={displayName} size="sm" />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className={`text-sm font-medium truncate ${isCurrentUser ? 'text-primary' : ''}`}>
-                  {player.display_name}
-                  {player.nickname && (
+                  {displayName}
+                  {player?.nickname && (
                     <span className="text-muted-foreground ml-1">({player.nickname})</span>
                   )}
                 </span>
                 {isCurrentUser && (
                   <Badge variant="secondary" className="text-xs">Tú</Badge>
                 )}
+                {isGuest && (
+                  <Badge variant="outline" className="text-xs">Invitado</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{POSITION_LABELS[player.main_position] || player.main_position}</span>
-                <span className="flex items-center gap-0.5">
-                  <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                  {player.overall_rating.toFixed(1)}
-                </span>
+                {player ? (
+                  <>
+                    <span>{POSITION_LABELS[player.main_position] || player.main_position}</span>
+                    <span className="flex items-center gap-0.5">
+                      <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                      {player.overall_rating.toFixed(1)}
+                    </span>
+                  </>
+                ) : (
+                  <span>Jugador invitado</span>
+                )}
               </div>
             </div>
 

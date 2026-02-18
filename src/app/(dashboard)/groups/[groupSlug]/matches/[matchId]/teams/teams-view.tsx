@@ -18,12 +18,14 @@ interface Player {
   nickname: string | null
   mainPosition: string
   overallRating: number
+  isGuest?: boolean
 }
 
 interface Assignment {
   id: string
   team_id: string
-  player_id: string
+  player_id: string | null
+  guest_player_id: string | null
   position: string
   order_index: number
 }
@@ -93,18 +95,20 @@ export function TeamsView({
     }
   }
 
-  // Get players by team
-  const darkPlayers = darkTeam.assignments.map((a) => ({
-    ...players.find((p) => p.id === a.player_id)!,
-    position: a.position,
-    assignmentId: a.id,
-  })).filter(Boolean)
+  // Get players by team (match by player_id or guest_player_id)
+  const darkPlayers = darkTeam.assignments.map((a) => {
+    const id = a.player_id || a.guest_player_id
+    const player = players.find((p) => p.id === id)
+    if (!player) return null
+    return { ...player, position: a.position, assignmentId: a.id }
+  }).filter(Boolean) as (Player & { position: string; assignmentId: string })[]
 
-  const lightPlayers = lightTeam.assignments.map((a) => ({
-    ...players.find((p) => p.id === a.player_id)!,
-    position: a.position,
-    assignmentId: a.id,
-  })).filter(Boolean)
+  const lightPlayers = lightTeam.assignments.map((a) => {
+    const id = a.player_id || a.guest_player_id
+    const player = players.find((p) => p.id === id)
+    if (!player) return null
+    return { ...player, position: a.position, assignmentId: a.id }
+  }).filter(Boolean) as (Player & { position: string; assignmentId: string })[]
 
   // Calculate team stats
   const darkAvgRating = darkPlayers.length > 0
@@ -117,8 +121,8 @@ export function TeamsView({
 
   // Get unassigned players
   const assignedIds = new Set([
-    ...darkTeam.assignments.map((a) => a.player_id),
-    ...lightTeam.assignments.map((a) => a.player_id),
+    ...darkTeam.assignments.map((a) => a.player_id || a.guest_player_id),
+    ...lightTeam.assignments.map((a) => a.player_id || a.guest_player_id),
   ])
   const unassignedPlayers = players.filter((p) => !assignedIds.has(p.id))
 
@@ -141,7 +145,7 @@ export function TeamsView({
                 <div>
                   <p className="font-medium">Generar equipos con IA</p>
                   <p className="text-sm text-muted-foreground">
-                    Claude analiza jugadores y arma equipos equilibrados
+                    La IA analiza jugadores y arma equipos equilibrados
                   </p>
                 </div>
               </div>

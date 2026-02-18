@@ -67,16 +67,21 @@ export default async function TeamsPage({ params }: PageProps) {
 
   if (!match) return notFound()
 
-  // Get confirmed signups with player info
+  // Get confirmed signups with player info (registered + guests)
   type SignupResult = {
     id: string
-    player_id: string
+    player_id: string | null
+    guest_player_id: string | null
     player_profiles: {
       id: string
       display_name: string
       nickname: string | null
       main_position: string
       overall_rating: number
+    } | null
+    guest_players: {
+      id: string
+      display_name: string
     } | null
   }
 
@@ -85,26 +90,44 @@ export default async function TeamsPage({ params }: PageProps) {
     .select(`
       id,
       player_id,
+      guest_player_id,
       player_profiles (
         id,
         display_name,
         nickname,
         main_position,
         overall_rating
+      ),
+      guest_players (
+        id,
+        display_name
       )
     `)
     .eq('match_id', matchId)
     .eq('status', 'confirmed') as { data: SignupResult[] | null }
 
   const players = (signups || [])
-    .filter((s) => s.player_profiles !== null)
-    .map((s) => ({
-      id: s.player_profiles!.id,
-      displayName: s.player_profiles!.display_name,
-      nickname: s.player_profiles!.nickname,
-      mainPosition: s.player_profiles!.main_position,
-      overallRating: s.player_profiles!.overall_rating,
-    }))
+    .filter((s) => s.player_profiles !== null || s.guest_players !== null)
+    .map((s) => {
+      if (s.player_profiles) {
+        return {
+          id: s.player_profiles.id,
+          displayName: s.player_profiles.display_name,
+          nickname: s.player_profiles.nickname,
+          mainPosition: s.player_profiles.main_position,
+          overallRating: s.player_profiles.overall_rating,
+          isGuest: false,
+        }
+      }
+      return {
+        id: s.guest_players!.id,
+        displayName: s.guest_players!.display_name,
+        nickname: null,
+        mainPosition: 'CM',
+        overallRating: 2.5,
+        isGuest: true,
+      }
+    })
 
   // Get existing teams if any
   type TeamResult = {
@@ -122,7 +145,8 @@ export default async function TeamsPage({ params }: PageProps) {
   type AssignmentResult = {
     id: string
     team_id: string
-    player_id: string
+    player_id: string | null
+    guest_player_id: string | null
     position: string
     order_index: number
   }
@@ -137,7 +161,7 @@ export default async function TeamsPage({ params }: PageProps) {
     if (darkTeam) {
       const { data: darkAssignments } = await supabase
         .from('team_assignments')
-        .select('id, team_id, player_id, position, order_index')
+        .select('id, team_id, player_id, guest_player_id, position, order_index')
         .eq('team_id', darkTeam.id)
         .order('order_index') as { data: AssignmentResult[] | null }
       darkTeamAssignments = darkAssignments || []
@@ -146,7 +170,7 @@ export default async function TeamsPage({ params }: PageProps) {
     if (lightTeam) {
       const { data: lightAssignments } = await supabase
         .from('team_assignments')
-        .select('id, team_id, player_id, position, order_index')
+        .select('id, team_id, player_id, guest_player_id, position, order_index')
         .eq('team_id', lightTeam.id)
         .order('order_index') as { data: AssignmentResult[] | null }
       lightTeamAssignments = lightAssignments || []

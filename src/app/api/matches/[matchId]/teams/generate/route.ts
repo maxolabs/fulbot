@@ -52,10 +52,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'No tenés permiso para armar equipos' }, { status: 403 })
     }
 
-    // Get confirmed signups with player profiles
+    // Get confirmed signups with player profiles and guest players
     type SignupWithPlayer = {
       id: string
-      player_id: string
+      player_id: string | null
+      guest_player_id: string | null
       player_profiles: {
         id: string
         display_name: string
@@ -71,6 +72,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         goals: number
         assists: number
       } | null
+      guest_players: {
+        id: string
+        display_name: string
+      } | null
     }
 
     const { data: signups } = await supabase
@@ -78,6 +83,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .select(`
         id,
         player_id,
+        guest_player_id,
         player_profiles (
           id,
           display_name,
@@ -92,6 +98,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
           matches_played,
           goals,
           assists
+        ),
+        guest_players (
+          id,
+          display_name
         )
       `)
       .eq('match_id', matchId)
@@ -104,24 +114,45 @@ export async function POST(request: NextRequest, context: RouteContext) {
       )
     }
 
-    // Convert to PlayerInput format
+    // Convert to PlayerInput format (registered players + guests)
     const players: PlayerInput[] = signups
-      .filter((s) => s.player_profiles !== null)
-      .map((s) => ({
-        id: s.player_profiles!.id,
-        displayName: s.player_profiles!.display_name,
-        nickname: s.player_profiles!.nickname,
-        mainPosition: s.player_profiles!.main_position,
-        preferredPositions: s.player_profiles!.preferred_positions,
-        overallRating: s.player_profiles!.overall_rating,
-        footedness: s.player_profiles!.footedness,
-        goalkeeperWillingness: s.player_profiles!.goalkeeper_willingness,
-        fitnessStatus: s.player_profiles!.fitness_status,
-        reliabilityScore: s.player_profiles!.reliability_score,
-        matchesPlayed: s.player_profiles!.matches_played,
-        goals: s.player_profiles!.goals,
-        assists: s.player_profiles!.assists,
-      }))
+      .filter((s) => s.player_profiles !== null || s.guest_players !== null)
+      .map((s) => {
+        if (s.player_profiles) {
+          return {
+            id: s.player_profiles.id,
+            displayName: s.player_profiles.display_name,
+            nickname: s.player_profiles.nickname,
+            mainPosition: s.player_profiles.main_position,
+            preferredPositions: s.player_profiles.preferred_positions,
+            overallRating: s.player_profiles.overall_rating,
+            footedness: s.player_profiles.footedness,
+            goalkeeperWillingness: s.player_profiles.goalkeeper_willingness,
+            fitnessStatus: s.player_profiles.fitness_status,
+            reliabilityScore: s.player_profiles.reliability_score,
+            matchesPlayed: s.player_profiles.matches_played,
+            goals: s.player_profiles.goals,
+            assists: s.player_profiles.assists,
+          }
+        }
+        // Guest player with sensible defaults
+        return {
+          id: s.guest_players!.id,
+          displayName: s.guest_players!.display_name,
+          nickname: null,
+          mainPosition: 'CM',
+          preferredPositions: ['CM', 'ST', 'CB'],
+          overallRating: 2.5,
+          footedness: 'right' as const,
+          goalkeeperWillingness: 1,
+          fitnessStatus: 'ok' as const,
+          reliabilityScore: 50,
+          matchesPlayed: 0,
+          goals: 0,
+          assists: 0,
+          isGuest: true,
+        }
+      })
 
     // Get rules for this group/match
     type RuleRow = {
@@ -187,10 +218,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw lightError
     }
 
+    // Build a set of guest player IDs for assignment mapping
+    const guestPlayerIds = new Set(
+      signups.filter(s => s.guest_player_id).map(s => s.guest_players!.id)
+    )
+
     // Create team assignments for dark team
     const darkAssignments = generatedTeams.dark.map((a, index) => ({
       team_id: darkTeam.id,
-      player_id: a.playerId,
+      player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
+      guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
       position: a.position,
       order_index: index,
       source: 'ai',
@@ -204,7 +241,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Create team assignments for light team
     const lightAssignments = generatedTeams.light.map((a, index) => ({
       team_id: lightTeam.id,
-      player_id: a.playerId,
+      player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
+      guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
       position: a.position,
       order_index: index,
       source: 'ai',

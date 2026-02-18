@@ -99,7 +99,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!match) return notFound()
 
-  // Get signups with player info
+  // Get signups with player info (both registered and guest players)
   type SignupResult = {
     id: string
     status: string
@@ -107,12 +107,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
     position_preference: string | null
     notes: string | null
     waitlist_position: number | null
+    player_id: string | null
+    guest_player_id: string | null
     player_profiles: {
       id: string
       display_name: string
       nickname: string | null
       main_position: string
       overall_rating: number
+    } | null
+    guest_players: {
+      id: string
+      display_name: string
     } | null
   }
 
@@ -125,12 +131,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
       position_preference,
       notes,
       waitlist_position,
+      player_id,
+      guest_player_id,
       player_profiles (
         id,
         display_name,
         nickname,
         main_position,
         overall_rating
+      ),
+      guest_players (
+        id,
+        display_name
       )
     `)
     .eq('match_id', matchId)
