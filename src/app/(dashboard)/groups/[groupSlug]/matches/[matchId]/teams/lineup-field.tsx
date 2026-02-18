@@ -175,7 +175,7 @@ export function LineupField({ players, teamColor }: LineupFieldProps) {
             className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-lg border-2 ${
               isDark
                 ? 'bg-gray-800 text-white border-gray-600'
-                : 'bg-white text-gray-800 border-gray-300'
+                : 'bg-gray-100 text-gray-900 border-gray-400 shadow-white/30'
             }`}
           >
             {player.position}
@@ -183,7 +183,7 @@ export function LineupField({ players, teamColor }: LineupFieldProps) {
           {/* Player name */}
           <div
             className={`px-2 py-0.5 rounded text-[10px] font-medium max-w-[80px] truncate ${
-              isDark ? 'bg-gray-800/90 text-white' : 'bg-white/90 text-gray-800'
+              isDark ? 'bg-gray-800/90 text-white' : 'bg-gray-100/95 text-gray-900'
             }`}
           >
             {player.nickname || player.displayName.split(' ')[0]}

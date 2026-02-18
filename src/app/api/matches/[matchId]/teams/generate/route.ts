@@ -234,9 +234,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }))
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { error: darkAssignError } = await (supabase as any)
       .from('team_assignments')
       .insert(darkAssignments)
+
+    if (darkAssignError) {
+      console.error('Error inserting dark team assignments:', darkAssignError)
+      throw darkAssignError
+    }
 
     // Create team assignments for light team
     const lightAssignments = generatedTeams.light.map((a, index) => ({
@@ -249,9 +254,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }))
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { error: lightAssignError } = await (supabase as any)
       .from('team_assignments')
       .insert(lightAssignments)
+
+    if (lightAssignError) {
+      console.error('Error inserting light team assignments:', lightAssignError)
+      throw lightAssignError
+    }
 
     // Update match status to teams_created
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -282,11 +282,11 @@ export function TeamsView({
               </Card>
 
               {/* Light Team */}
-              <Card className="border-2 border-gray-300">
-                <CardHeader className="bg-gray-100">
-                  <CardTitle className="flex items-center justify-between">
+              <Card className="border-2 border-gray-400/50">
+                <CardHeader className="bg-gray-300 dark:bg-gray-600">
+                  <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
                     <span>Equipo Claro</span>
-                    <Badge variant="outline">
+                    <Badge variant="secondary" className="bg-white/30">
                       {lightPlayers.length} jugadores · {lightAvgRating.toFixed(1)} avg
                     </Badge>
                   </CardTitle>
