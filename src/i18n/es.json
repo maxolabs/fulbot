@@ -86,6 +86,8 @@
     "nextMatch": "Próximo partido",
     "noUpcomingMatch": "Sin partidos programados",
     "nextMatchSummary": "{day} {time} · {confirmed}/{max} confirmados",
+    "mvpNudgeTitle": "Votá el MVP de {group} — {date}",
+    "mvpNudgeSubtitle": "Elegí al mejor jugador del partido",
     "roles": {
       "admin": "Admin",
       "captain": "Capitán",

@@ -9,6 +9,7 @@ import {
   Edit,
   Share2,
   Copy,
+  Trophy,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -105,10 +106,22 @@ export default async function MatchDetailPage({ params }: PageProps) {
       max_players: number
       notes: string | null
       results_finalized: boolean
+      mvp_player_id: string | null
       created_at: string
     } | null }
 
   if (!match) return notFound()
+
+  // Current MVP (if voted) - shown with a trophy in the header
+  let mvpPlayerName: string | null = null
+  if (match.mvp_player_id) {
+    const { data: mvpPlayer } = await supabase
+      .from('player_profiles')
+      .select('display_name')
+      .eq('id', match.mvp_player_id)
+      .single() as { data: { display_name: string } | null }
+    mvpPlayerName = mvpPlayer?.display_name ?? null
+  }
 
   // Get signups with player info (both registered and guest players)
   type SignupResult = {
@@ -157,13 +170,45 @@ export default async function MatchDetailPage({ params }: PageProps) {
       )
     `)
     .eq('match_id', matchId)
-    .in('status', ['confirmed', 'waitlist'])
+    .in('status', ['confirmed', 'waitlist', 'did_not_show'])
     .order('signup_time') as { data: SignupResult[] | null }
 
   const confirmedSignups = (signups || []).filter(s => s.status === 'confirmed')
+  const noShowSignups = (signups || []).filter(s => s.status === 'did_not_show')
   const waitlistSignups = (signups || [])
     .filter(s => s.status === 'waitlist')
     .sort((a, b) => (a.waitlist_position || 0) - (b.waitlist_position || 0))
+
+  // On a finished match, no-shows stay visible in the confirmed list so
+  // admins can toggle them back; before that they simply don't exist yet.
+  const confirmedListSignups = match.status === 'finished'
+    ? [...confirmedSignups, ...noShowSignups].sort((a, b) => a.signup_time.localeCompare(b.signup_time))
+    : confirmedSignups
+
+  // Badges for everyone shown in the signup lists (up to 3 icons each in SignupList)
+  const listedPlayerIds = Array.from(new Set(
+    [...confirmedListSignups, ...waitlistSignups]
+      .map(s => s.player_profiles?.id)
+      .filter((id): id is string => !!id)
+  ))
+
+  const badgesByPlayer: Record<string, string[]> = {}
+  if (listedPlayerIds.length > 0) {
+    const { data: badgeRows } = await supabase
+      .from('player_badges')
+      .select('player_id, badge_type, earned_at')
+      .in('player_id', listedPlayerIds)
+      .order('earned_at', { ascending: false }) as {
+        data: { player_id: string; badge_type: string; earned_at: string }[] | null
+      }
+
+    for (const row of badgeRows || []) {
+      if (!badgesByPlayer[row.player_id]) badgesByPlayer[row.player_id] = []
+      if (badgesByPlayer[row.player_id].length < 3) {
+        badgesByPlayer[row.player_id].push(row.badge_type)
+      }
+    }
+  }
 
   // Get all group members for rules and voting
   type MemberProfile = {
@@ -330,6 +375,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <Badge variant={statusVariant}>{statusLabel}</Badge>
           </div>
 
+          {mvpPlayerName && (
+            <p className="flex items-center gap-1.5 text-sm text-yellow-600 dark:text-yellow-500 mb-2">
+              <Trophy className="h-4 w-4" />
+              MVP: {mvpPlayerName}
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
@@ -420,10 +472,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </CardHeader>
             <CardContent>
               <SignupList
-                signups={confirmedSignups}
+                signups={confirmedListSignups}
                 currentPlayerId={playerProfile.id}
                 emptyMessage="Nadie se inscribió todavía"
                 isAdminOrCaptain={isAdminOrCaptain}
+                matchStatus={match.status}
+                badgesByPlayer={badgesByPlayer}
               />
             </CardContent>
           </Card>
@@ -443,6 +497,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   showWaitlistPosition
                   emptyMessage="No hay nadie en espera"
                   isAdminOrCaptain={isAdminOrCaptain}
+                  badgesByPlayer={badgesByPlayer}
                 />
               </CardContent>
             </Card>
@@ -487,6 +542,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
               matchId={match.id}
               currentPlayerId={playerProfile.id}
               players={matchPlayers}
+              matchDateTime={match.date_time}
             />
           )}
         </div>
