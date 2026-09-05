@@ -16,6 +16,7 @@ export type Database = {
           name: string
           avatar_url: string | null
           preferred_language: 'es' | 'en'
+          notification_prefs: Json
           created_at: string
           updated_at: string
         }
@@ -25,6 +26,7 @@ export type Database = {
           name: string
           avatar_url?: string | null
           preferred_language?: 'es' | 'en'
+          notification_prefs?: Json
           created_at?: string
           updated_at?: string
         }
@@ -34,6 +36,7 @@ export type Database = {
           name?: string
           avatar_url?: string | null
           preferred_language?: 'es' | 'en'
+          notification_prefs?: Json
           created_at?: string
           updated_at?: string
         }

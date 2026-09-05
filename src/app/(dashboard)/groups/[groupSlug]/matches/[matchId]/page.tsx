@@ -24,21 +24,23 @@ import { RulesManager } from './rules-manager'
 import { RealtimeWrapper } from './realtime-wrapper'
 import { MatchResults } from './match-results'
 import { MatchScoreDisplay } from './match-score-display'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/use-translations'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
 }
 
-const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  draft: { label: 'Borrador', variant: 'outline' },
-  signup_open: { label: 'Inscripción abierta', variant: 'default' },
-  signup_closed: { label: 'Inscripción cerrada', variant: 'outline' },
-  full: { label: 'Completo', variant: 'secondary' },
-  teams_created: { label: 'Equipos armados', variant: 'default' },
-  finished: { label: 'Finalizado', variant: 'outline' },
-  cancelled: { label: 'Cancelado', variant: 'destructive' },
+const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  draft: 'outline',
+  signup_open: 'default',
+  signup_closed: 'outline',
+  full: 'secondary',
+  teams_created: 'default',
+  finished: 'outline',
+  cancelled: 'destructive',
 }
 
 export default async function MatchDetailPage({ params }: PageProps) {
@@ -48,6 +50,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+
+  const t = getT(userData?.preferred_language ?? 'es')
 
   // Get user's player profile
   const { data: playerProfile } = await supabase
@@ -293,7 +303,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   const date = new Date(match.date_time)
   const isPast = date < new Date()
-  const statusConfig = STATUS_CONFIG[match.status] || STATUS_CONFIG.draft
+  const statusVariant = STATUS_VARIANTS[match.status] || STATUS_VARIANTS.draft
+  const statusLabel = t(`matches.status.${match.status}`)
 
   const signupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
 
@@ -306,7 +317,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Volver a {group.name}
+          {t('common.backTo', { name: group.name })}
         </Link>
 
       {/* Match Header */}
@@ -314,9 +325,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-2xl font-bold tracking-tight">
-              {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}
+              {t(`days.${DAY_KEYS[date.getDay()]}`)} {date.toLocaleDateString('es-AR')}
             </h1>
-            <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -332,7 +343,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             )}
             <span className="flex items-center gap-1.5">
               <Users className="h-4 w-4" />
-              {confirmedSignups.length}/{match.max_players} jugadores
+              {confirmedSignups.length}/{match.max_players} {t('matches.playersLabel')}
             </span>
           </div>
         </div>
@@ -342,7 +353,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <Link href={`/groups/${groupSlug}/matches/${matchId}/edit`}>
               <Button variant="outline" size="sm">
                 <Edit className="mr-2 h-4 w-4" />
-                Editar
+                {t('common.edit')}
               </Button>
             </Link>
           </div>

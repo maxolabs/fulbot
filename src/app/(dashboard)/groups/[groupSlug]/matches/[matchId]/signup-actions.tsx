@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/types/database'
+import { useT } from '@/i18n/provider'
 
 interface SignupActionsProps {
   matchId: string
@@ -28,6 +29,7 @@ export function SignupActions({
 }: SignupActionsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,14 +52,14 @@ export function SignupActions({
       router.refresh()
     } catch (err) {
       console.error('Error signing up:', err)
-      setError('Error al inscribirse. Intenta de nuevo.')
+      setError(t('matches.signupError'))
     } finally {
       setLoading(false)
     }
   }
 
   const handleCancel = async () => {
-    if (!confirm('¿Estás seguro de que querés bajarte del partido?')) {
+    if (!confirm(t('matches.confirmCancelSignup'))) {
       return
     }
 
@@ -77,7 +79,7 @@ export function SignupActions({
       router.refresh()
     } catch (err) {
       console.error('Error canceling signup:', err)
-      setError('Error al bajarse. Intenta de nuevo.')
+      setError(t('matches.cancelError'))
     } finally {
       setLoading(false)
     }
@@ -98,22 +100,22 @@ export function SignupActions({
             <div>
               <p className="font-medium">
                 {matchStatus === 'signup_closed'
-                  ? 'Las inscripciones están cerradas'
+                  ? t('matches.signupClosedTitle')
                   : isFull
-                    ? 'El partido está completo'
-                    : 'Inscribite al partido'}
+                    ? t('matches.matchFull')
+                    : t('matches.signupPrompt')}
               </p>
               <p className="text-sm text-muted-foreground">
                 {matchStatus === 'signup_closed'
-                  ? 'El admin todavía no las volvió a abrir'
+                  ? t('matches.signupClosedSubtitle')
                   : isFull
-                    ? 'Podés anotarte en la lista de espera'
-                    : 'Hay lugar disponible'}
+                    ? t('matches.canJoinWaitlist')
+                    : t('matches.spotsAvailable')}
               </p>
             </div>
             <Button onClick={handleSignUp} disabled={loading || !canSignUp}>
               {loading && <Spinner size="sm" className="mr-2" />}
-              {isFull ? 'Anotarme en espera' : 'Inscribirme'}
+              {isFull ? t('matches.joinWaitlist') : t('matches.signup')}
             </Button>
           </div>
         </CardContent>
@@ -136,15 +138,15 @@ export function SignupActions({
             <div className="flex items-center gap-3">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <div>
-                <p className="font-medium text-green-700">Estás inscripto</p>
+                <p className="font-medium text-green-700">{t('matches.signedUp')}</p>
                 <p className="text-sm text-muted-foreground">
-                  Tenés tu lugar confirmado
+                  {t('matches.confirmedSpot')}
                 </p>
               </div>
             </div>
             <Button variant="outline" onClick={handleCancel} disabled={loading}>
               {loading && <Spinner size="sm" className="mr-2" />}
-              Bajarme
+              {t('matches.leaveMatch')}
             </Button>
           </div>
         </CardContent>
@@ -168,16 +170,16 @@ export function SignupActions({
               <Clock className="h-5 w-5 text-yellow-600" />
               <div>
                 <p className="font-medium text-yellow-700">
-                  Estás en la lista de espera
+                  {t('matches.onWaitlist')}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Posición #{currentSignup.waitlistPosition} - Te avisaremos si se libera un lugar
+                  {t('matches.waitlistPositionDetail', { position: currentSignup.waitlistPosition ?? 0 })}
                 </p>
               </div>
             </div>
             <Button variant="outline" onClick={handleCancel} disabled={loading}>
               {loading && <Spinner size="sm" className="mr-2" />}
-              Salir de espera
+              {t('matches.leaveWaitlist')}
             </Button>
           </div>
         </CardContent>

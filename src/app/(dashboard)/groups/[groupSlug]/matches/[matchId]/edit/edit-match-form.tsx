@@ -8,19 +8,23 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { combineDateTimeInTimezone } from '@/lib/utils/datetime'
+import { useT } from '@/i18n/provider'
 
-interface CreateMatchFormProps {
-  groupId: string
+interface EditMatchFormProps {
+  matchId: string
   groupSlug: string
   timezone: string
   defaults: {
     date: string
     time: string
+    location: string
     maxPlayers: number
+    notes: string
   }
 }
 
-export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: CreateMatchFormProps) {
+export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMatchFormProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
 
@@ -29,10 +33,9 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
 
   const [date, setDate] = useState(defaults.date)
   const [time, setTime] = useState(defaults.time)
-  const [location, setLocation] = useState('')
+  const [location, setLocation] = useState(defaults.location)
   const [maxPlayers, setMaxPlayers] = useState(defaults.maxPlayers)
-  const [notes, setNotes] = useState('')
-  const [openSignup, setOpenSignup] = useState(true)
+  const [notes, setNotes] = useState(defaults.notes)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,32 +43,27 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
     setError(null)
 
     try {
-      // Combine date and time into an ISO datetime, honoring the group's timezone
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: match, error: insertError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('matches')
-        .insert({
-          group_id: groupId,
+        .update({
           date_time: dateTime,
           location: location || null,
           max_players: maxPlayers,
           notes: notes || null,
-          status: openSignup ? 'signup_open' : 'draft',
         })
-        .select('id')
-        .single()
+        .eq('id', matchId)
 
-      if (insertError) {
-        throw insertError
+      if (updateError) {
+        throw updateError
       }
 
-      router.push(`/groups/${groupSlug}/matches/${match.id}`)
+      router.push(`/groups/${groupSlug}/matches/${matchId}`)
       router.refresh()
     } catch (err) {
-      console.error('Error creating match:', err)
-      setError('Error al crear el partido')
+      console.error('Error updating match:', err)
+      setError(t('common.error'))
     } finally {
       setLoading(false)
     }
@@ -81,7 +79,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="date">Fecha</Label>
+          <Label htmlFor="date">{t('matches.date')}</Label>
           <Input
             id="date"
             type="date"
@@ -92,7 +90,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="time">Hora</Label>
+          <Label htmlFor="time">{t('matches.time')}</Label>
           <Input
             id="time"
             type="time"
@@ -105,7 +103,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="location">Lugar (opcional)</Label>
+        <Label htmlFor="location">{t('matches.location')}</Label>
         <Input
           id="location"
           value={location}
@@ -117,7 +115,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="maxPlayers">Jugadores máximo</Label>
+        <Label htmlFor="maxPlayers">{t('matches.maxPlayers')}</Label>
         <Input
           id="maxPlayers"
           type="number"
@@ -128,13 +126,10 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           required
           disabled={loading}
         />
-        <p className="text-xs text-muted-foreground">
-          Cuando se alcance el límite, los siguientes quedarán en lista de espera
-        </p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="notes">Notas (opcional)</Label>
+        <Label htmlFor="notes">{t('matches.notes')}</Label>
         <textarea
           id="notes"
           value={notes}
@@ -147,26 +142,10 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
         />
       </div>
 
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={openSignup}
-          onChange={(e) => setOpenSignup(e.target.checked)}
-          disabled={loading}
-          className="h-4 w-4 rounded border-input"
-        />
-        <div>
-          <p className="text-sm font-medium">Abrir inscripciones inmediatamente</p>
-          <p className="text-xs text-muted-foreground">
-            Si no, el partido quedará como borrador
-          </p>
-        </div>
-      </label>
-
       <div className="flex gap-3">
         <Button type="submit" disabled={loading}>
           {loading && <Spinner size="sm" className="mr-2" />}
-          Crear partido
+          {t('common.save')}
         </Button>
         <Button
           type="button"
@@ -174,7 +153,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           onClick={() => router.back()}
           disabled={loading}
         >
-          Cancelar
+          {t('common.cancel')}
         </Button>
       </div>
     </form>

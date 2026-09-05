@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, User, LogOut } from 'lucide-react'
+import { Menu, X, User, LogOut, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils/cn'
 import { Avatar } from '@/components/ui/avatar'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useT } from '@/i18n/provider'
 
 interface HeaderProps {
   user?: {
@@ -23,6 +24,7 @@ export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -30,7 +32,7 @@ export function Header({ user }: HeaderProps) {
   }
 
   const navigation = [
-    { name: 'Grupos', href: '/groups' },
+    { name: t('nav.groups'), href: '/groups' },
   ]
 
   return (
@@ -98,14 +100,22 @@ export function Header({ user }: HeaderProps) {
                         className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-lg mx-1 transition-colors"
                       >
                         <User className="h-4 w-4 text-muted-foreground" />
-                        Mi perfil
+                        {t('nav.profile')}
+                      </Link>
+                      <Link
+                        href="/settings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-lg mx-1 transition-colors"
+                      >
+                        <Settings className="h-4 w-4 text-muted-foreground" />
+                        {t('nav.settings')}
                       </Link>
                       <button
                         onClick={handleSignOut}
                         className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-accent rounded-lg mx-1 transition-colors"
                       >
                         <LogOut className="h-4 w-4" />
-                        Cerrar sesión
+                        {t('nav.logout')}
                       </button>
                     </div>
                   </div>
@@ -117,7 +127,7 @@ export function Header({ user }: HeaderProps) {
               href="/login"
               className="rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-card hover:border-border"
             >
-              Iniciar sesión
+              {t('nav.login')}
             </Link>
           )}
 

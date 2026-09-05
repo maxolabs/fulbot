@@ -6,7 +6,9 @@ const config: Config = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  // Always dark mode via globals.css root variables
+  // Theme is driven by the .dark class on <html> (set server-side from the
+  // fulbot_theme cookie in the root layout), not by prefers-color-scheme.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

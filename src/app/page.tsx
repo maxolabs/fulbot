@@ -1,7 +1,15 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { Users, Brain, BarChart3, ChevronRight } from 'lucide-react'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/use-translations'
 
-export default function Home() {
+export default async function Home() {
+  const cookieStore = await cookies()
+  const langCookie = cookieStore.get('fulbot_lang')?.value
+  const language: Language = langCookie === 'en' ? 'en' : 'es'
+  const t = getT(language)
+
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden">
       {/* Background gradient effects */}
@@ -18,7 +26,7 @@ export default function Home() {
             <span className="text-primary">bot</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-xs mx-auto">
-            Organiza partidos de fútbol con tus amigos
+            {t('landing.tagline')}
           </p>
         </div>
 
@@ -27,18 +35,18 @@ export default function Home() {
           {[
             {
               icon: Users,
-              title: 'Inscripción rápida',
-              desc: 'Compartí el link y que se anoten desde el celular',
+              title: t('landing.featureSignupTitle'),
+              desc: t('landing.featureSignupDesc'),
             },
             {
               icon: Brain,
-              title: 'Equipos con IA',
-              desc: 'Genera equipos balanceados automáticamente',
+              title: t('landing.featureTeamsTitle'),
+              desc: t('landing.featureTeamsDesc'),
             },
             {
               icon: BarChart3,
-              title: 'Estadísticas',
-              desc: 'Goles, asistencias, MVPs y más',
+              title: t('landing.featureStatsTitle'),
+              desc: t('landing.featureStatsDesc'),
             },
           ].map((feature) => (
             <div
@@ -63,19 +71,19 @@ export default function Home() {
             href="/register"
             className="flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground transition-all hover:brightness-110 glow-sm hover:glow-md"
           >
-            Crear cuenta
+            {t('auth.createAccount')}
           </Link>
           <Link
             href="/login"
             className="flex items-center justify-center rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm px-6 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-card hover:border-border"
           >
-            Iniciar sesión
+            {t('auth.login')}
           </Link>
         </div>
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground/60">
-          Hecho para organizar partidos de fútbol amateur
+          {t('landing.footer')}
         </p>
       </div>
     </main>
