@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { Json } from '@/types/database'
+import type { ResultsPostedPayload } from '@/lib/notifications/types'
 
 interface TeamPlayer {
   id: string
@@ -35,6 +37,7 @@ interface GoalEntry {
 
 interface MatchResultsProps {
   matchId: string
+  groupId: string
   teams: TeamData[]
   existingEvents: {
     id: string
@@ -47,7 +50,7 @@ interface MatchResultsProps {
   resultsFinalized: boolean
 }
 
-export function MatchResults({ matchId, teams, existingEvents, resultsFinalized }: MatchResultsProps) {
+export function MatchResults({ matchId, groupId, teams, existingEvents, resultsFinalized }: MatchResultsProps) {
   const router = useRouter()
   const supabase = createClient()
   const [goals, setGoals] = useState<GoalEntry[]>([])
@@ -210,6 +213,24 @@ export function MatchResults({ matchId, teams, existingEvents, resultsFinalized 
         .rpc('finalize_match_results', { p_match_id: matchId })
 
       if (rpcError) throw rpcError
+
+      // Emit results_posted (T5, §2.6). Non-fatal: results were already saved.
+      const darkScore = darkTeam ? getTeamGoals(darkTeam.id).length : 0
+      const lightScore = lightTeam ? getTeamGoals(lightTeam.id).length : 0
+      const resultsPostedPayload: ResultsPostedPayload = {
+        match_id: matchId,
+        dark_score: darkScore,
+        light_score: lightScore,
+      }
+      const { error: notifyError } = await supabase.rpc('emit_notification', {
+        p_group_id: groupId,
+        p_match_id: matchId,
+        p_type: 'results_posted',
+        p_payload: resultsPostedPayload as unknown as Json,
+      })
+      if (notifyError) {
+        console.error('Error emitting results_posted notification:', notifyError)
+      }
 
       setFinalized(true)
       router.refresh()

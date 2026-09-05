@@ -8,6 +8,7 @@ import {
   MatchHistoryEntry,
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
+import type { TeamsCreatedPayload } from '@/lib/notifications/types'
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
@@ -292,6 +293,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (updateError) {
       console.error('Error updating match after team generation:', updateError)
       // The teams were already saved, so this is a soft failure - keep going.
+    }
+
+    // Emit teams_created (T5, §2.6). emit_notification is SECURITY DEFINER,
+    // so the user client is enough here - it honors notification_settings
+    // itself. Non-fatal: the teams were already saved and persisted above.
+    const playerNameById = new Map(players.map((p) => [p.id, p.displayName]))
+    const teamsCreatedPayload: TeamsCreatedPayload = {
+      match_id: matchId,
+      dark_team_names: generatedTeams.dark.map((a) => playerNameById.get(a.playerId) ?? 'Jugador'),
+      light_team_names: generatedTeams.light.map((a) => playerNameById.get(a.playerId) ?? 'Jugador'),
+    }
+
+    const { error: notifyError } = await supabase.rpc('emit_notification', {
+      p_group_id: match.group_id,
+      p_match_id: matchId,
+      p_type: 'teams_created',
+      p_payload: teamsCreatedPayload as unknown as Json,
+    })
+
+    if (notifyError) {
+      console.error('Error emitting teams_created notification:', notifyError)
     }
 
     return NextResponse.json({

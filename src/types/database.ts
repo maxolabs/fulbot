@@ -606,6 +606,81 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          id: string
+          group_id: string
+          match_id: string | null
+          recipient_player_id: string | null
+          type: string
+          payload: Json
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          match_id?: string | null
+          recipient_player_id?: string | null
+          type: string
+          payload?: Json
+          read_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          match_id?: string | null
+          recipient_player_id?: string | null
+          type?: string
+          payload?: Json
+          read_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      notification_outbox: {
+        Row: {
+          id: string
+          group_id: string
+          match_id: string | null
+          type: string
+          payload: Json
+          channel: string
+          status: string
+          attempts: number
+          last_error: string | null
+          created_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          match_id?: string | null
+          type: string
+          payload?: Json
+          channel?: string
+          status?: string
+          attempts?: number
+          last_error?: string | null
+          created_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          match_id?: string | null
+          type?: string
+          payload?: Json
+          channel?: string
+          status?: string
+          attempts?: number
+          last_error?: string | null
+          created_at?: string
+          sent_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -762,6 +837,25 @@ export type Database = {
           light_team_players: Json | null
         }[]
       }
+      emit_notification: {
+        Args: {
+          p_group_id: string
+          p_match_id: string | null
+          p_type: string
+          p_payload: Json
+        }
+        Returns: undefined
+      }
+      mark_notifications_read: {
+        Args: {
+          p_ids: string[]
+        }
+        Returns: undefined
+      }
+      get_unread_notification_count: {
+        Args: Record<string, never>
+        Returns: number
+      }
     }
     Enums: {
       user_language: 'es' | 'en'
@@ -794,6 +888,8 @@ export type RuleSet = Database['public']['Tables']['rule_sets']['Row']
 export type NotificationSettings = Database['public']['Tables']['notification_settings']['Row']
 export type PlayerBadge = Database['public']['Tables']['player_badges']['Row']
 export type MatchEvent = Database['public']['Tables']['match_events']['Row']
+export type Notification = Database['public']['Tables']['notifications']['Row']
+export type NotificationOutboxRow = Database['public']['Tables']['notification_outbox']['Row']
 
 // Type for group with role
 export type GroupWithRole = Group & {
