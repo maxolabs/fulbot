@@ -3,15 +3,23 @@
 -- Adds:
 --   - notifications: one row per in-app event, either group-wide
 --     (recipient_player_id NULL) or targeted at a single player.
+--   - notification_reads: per-(notification, player) read-state join table.
+--     Group-wide notifications (match_created, teams_created, results_posted)
+--     are one row shared by every member, so read state cannot live on that
+--     row itself -- otherwise the first member to hit "Marcar todo como
+--     leído" would mark it read for the whole group. Targeted notifications
+--     use the same table for consistency, so callers never need to branch.
 --   - notification_outbox: queued external deliveries (WhatsApp webhook today),
 --     drained by GET /api/cron/notifications.
 --   - emit_notification(): the single SECURITY DEFINER entry point every
---     event goes through; honors notification_settings toggles and enqueues
---     an outbox row when the group has a whatsapp_webhook_url configured.
+--     event goes through; requires the caller to be a member of p_group_id
+--     (or the service role, for cron/system callers); honors
+--     notification_settings toggles and enqueues an outbox row when the
+--     group has a whatsapp_webhook_url configured.
 --   - promote_from_waitlist() is CREATE OR REPLACEd (same signature as
 --     00007_signup_flow.sql) to also emit 'waitlist_promoted'.
 --   - mark_notifications_read() / get_unread_notification_count() for the
---     bell icon and /notifications page.
+--     bell icon and /notifications page, backed by notification_reads.
 
 -- ============================================
 -- TABLES
@@ -24,7 +32,6 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     recipient_player_id UUID REFERENCES public.player_profiles(id) ON DELETE CASCADE, -- NULL = whole group
     type TEXT NOT NULL,
     payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-    read_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -32,7 +39,19 @@ CREATE INDEX IF NOT EXISTS idx_notifications_group_id ON public.notifications(gr
 CREATE INDEX IF NOT EXISTS idx_notifications_match_id ON public.notifications(match_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_player_id ON public.notifications(recipient_player_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(group_id, read_at) WHERE read_at IS NULL;
+
+-- Per-(notification, player) read state -- see file header. A row's presence
+-- means that player has read that notification; absence means unread. This
+-- is what makes "unread" per-user even for group-wide rows (recipient_player_id
+-- IS NULL) shared by every member.
+CREATE TABLE IF NOT EXISTS public.notification_reads (
+    notification_id UUID NOT NULL REFERENCES public.notifications(id) ON DELETE CASCADE,
+    player_id UUID NOT NULL REFERENCES public.player_profiles(id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (notification_id, player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_reads_player_id ON public.notification_reads(player_id);
 
 CREATE TABLE IF NOT EXISTS public.notification_outbox (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,12 +75,14 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_group_id ON public.notificati
 -- ============================================
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notification_reads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_outbox ENABLE ROW LEVEL SECURITY;
 
 -- Members read notifications for their groups: group-wide rows (recipient
--- NULL) plus rows targeted at their own player id. No INSERT policy on
+-- NULL) plus rows targeted at their own player id. No INSERT/UPDATE policy on
 -- purpose -- every row is written by emit_notification (SECURITY DEFINER),
--- never directly by a client.
+-- never directly by a client. Read state lives in notification_reads, not on
+-- this table, so there is no "mark read" policy here either.
 DROP POLICY IF EXISTS "Members can read their group's notifications" ON public.notifications;
 CREATE POLICY "Members can read their group's notifications"
     ON public.notifications FOR SELECT
@@ -70,14 +91,18 @@ CREATE POLICY "Members can read their group's notifications"
         AND (recipient_player_id IS NULL OR recipient_player_id = get_current_player_id())
     );
 
--- Members can mark their own targeted notifications read directly (the
--- mark_notifications_read RPC is the normal path and also covers group-wide
--- rows via its own SECURITY DEFINER logic).
+-- Drop the old direct-UPDATE read policy from when read state lived on
+-- notifications.read_at -- writes now go through notification_reads only.
 DROP POLICY IF EXISTS "Members can mark their own notifications read" ON public.notifications;
-CREATE POLICY "Members can mark their own notifications read"
-    ON public.notifications FOR UPDATE
-    USING (recipient_player_id = get_current_player_id())
-    WITH CHECK (recipient_player_id = get_current_player_id());
+
+-- Players can see and write only their own read markers. mark_notifications_read
+-- (SECURITY DEFINER) is the normal write path, but these policies also let a
+-- player read their own read state directly if ever needed.
+DROP POLICY IF EXISTS "Players manage their own notification reads" ON public.notification_reads;
+CREATE POLICY "Players manage their own notification reads"
+    ON public.notification_reads FOR ALL
+    USING (player_id = get_current_player_id())
+    WITH CHECK (player_id = get_current_player_id());
 
 -- notification_outbox has no policies at all: it is only ever touched by
 -- emit_notification (SECURITY DEFINER) and the cron route's admin client
@@ -101,6 +126,19 @@ DECLARE
 BEGIN
     IF p_group_id IS NULL OR p_type IS NULL THEN
         RETURN;
+    END IF;
+
+    -- Authorization: the caller must be a member of the target group, or be
+    -- the service role (cron/recurring, cron/reminders and the match-created
+    -- helper all emit via the admin/service-role client on behalf of the
+    -- whole system, not a single acting member). Without this, any
+    -- authenticated user could call this SECURITY DEFINER RPC directly with
+    -- an arbitrary p_group_id and forge notifications/webhook sends into a
+    -- group they don't belong to. Mirrors the same-shaped check in
+    -- generate_recurring_matches (00010_recurring_matches.sql).
+    IF COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') <> 'service_role'
+       AND NOT is_group_member(p_group_id) THEN
+        RAISE EXCEPTION 'No sos miembro de este grupo';
     END IF;
 
     SELECT * INTO v_settings FROM public.notification_settings WHERE group_id = p_group_id;
@@ -238,12 +276,16 @@ BEGIN
         RETURN;
     END IF;
 
-    UPDATE public.notifications n
-    SET read_at = NOW()
+    -- Per-player read marker (see notification_reads above) -- never touches
+    -- notifications itself, so marking read never affects other members'
+    -- unread state for the same group-wide row.
+    INSERT INTO public.notification_reads (notification_id, player_id)
+    SELECT n.id, v_player_id
+    FROM public.notifications n
     WHERE n.id = ANY(p_ids)
-      AND n.read_at IS NULL
       AND is_group_member(n.group_id)
-      AND (n.recipient_player_id IS NULL OR n.recipient_player_id = v_player_id);
+      AND (n.recipient_player_id IS NULL OR n.recipient_player_id = v_player_id)
+    ON CONFLICT (notification_id, player_id) DO NOTHING;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -262,8 +304,11 @@ BEGIN
     FROM public.notifications n
     JOIN public.group_memberships gm
         ON gm.group_id = n.group_id AND gm.player_id = v_player_id AND gm.is_active = TRUE
-    WHERE n.read_at IS NULL
-      AND (n.recipient_player_id IS NULL OR n.recipient_player_id = v_player_id);
+    WHERE (n.recipient_player_id IS NULL OR n.recipient_player_id = v_player_id)
+      AND NOT EXISTS (
+          SELECT 1 FROM public.notification_reads nr
+          WHERE nr.notification_id = n.id AND nr.player_id = v_player_id
+      );
 
     RETURN COALESCE(v_count, 0);
 END;

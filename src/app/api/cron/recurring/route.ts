@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 
-// Daily sweep (see vercel.json) that materializes the next match instance for
-// every active recurring pattern, across all groups. Also called lazily,
-// scoped to one group, from the group page server component -- this route is
-// only the scheduled, all-groups trigger (see docs/rework-plan.md §2.4).
+// Sweep that materializes the next match instance for every active
+// recurring pattern, across all groups. Also called lazily, scoped to one
+// group, from the group page server component. Not registered in
+// vercel.json directly -- Vercel Hobby only allows one daily cron, so this
+// runs as one step of the consolidated GET /api/cron/daily route (see
+// docs/rework-plan.md §2.4/§2.6). Kept standalone for manual/local invocation.
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const expected = `Bearer ${process.env.CRON_SECRET}`

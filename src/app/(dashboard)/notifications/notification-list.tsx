@@ -12,6 +12,7 @@ import type { NotificationEvent, NotificationRow } from '@/lib/notifications/typ
 interface NotificationItem extends NotificationRow {
   groupSlug: string | null
   groupName: string
+  isRead: boolean
 }
 
 const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
@@ -50,8 +51,12 @@ export function NotificationList({
   prefs: Record<string, boolean>
 }) {
   const supabase = createClient()
+  // Read state comes from notification_reads (per-player), passed in as
+  // isRead -- never from a shared column on the notification row itself, so
+  // marking read here never affects other members' unread state for the
+  // same group-wide notification.
   const [readIds, setReadIds] = useState<Set<string>>(
-    () => new Set(items.filter((n) => n.read_at).map((n) => n.id))
+    () => new Set(items.filter((n) => n.isRead).map((n) => n.id))
   )
   const [marking, setMarking] = useState(false)
 

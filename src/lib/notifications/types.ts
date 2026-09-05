@@ -79,6 +79,5 @@ export interface NotificationRow {
   recipient_player_id: string | null
   type: NotificationType
   payload: NotificationPayloadMap[NotificationType]
-  read_at: string | null
   created_at: string
 }

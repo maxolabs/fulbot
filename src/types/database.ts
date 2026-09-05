@@ -614,7 +614,6 @@ export type Database = {
           recipient_player_id: string | null
           type: string
           payload: Json
-          read_at: string | null
           created_at: string
         }
         Insert: {
@@ -624,7 +623,6 @@ export type Database = {
           recipient_player_id?: string | null
           type: string
           payload?: Json
-          read_at?: string | null
           created_at?: string
         }
         Update: {
@@ -634,8 +632,25 @@ export type Database = {
           recipient_player_id?: string | null
           type?: string
           payload?: Json
-          read_at?: string | null
           created_at?: string
+        }
+        Relationships: []
+      }
+      notification_reads: {
+        Row: {
+          notification_id: string
+          player_id: string
+          read_at: string
+        }
+        Insert: {
+          notification_id: string
+          player_id: string
+          read_at?: string
+        }
+        Update: {
+          notification_id?: string
+          player_id?: string
+          read_at?: string
         }
         Relationships: []
       }
@@ -889,6 +904,7 @@ export type NotificationSettings = Database['public']['Tables']['notification_se
 export type PlayerBadge = Database['public']['Tables']['player_badges']['Row']
 export type MatchEvent = Database['public']['Tables']['match_events']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
+export type NotificationRead = Database['public']['Tables']['notification_reads']['Row']
 export type NotificationOutboxRow = Database['public']['Tables']['notification_outbox']['Row']
 
 // Type for group with role

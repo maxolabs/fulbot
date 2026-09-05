@@ -19,11 +19,17 @@ export default async function NotificationsPage() {
 
   const prefs = (userData?.notification_prefs ?? {}) as Record<string, boolean>
 
+  const { data: playerProfile } = await supabase
+    .from('player_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single() as { data: { id: string } | null }
+
   // RLS scopes this to the current player's visible rows (their groups,
   // recipient_player_id null or their own) -- see 00012_notifications.sql.
   const { data: notifications } = await supabase
     .from('notifications')
-    .select('id, group_id, match_id, recipient_player_id, type, payload, read_at, created_at')
+    .select('id, group_id, match_id, recipient_player_id, type, payload, created_at')
     .order('created_at', { ascending: false })
     .limit(100) as { data: NotificationRow[] | null }
 
@@ -37,10 +43,25 @@ export default async function NotificationsPage() {
 
   const groupById = new Map((groups ?? []).map((g) => [g.id, g]))
 
+  // Read state is per-(notification, player) -- see notification_reads in
+  // 00012_notifications.sql -- so it never leaks across group members
+  // sharing a group-wide row (match_created, teams_created, results_posted).
+  const { data: reads } =
+    playerProfile && rows.length > 0
+      ? await supabase
+          .from('notification_reads')
+          .select('notification_id')
+          .eq('player_id', playerProfile.id)
+          .in('notification_id', rows.map((n) => n.id))
+      : { data: [] as { notification_id: string }[] }
+
+  const readIds = new Set((reads ?? []).map((r) => r.notification_id))
+
   const items = rows.map((n) => ({
     ...n,
     groupSlug: groupById.get(n.group_id)?.slug ?? null,
     groupName: groupById.get(n.group_id)?.name ?? '',
+    isRead: readIds.has(n.id),
   }))
 
   return (
