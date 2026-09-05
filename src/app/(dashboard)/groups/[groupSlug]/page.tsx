@@ -145,6 +145,15 @@ export default async function GroupDetailPage({ params }: PageProps) {
       player: m.player_profiles
     }))
 
+  // Lazily materialize the next recurring-match instance for this group, in
+  // case the daily cron drifted or hasn't run yet (see docs/rework-plan.md
+  // §2.4). Best-effort: a failure here must never break the group page.
+  try {
+    await supabase.rpc('generate_recurring_matches', { p_group_id: group.id })
+  } catch {
+    // ignore
+  }
+
   // Get upcoming matches
   type MatchResult = {
     id: string

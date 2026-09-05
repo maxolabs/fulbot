@@ -137,6 +137,11 @@ rules manager, the generate route, and the generator read/write only these shape
 
 ### 2.4 Recurring matches (track T3 owns)
 
+> **Implemented** (00010_recurring_matches.sql, `/api/cron/recurring`, group-page lazy
+> call, settings editor, `MatchAnnouncement`). Caveat: Vercel Hobby only allows one daily
+> cron with up to ±59 min drift, so the lazy call from the group page is the real
+> safety net between cron runs.
+
 Table `recurring_patterns`:
 `id, group_id, weekday smallint (0=Sun), match_time time, location text, max_players
 smallint, signup_opens_weekday smallint, signup_opens_time time, timezone text,

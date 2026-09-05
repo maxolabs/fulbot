@@ -225,6 +225,54 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_patterns: {
+        Row: {
+          id: string
+          group_id: string
+          weekday: number
+          match_time: string
+          location: string | null
+          max_players: number
+          signup_opens_weekday: number
+          signup_opens_time: string
+          timezone: string
+          is_active: boolean
+          created_by_user_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          weekday: number
+          match_time: string
+          location?: string | null
+          max_players?: number
+          signup_opens_weekday: number
+          signup_opens_time: string
+          timezone?: string
+          is_active?: boolean
+          created_by_user_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          weekday?: number
+          match_time?: string
+          location?: string | null
+          max_players?: number
+          signup_opens_weekday?: number
+          signup_opens_time?: string
+          timezone?: string
+          is_active?: boolean
+          created_by_user_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       guest_players: {
         Row: {
           id: string
@@ -681,6 +729,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      generate_recurring_matches: {
+        Args: {
+          p_group_id?: string
+        }
+        Returns: number
+      }
       get_recent_match_history: {
         Args: {
           p_group_id: string
@@ -714,6 +768,7 @@ export type PlayerProfile = Database['public']['Tables']['player_profiles']['Row
 export type Group = Database['public']['Tables']['groups']['Row']
 export type GroupMembership = Database['public']['Tables']['group_memberships']['Row']
 export type Match = Database['public']['Tables']['matches']['Row']
+export type RecurringPattern = Database['public']['Tables']['recurring_patterns']['Row']
 export type GuestPlayer = Database['public']['Tables']['guest_players']['Row']
 export type MatchSignup = Database['public']['Tables']['match_signups']['Row']
 export type Team = Database['public']['Tables']['teams']['Row']

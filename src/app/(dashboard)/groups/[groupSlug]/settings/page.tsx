@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GroupSettingsForm } from './settings-form'
 import { MembersManager } from './members-manager'
 import { NotificationSettings } from './notification-settings'
+import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
 
 interface PageProps {
@@ -125,6 +126,15 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     whatsapp_webhook_url: null,
   }
 
+  // Get recurring pattern (one per group; UI creates/edits/deactivates it)
+  const { data: recurringPattern } = await supabase
+    .from('recurring_patterns')
+    .select('id, weekday, match_time, location, max_players, signup_opens_weekday, signup_opens_time, timezone, is_active')
+    .eq('group_id', group.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back button */}
@@ -183,6 +193,28 @@ export default async function GroupSettingsPage({ params }: PageProps) {
           <NotificationSettings
             groupId={group.id}
             settings={notifSettings}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Recurring Match */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Partido recurrente</CardTitle>
+          <CardDescription>
+            Configura el partido que se arma solo cada semana
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RecurringPatternForm
+            groupId={group.id}
+            groupDefaults={{
+              default_match_day: group.default_match_day,
+              default_match_time: group.default_match_time,
+              default_max_players: group.default_max_players,
+              timezone: group.timezone,
+            }}
+            pattern={recurringPattern}
           />
         </CardContent>
       </Card>
