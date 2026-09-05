@@ -59,9 +59,12 @@ export default async function TeamsPage({ params }: PageProps) {
       status: string
       max_players: number
       ai_input_snapshot: {
-        reasoning?: string
-        balanceScore?: number
-        warnings?: string[]
+        output?: {
+          reasoning?: string
+          balanceScore?: number
+          warnings?: string[]
+        }
+        provider?: 'openai' | 'fallback'
       } | null
     } | null }
 
@@ -212,9 +215,10 @@ export default async function TeamsPage({ params }: PageProps) {
           id: teams?.find((t) => t.name === 'light')?.id || null,
           assignments: lightTeamAssignments,
         }}
-        aiReasoning={match.ai_input_snapshot?.reasoning}
-        balanceScore={match.ai_input_snapshot?.balanceScore}
-        warnings={match.ai_input_snapshot?.warnings}
+        aiReasoning={match.ai_input_snapshot?.output?.reasoning}
+        balanceScore={match.ai_input_snapshot?.output?.balanceScore}
+        warnings={match.ai_input_snapshot?.output?.warnings}
+        provider={match.ai_input_snapshot?.provider}
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}
       />

@@ -7,20 +7,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { RuleSet, Json } from '@/types/database'
 
 interface Player {
   id: string
   display_name: string
 }
 
-interface Rule {
-  id: string
-  rule_type: string
-  data: Record<string, unknown>
-  is_active: boolean
+// Canonical rule_sets.data shapes (see docs/rework-plan.md §2.2):
+//   avoid_pair / force_pair -> { player_ids: [uuid, uuid] }
+//   min_defenders / min_goalkeepers -> { min_count: number }
+type RuleType = 'avoid_pair' | 'force_pair' | 'min_defenders' | 'min_goalkeepers'
+
+interface PairRuleData {
+  player_ids: [string, string]
+}
+
+interface MinCountRuleData {
+  min_count: number
 }
 
 interface RulesManagerProps {
@@ -29,7 +35,7 @@ interface RulesManagerProps {
   players: Player[]
 }
 
-const RULE_LABELS: Record<string, { label: string; icon: React.ReactNode; description: string }> = {
+const RULE_LABELS: Record<RuleType, { label: string; icon: React.ReactNode; description: string }> = {
   avoid_pair: {
     label: 'Separar jugadores',
     icon: <Ban className="h-4 w-4" />,
@@ -52,33 +58,38 @@ const RULE_LABELS: Record<string, { label: string; icon: React.ReactNode; descri
   },
 }
 
+function isPairRule(type: string): type is 'avoid_pair' | 'force_pair' {
+  return type === 'avoid_pair' || type === 'force_pair'
+}
+
+function isMinCountRule(type: string): type is 'min_defenders' | 'min_goalkeepers' {
+  return type === 'min_defenders' || type === 'min_goalkeepers'
+}
+
 export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
   const router = useRouter()
   const supabase = createClient()
-  const [rules, setRules] = useState<Rule[]>([])
+  const [rules, setRules] = useState<RuleSet[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [addingType, setAddingType] = useState<string | null>(null)
+  const [addingType, setAddingType] = useState<RuleType | null>(null)
 
   // Form state for pair rules
   const [playerA, setPlayerA] = useState('')
   const [playerB, setPlayerB] = useState('')
-  // Form state for min rules
+  // Form state for min-count rules
   const [minValue, setMinValue] = useState('1')
 
   useEffect(() => {
     const fetchRules = async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query = (supabase as any)
+      let query = supabase
         .from('rule_sets')
         .select('*')
         .eq('is_active', true)
 
-      if (matchId) {
-        query = query.or(`group_id.eq.${groupId},match_id.eq.${matchId}`)
-      } else {
-        query = query.eq('group_id', groupId).is('match_id', null)
-      }
+      query = matchId
+        ? query.or(`group_id.eq.${groupId},match_id.eq.${matchId}`)
+        : query.eq('group_id', groupId).is('match_id', null)
 
       const { data } = await query
       setRules(data || [])
@@ -92,27 +103,26 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
     setSaving(true)
 
     try {
-      let data: Record<string, unknown> = {}
+      let data: PairRuleData | MinCountRuleData
 
-      if (addingType === 'avoid_pair' || addingType === 'force_pair') {
+      if (isPairRule(addingType)) {
         if (!playerA || !playerB || playerA === playerB) {
           alert('Seleccioná dos jugadores diferentes')
           setSaving(false)
           return
         }
-        data = { player_id_a: playerA, player_id_b: playerB }
-      } else if (addingType === 'min_defenders' || addingType === 'min_goalkeepers') {
-        data = { min_count: parseInt(minValue) || 1 }
+        data = { player_ids: [playerA, playerB] }
+      } else {
+        data = { min_count: parseInt(minValue, 10) || 1 }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: newRule, error } = await (supabase as any)
+      const { data: newRule, error } = await supabase
         .from('rule_sets')
         .insert({
           group_id: groupId,
           match_id: matchId || null,
           rule_type: addingType,
-          data,
+          data: data as unknown as Json,
           is_active: true,
         })
         .select()
@@ -120,7 +130,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
 
       if (error) throw error
 
-      setRules(prev => [...prev, newRule])
+      setRules((prev) => [...prev, newRule])
       setAddingType(null)
       setPlayerA('')
       setPlayerB('')
@@ -128,34 +138,35 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
       router.refresh()
     } catch (err) {
       console.error('Error adding rule:', err)
-      alert('Error al agregar regla')
+      alert('No se pudo agregar la regla. Intentá de nuevo.')
     } finally {
       setSaving(false)
     }
   }
 
   const removeRule = async (ruleId: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('rule_sets')
       .update({ is_active: false })
       .eq('id', ruleId)
 
     if (!error) {
-      setRules(prev => prev.filter(r => r.id !== ruleId))
+      setRules((prev) => prev.filter((r) => r.id !== ruleId))
       router.refresh()
     }
   }
 
-  const getPlayerName = (id: string) =>
-    players.find(p => p.id === id)?.display_name || 'Desconocido'
+  const getPlayerName = (id: string | undefined) =>
+    players.find((p) => p.id === id)?.display_name || 'Desconocido'
 
-  const renderRuleDescription = (rule: Rule) => {
-    const d = rule.data as Record<string, string | number>
-    if (rule.rule_type === 'avoid_pair' || rule.rule_type === 'force_pair') {
-      return `${getPlayerName(d.player_id_a as string)} — ${getPlayerName(d.player_id_b as string)}`
+  const renderRuleDescription = (rule: RuleSet) => {
+    if (isPairRule(rule.rule_type)) {
+      const d = rule.data as unknown as PairRuleData
+      const [a, b] = d.player_ids || []
+      return `${getPlayerName(a)} — ${getPlayerName(b)}`
     }
-    if (rule.rule_type === 'min_defenders' || rule.rule_type === 'min_goalkeepers') {
+    if (isMinCountRule(rule.rule_type)) {
+      const d = rule.data as unknown as MinCountRuleData
       return `Mínimo: ${d.min_count} por equipo`
     }
     return JSON.stringify(rule.data)
@@ -185,15 +196,21 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
         )}
 
         {rules.map((rule) => {
-          const config = RULE_LABELS[rule.rule_type]
+          const config = RULE_LABELS[rule.rule_type as RuleType]
           return (
             <div key={rule.id} className="flex items-center gap-3 p-3 rounded-lg border">
-              <span className="text-muted-foreground">{config?.icon}</span>
-              <div className="flex-1">
+              <span className="text-muted-foreground shrink-0">{config?.icon}</span>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{config?.label || rule.rule_type}</p>
-                <p className="text-xs text-muted-foreground">{renderRuleDescription(rule)}</p>
+                <p className="text-xs text-muted-foreground truncate">{renderRuleDescription(rule)}</p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => removeRule(rule.id)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => removeRule(rule.id)}
+                aria-label="Quitar regla"
+                className="shrink-0"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -207,8 +224,8 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
               {RULE_LABELS[addingType]?.label}
             </p>
 
-            {(addingType === 'avoid_pair' || addingType === 'force_pair') && (
-              <div className="grid grid-cols-2 gap-2">
+            {isPairRule(addingType) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Jugador A</Label>
                   <select
@@ -217,7 +234,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Seleccionar...</option>
-                    {players.map(p => (
+                    {players.map((p) => (
                       <option key={p.id} value={p.id}>{p.display_name}</option>
                     ))}
                   </select>
@@ -230,7 +247,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Seleccionar...</option>
-                    {players.filter(p => p.id !== playerA).map(p => (
+                    {players.filter((p) => p.id !== playerA).map((p) => (
                       <option key={p.id} value={p.id}>{p.display_name}</option>
                     ))}
                   </select>
@@ -238,7 +255,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
               </div>
             )}
 
-            {(addingType === 'min_defenders' || addingType === 'min_goalkeepers') && (
+            {isMinCountRule(addingType) && (
               <div>
                 <Label className="text-xs">Cantidad mínima por equipo</Label>
                 <Input
@@ -251,12 +268,12 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Button size="sm" onClick={addRule} disabled={saving}>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={addRule} disabled={saving} className="flex-1 sm:flex-none">
                 {saving && <Spinner size="sm" className="mr-2" />}
                 Guardar
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAddingType(null)}>
+              <Button size="sm" variant="ghost" onClick={() => setAddingType(null)} className="flex-1 sm:flex-none">
                 Cancelar
               </Button>
             </div>
@@ -266,7 +283,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
         {/* Add rule buttons */}
         {!addingType && (
           <div className="flex flex-wrap gap-2">
-            {Object.entries(RULE_LABELS).map(([type, config]) => (
+            {(Object.entries(RULE_LABELS) as [RuleType, typeof RULE_LABELS[RuleType]][]).map(([type, config]) => (
               <Button
                 key={type}
                 variant="outline"
