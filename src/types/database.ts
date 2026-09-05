@@ -815,6 +815,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_public_group_by_invite: {
+        Args: {
+          p_invite_code: string
+        }
+        Returns: Json
+      }
       admin_finalize_match_results: {
         Args: {
           p_match_id: string

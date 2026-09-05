@@ -297,23 +297,29 @@ END $$;
 -- ---------------------------------------------------------------- upcoming matches
 BEGIN;
 
--- Next Monday: open, 12 of 14 confirmed (two of them guests) so there is room to test.
+-- Next Monday: full, 14 confirmed (12 members + two guests) and two on the waitlist,
+-- ready for team generation and waitlist promotion.
 INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, recurring_pattern_id, notes)
 VALUES ('66666666-6666-4666-8666-666666666661', '11111111-1111-4111-8111-111111111111',
         ('2026-09-07 21:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
-        'Club Ferro, cancha 3', 'signup_open', 14, '33333333-3333-4333-8333-333333333333',
+        'Club Ferro, cancha 3', 'full', 14, '33333333-3333-4333-8333-333333333333',
         'Traer pechera. Se paga en la cancha.');
 
-INSERT INTO public.match_signups (match_id, player_id, status, signup_time)
-SELECT '66666666-6666-4666-8666-666666666661', pp.id, 'confirmed', now() - interval '20 hours' + (rn || ' minutes')::interval
+INSERT INTO public.match_signups (match_id, player_id, status, signup_time, waitlist_position)
+SELECT '66666666-6666-4666-8666-666666666661', pp.id,
+       CASE WHEN rn <= 12 THEN 'confirmed' ELSE 'waitlist' END::signup_status,
+       now() - interval '20 hours' + (rn || ' minutes')::interval,
+       CASE WHEN rn > 12 THEN rn - 12 ELSE NULL END
 FROM (
-    SELECT pp.id, row_number() OVER (ORDER BY md5('open' || pp.id::text)) AS rn
+    SELECT pp.id, row_number() OVER (ORDER BY
+        CASE WHEN pp.nickname IN ('Pedrito','Santi','Fede','Dieguito') THEN 0 ELSE 1 END,
+        md5('open' || pp.id::text)) AS rn
     FROM public.player_profiles pp JOIN public.group_memberships gm ON gm.player_id = pp.id
-    WHERE gm.group_id = '11111111-1111-4111-8111-111111111111' AND pp.nickname NOT IN ('Seba', 'Maxo', 'Luis')
-) pp WHERE rn <= 10;
+    WHERE gm.group_id = '11111111-1111-4111-8111-111111111111' AND pp.nickname NOT IN ('Seba', 'Maxo')
+) pp WHERE rn <= 14;
 INSERT INTO public.match_signups (match_id, guest_player_id, status, signup_time, notes)
-VALUES ('66666666-6666-4666-8666-666666666661', '55555555-5555-4555-8555-555555555551', 'confirmed', now() - interval '18 hours', 'Viene con Juan'),
-       ('66666666-6666-4666-8666-666666666661', '55555555-5555-4555-8555-555555555552', 'confirmed', now() - interval '17 hours', NULL);
+VALUES ('66666666-6666-4666-8666-666666666661', '55555555-5555-4555-8555-555555555551', 'confirmed', now() - interval '19 hours 50 minutes', 'Viene con Juan'),
+       ('66666666-6666-4666-8666-666666666661', '55555555-5555-4555-8555-555555555552', 'confirmed', now() - interval '19 hours 45 minutes', NULL);
 
 -- Match-level rule for the open match: keep the two keepers apart.
 INSERT INTO public.rule_sets (match_id, rule_type, data, created_by_user_id)
