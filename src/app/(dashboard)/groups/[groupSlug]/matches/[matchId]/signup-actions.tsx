@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { Database } from '@/types/database'
 
 interface SignupActionsProps {
   matchId: string
-  playerId: string
   currentSignup: {
     id: string
     status: string
@@ -22,7 +22,6 @@ interface SignupActionsProps {
 
 export function SignupActions({
   matchId,
-  playerId,
   currentSignup,
   matchStatus,
   isFull,
@@ -39,12 +38,10 @@ export function SignupActions({
     setError(null)
 
     try {
-      // Call the RPC function for signup
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: signupError } = await (supabase as any).rpc('process_match_signup', {
+      const args: Database['public']['Functions']['signup_for_match']['Args'] = {
         p_match_id: matchId,
-        p_player_id: playerId,
-      })
+      }
+      const { error: signupError } = await (supabase as any).rpc('signup_for_match', args)
 
       if (signupError) {
         throw signupError
@@ -68,12 +65,10 @@ export function SignupActions({
     setError(null)
 
     try {
-      // Call the RPC function for cancellation
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: cancelError } = await (supabase as any).rpc('cancel_match_signup', {
+      const args: Database['public']['Functions']['cancel_my_signup']['Args'] = {
         p_match_id: matchId,
-        p_player_id: playerId,
-      })
+      }
+      const { error: cancelError } = await (supabase as any).rpc('cancel_my_signup', args)
 
       if (cancelError) {
         throw cancelError
@@ -102,12 +97,18 @@ export function SignupActions({
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">
-                {isFull ? 'El partido está completo' : 'Inscribite al partido'}
+                {matchStatus === 'signup_closed'
+                  ? 'Las inscripciones están cerradas'
+                  : isFull
+                    ? 'El partido está completo'
+                    : 'Inscribite al partido'}
               </p>
               <p className="text-sm text-muted-foreground">
-                {isFull
-                  ? 'Podés anotarte en la lista de espera'
-                  : 'Hay lugar disponible'}
+                {matchStatus === 'signup_closed'
+                  ? 'El admin todavía no las volvió a abrir'
+                  : isFull
+                    ? 'Podés anotarte en la lista de espera'
+                    : 'Hay lugar disponible'}
               </p>
             </div>
             <Button onClick={handleSignUp} disabled={loading || !canSignUp}>

@@ -3,11 +3,14 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Play, Pause, Users, CheckCircle, XCircle, Trash2 } from 'lucide-react'
+import { Play, Pause, RotateCcw, Users, CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { Database } from '@/types/database'
+
+type MatchStatus = Database['public']['Enums']['match_status']
 
 interface MatchAdminActionsProps {
   matchId: string
@@ -26,15 +29,15 @@ export function MatchAdminActions({
   const supabase = createClient()
   const [loading, setLoading] = useState<string | null>(null)
 
-  const updateStatus = async (newStatus: string) => {
+  const updateStatus = async (newStatus: MatchStatus) => {
     setLoading(newStatus)
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from('matches')
-        .update({ status: newStatus })
-        .eq('id', matchId)
+      const args: Database['public']['Functions']['admin_set_match_status']['Args'] = {
+        p_match_id: matchId,
+        p_status: newStatus,
+      }
+      const { error } = await (supabase as any).rpc('admin_set_match_status', args)
 
       if (error) throw error
       router.refresh()
@@ -54,7 +57,6 @@ export function MatchAdminActions({
     setLoading('delete')
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('matches')
         .delete()
@@ -95,14 +97,14 @@ export function MatchAdminActions({
         )}
 
         {/* Close signup */}
-        {currentStatus === 'signup_open' && (
+        {(currentStatus === 'signup_open' || currentStatus === 'full') && (
           <Button
             variant="outline"
             className="w-full justify-start"
-            onClick={() => updateStatus('draft')}
+            onClick={() => updateStatus('signup_closed')}
             disabled={loading !== null}
           >
-            {loading === 'draft' ? (
+            {loading === 'signup_closed' ? (
               <Spinner size="sm" className="mr-2" />
             ) : (
               <Pause className="mr-2 h-4 w-4" />
@@ -111,8 +113,25 @@ export function MatchAdminActions({
           </Button>
         )}
 
+        {/* Reopen signup */}
+        {currentStatus === 'signup_closed' && (
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => updateStatus('signup_open')}
+            disabled={loading !== null}
+          >
+            {loading === 'signup_open' ? (
+              <Spinner size="sm" className="mr-2" />
+            ) : (
+              <RotateCcw className="mr-2 h-4 w-4" />
+            )}
+            Reabrir inscripciones
+          </Button>
+        )}
+
         {/* Generate teams */}
-        {(currentStatus === 'signup_open' || currentStatus === 'full') && hasEnoughPlayers && (
+        {(currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && hasEnoughPlayers && (
           <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`}>
             <Button variant="default" className="w-full justify-start">
               <Users className="mr-2 h-4 w-4" />

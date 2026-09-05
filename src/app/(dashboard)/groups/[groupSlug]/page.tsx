@@ -300,12 +300,14 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 const statusColors: Record<string, string> = {
                   draft: 'bg-gray-100 text-gray-800',
                   signup_open: 'bg-green-100 text-green-800',
+                  signup_closed: 'bg-orange-100 text-orange-800',
                   full: 'bg-yellow-100 text-yellow-800',
                   teams_created: 'bg-blue-100 text-blue-800',
                 }
                 const statusLabels: Record<string, string> = {
                   draft: 'Borrador',
                   signup_open: 'Inscripción abierta',
+                  signup_closed: 'Inscripción cerrada',
                   full: 'Completo',
                   teams_created: 'Equipos armados',
                 }

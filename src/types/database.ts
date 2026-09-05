@@ -179,7 +179,7 @@ export type Database = {
           group_id: string
           date_time: string
           location: string | null
-          status: 'draft' | 'signup_open' | 'full' | 'teams_created' | 'finished' | 'cancelled'
+          status: 'draft' | 'signup_open' | 'signup_closed' | 'full' | 'teams_created' | 'finished' | 'cancelled'
           max_players: number
           recurring_pattern_id: string | null
           ai_input_snapshot: Json | null
@@ -193,7 +193,7 @@ export type Database = {
           group_id: string
           date_time: string
           location?: string | null
-          status?: 'draft' | 'signup_open' | 'full' | 'teams_created' | 'finished' | 'cancelled'
+          status?: 'draft' | 'signup_open' | 'signup_closed' | 'full' | 'teams_created' | 'finished' | 'cancelled'
           max_players?: number
           recurring_pattern_id?: string | null
           ai_input_snapshot?: Json | null
@@ -207,7 +207,7 @@ export type Database = {
           group_id?: string
           date_time?: string
           location?: string | null
-          status?: 'draft' | 'signup_open' | 'full' | 'teams_created' | 'finished' | 'cancelled'
+          status?: 'draft' | 'signup_open' | 'signup_closed' | 'full' | 'teams_created' | 'finished' | 'cancelled'
           max_players?: number
           recurring_pattern_id?: string | null
           ai_input_snapshot?: Json | null
@@ -226,6 +226,7 @@ export type Database = {
           preferred_positions: string[]
           created_by_user_id: string | null
           group_id: string | null
+          self_signup_token: string | null
           created_at: string
         }
         Insert: {
@@ -236,6 +237,7 @@ export type Database = {
           preferred_positions?: string[]
           created_by_user_id?: string | null
           group_id?: string | null
+          self_signup_token?: string | null
           created_at?: string
         }
         Update: {
@@ -246,6 +248,7 @@ export type Database = {
           preferred_positions?: string[]
           created_by_user_id?: string | null
           group_id?: string | null
+          self_signup_token?: string | null
           created_at?: string
         }
       }
@@ -539,24 +542,74 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      process_match_signup: {
+      signup_for_match: {
         Args: {
           p_match_id: string
-          p_player_id: string
           p_notes?: string
           p_position_preference?: string
         }
         Returns: Database['public']['Tables']['match_signups']['Row']
       }
-      cancel_match_signup: {
+      cancel_my_signup: {
         Args: {
           p_match_id: string
-          p_player_id: string
         }
-        Returns: {
-          cancelled_signup: Database['public']['Tables']['match_signups']['Row']
-          promoted_signup: Database['public']['Tables']['match_signups']['Row'] | null
-        }[]
+        Returns: undefined
+      }
+      admin_add_guest_signup: {
+        Args: {
+          p_match_id: string
+          p_display_name: string
+          p_notes?: string
+        }
+        Returns: Database['public']['Tables']['match_signups']['Row']
+      }
+      admin_remove_signup: {
+        Args: {
+          p_signup_id: string
+        }
+        Returns: undefined
+      }
+      admin_set_signup_status: {
+        Args: {
+          p_signup_id: string
+          p_status: Database['public']['Enums']['signup_status']
+        }
+        Returns: undefined
+      }
+      admin_set_match_status: {
+        Args: {
+          p_match_id: string
+          p_status: Database['public']['Enums']['match_status']
+        }
+        Returns: Database['public']['Tables']['matches']['Row']
+      }
+      get_public_match: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: Json
+      }
+      public_guest_signup: {
+        Args: {
+          p_match_id: string
+          p_display_name: string
+          p_token: string
+        }
+        Returns: Json
+      }
+      cancel_guest_signup: {
+        Args: {
+          p_match_id: string
+          p_token: string
+        }
+        Returns: undefined
+      }
+      promote_from_waitlist: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: string | null
       }
       create_group_with_admin: {
         Args: {
@@ -609,7 +662,7 @@ export type Database = {
       footedness: 'left' | 'right' | 'both'
       fitness_status: 'ok' | 'limited' | 'injured'
       group_role: 'admin' | 'captain' | 'member'
-      match_status: 'draft' | 'signup_open' | 'full' | 'teams_created' | 'finished' | 'cancelled'
+      match_status: 'draft' | 'signup_open' | 'signup_closed' | 'full' | 'teams_created' | 'finished' | 'cancelled'
       signup_status: 'confirmed' | 'waitlist' | 'cancelled' | 'did_not_show'
       team_name: 'dark' | 'light'
       assignment_source: 'ai' | 'manual'
