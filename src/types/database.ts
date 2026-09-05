@@ -815,6 +815,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_finalize_match_results: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
       recompute_match_mvp: {
         Args: {
           p_match_id: string

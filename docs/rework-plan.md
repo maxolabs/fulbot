@@ -254,3 +254,53 @@ Files likely touched by several tracks (expect merge care):
 `src/types/database.ts`, `src/app/(dashboard)/groups/[groupSlug]/matches/[matchId]/page.tsx`,
 `match-admin-actions.tsx`, `src/components/layout/header.tsx`, `.env.local.example`,
 `vercel.json`.
+
+---
+
+## 4. Status (2026-09-05) and deployment runbook
+
+All six tracks landed on `main`, were audited against this document, fixed, and then
+verified by the owner's session against a local Supabase stack (all migrations applied
+with `psql`, an end-to-end SQL scenario through the RPCs as anon/member/admin/service
+roles, and Playwright screenshots of every screen at 390px and 1366px).
+
+Extra fixes found during that verification (not in the tracks):
+- `00013_function_privileges.sql`: Supabase's default privileges grant EXECUTE to
+  `anon` on every new function, so `REVOKE ... FROM PUBLIC` alone never restricted
+  anything. Now only `get_public_match`, `public_guest_signup`, `cancel_guest_signup`
+  and the four RLS helpers are anon-callable; internal helpers are owner-only; results
+  are finalized through `admin_finalize_match_results`.
+- `00014_policy_and_reliability_fixes.sql`: the original `player_profiles` read policy
+  from 00003 recursed on itself (Postgres error on every profile read); no-shows now
+  recompute reliability.
+- `00011`: `finalize_match_results` called `update_player_rating(DISTINCT ...)`, invalid
+  SQL inherited from 00004/00005, so results could never be finalized.
+- i18n: server components imported translation helpers from a `'use client'` module,
+  crashing every server-rendered page; pure logic moved to `src/i18n/core.ts`.
+- Dates are formatted in the group's timezone with deterministic output
+  (`src/lib/utils/datetime.ts`), so Vercel (UTC) no longer shifts match times and the
+  announcement text hydrates cleanly.
+
+### Deploy checklist
+
+1. **Migrations**: apply `00006` through the last file in `supabase/migrations`, in
+   order, against the production project (`supabase db push` with a linked project, or
+   the SQL editor one file at a time). `00006` must run on its own. If the live database
+   was patched by hand in the past, the `DROP POLICY IF EXISTS` / `CREATE OR REPLACE`
+   statements make re-running safe.
+2. **Environment variables on Vercel**: `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
+   `OPENAI_MODEL` (optional), `NEXT_PUBLIC_APP_URL` (the public URL used in signup links
+   and announcements), `CRON_SECRET` (random string; Vercel sends it as
+   `Authorization: Bearer` to cron routes).
+3. **Cron**: `vercel.json` registers one daily job, `/api/cron/daily` at 12:00 UTC
+   (09:00 Buenos Aires), which generates recurring matches, drains the WhatsApp outbox
+   and emits reminders. Vercel Hobby runs it once a day with up to an hour of drift; the
+   group page also generates the next recurring match lazily on render, so the Monday
+   match appears even if the cron is late. The individual routes
+   `/api/cron/recurring`, `/notifications`, `/reminders` still exist for manual runs.
+4. **WhatsApp**: set the group's webhook URL in group settings to receive
+   `{ text, type, payload }` POSTs from the outbox; without it, notifications stay
+   in-app only and the announcement / lineup texts are copied by hand.
+5. **Smoke after deploy**: open a match's public link logged out, sign up as a guest
+   by name, confirm the name appears; as admin close signups, generate teams, finish,
+   load a result, vote MVP.

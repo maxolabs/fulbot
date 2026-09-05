@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { LanguageProvider } from '@/i18n/provider'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 import { LoginForm } from './login-form'
 
 export default async function LoginPage() {

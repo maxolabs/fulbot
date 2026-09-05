@@ -284,9 +284,14 @@ BEGIN
     AND ms.player_id IS NOT NULL;
 
     -- Update ratings for all rated players
-    PERFORM update_player_rating(DISTINCT mr.rated_player_id)
-    FROM public.match_ratings mr
-    WHERE mr.match_id = p_match_id;
+    -- (DISTINCT inside a function call is invalid SQL; the original 00004/00005
+    -- version raised at runtime, so finalizing never completed.)
+    PERFORM update_player_rating(rated.pid)
+    FROM (
+        SELECT DISTINCT mr.rated_player_id AS pid
+        FROM public.match_ratings mr
+        WHERE mr.match_id = p_match_id
+    ) rated;
 
     -- Mark as finalized to prevent double-counting
     UPDATE public.matches SET results_finalized = TRUE WHERE id = p_match_id;

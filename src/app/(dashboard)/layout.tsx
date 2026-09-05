@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { LanguageProvider } from '@/i18n/provider'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 
 export default async function DashboardLayout({
   children,

@@ -48,7 +48,7 @@ function Dropdown({
     <div className="relative" ref={dropdownRef}>
       <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-md border bg-white shadow-lg z-50">
+        <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-md border border-border bg-card text-card-foreground shadow-lg z-50">
           {items.map((item, i) => (
             <button
               key={i}
@@ -56,7 +56,7 @@ function Dropdown({
                 item.onClick()
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 first:rounded-t-md last:rounded-b-md"
+              className="w-full px-3 py-2 text-left text-sm hover:bg-accent first:rounded-t-md last:rounded-b-md"
             >
               {item.label}
             </button>
@@ -230,7 +230,7 @@ ${lightList}
 
       <Dropdown
         trigger={
-          <Button variant="outline" size="sm" className="bg-green-50 hover:bg-green-100 border-green-200">
+          <Button variant="outline" size="sm" className="border-green-600/40 text-green-600 hover:bg-green-600/10">
             <MessageCircle className="mr-2 h-4 w-4 text-green-600" />
             WhatsApp
           </Button>
@@ -246,7 +246,7 @@ ${lightList}
         size="sm"
         onClick={downloadLineupImage}
         disabled={downloadingImage}
-        className="bg-blue-50 hover:bg-blue-100 border-blue-200"
+        className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10"
       >
         {downloadingImage ? (
           <Spinner size="sm" className="mr-2" />

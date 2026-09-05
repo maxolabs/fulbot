@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 import type { Json } from '@/types/database'
 
 export type ThemePreference = 'light' | 'dark' | 'system'

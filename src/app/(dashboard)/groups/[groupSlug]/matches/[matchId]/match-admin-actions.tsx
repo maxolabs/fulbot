@@ -73,6 +73,15 @@ export function MatchAdminActions({
     }
   }
 
+  const hasActions =
+    currentStatus === 'draft' ||
+    currentStatus === 'signup_open' ||
+    currentStatus === 'full' ||
+    currentStatus === 'signup_closed' ||
+    currentStatus === 'teams_created' ||
+    currentStatus === 'cancelled'
+  if (!hasActions) return null
+
   return (
     <Card>
       <CardHeader>
@@ -158,7 +167,7 @@ export function MatchAdminActions({
         )}
 
         {/* Cancel match */}
-        {currentStatus !== 'finished' && currentStatus !== 'cancelled' && (
+        {currentStatus !== 'cancelled' && (
           <Button
             variant="outline"
             className="w-full justify-start text-destructive hover:text-destructive"

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Users, Brain, BarChart3, ChevronRight } from 'lucide-react'
 import { getT } from '@/i18n/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 
 export default async function Home() {
   const cookieStore = await cookies()

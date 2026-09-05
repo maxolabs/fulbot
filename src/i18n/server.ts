@@ -1,4 +1,4 @@
-import { getTranslation, type Language } from './use-translations'
+import { getTranslation, type Language } from './core'
 
 /**
  * Server-side translation helper. Use in Server Components / route handlers:

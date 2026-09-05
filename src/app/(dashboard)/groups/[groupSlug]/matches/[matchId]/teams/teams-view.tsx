@@ -50,6 +50,7 @@ interface TeamsViewProps {
   provider?: 'openai' | 'fallback'
   isAdminOrCaptain: boolean
   hasTeams: boolean
+  matchStatus?: string
 }
 
 export function TeamsView({
@@ -66,7 +67,9 @@ export function TeamsView({
   provider,
   isAdminOrCaptain,
   hasTeams,
+  matchStatus,
 }: TeamsViewProps) {
+  const canEditTeams = isAdminOrCaptain && matchStatus !== 'finished' && matchStatus !== 'cancelled'
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -152,7 +155,7 @@ export function TeamsView({
       )}
 
       {/* Generate button */}
-      {isAdminOrCaptain && (
+      {canEditTeams && (
         <Card>
           <CardContent className="py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -189,7 +192,7 @@ export function TeamsView({
       )}
 
       {/* Not enough players warning */}
-      {players.length < 4 && (
+      {canEditTeams && players.length < 4 && (
         <Card className="border-yellow-500/30 bg-yellow-500/5">
           <CardContent className="py-4">
             <div className="flex items-center gap-3">

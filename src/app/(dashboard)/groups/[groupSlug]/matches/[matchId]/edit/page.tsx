@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { getT } from '@/i18n/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 import { splitDateTimeInTimezone } from '@/lib/utils/datetime'
 import { EditMatchForm } from './edit-match-form'
 

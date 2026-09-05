@@ -207,10 +207,10 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
         if (scoreError) throw scoreError
       }
 
-      // Call finalize_match_results RPC
-       
-      const { error: rpcError } = await (supabase as any)
-        .rpc('finalize_match_results', { p_match_id: matchId })
+      // Finalize through the authorization-checked wrapper (admin/captain only)
+      const { error: rpcError } = await supabase.rpc('admin_finalize_match_results', {
+        p_match_id: matchId,
+      })
 
       if (rpcError) throw rpcError
 

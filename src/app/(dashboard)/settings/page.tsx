@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
 import { getT } from '@/i18n/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
 import { SettingsForm } from './settings-form'
 

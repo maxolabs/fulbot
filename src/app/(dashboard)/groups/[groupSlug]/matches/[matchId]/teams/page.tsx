@@ -223,6 +223,7 @@ export default async function TeamsPage({ params }: PageProps) {
         provider={match.ai_input_snapshot?.provider}
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}
+        matchStatus={match.status}
       />
     </div>
   )
