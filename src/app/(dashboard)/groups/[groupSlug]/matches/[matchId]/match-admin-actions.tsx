@@ -37,7 +37,7 @@ export function MatchAdminActions({
         p_match_id: matchId,
         p_status: newStatus,
       }
-      const { error } = await (supabase as any).rpc('admin_set_match_status', args)
+      const { error } = await supabase.rpc('admin_set_match_status', args)
 
       if (error) throw error
       router.refresh()

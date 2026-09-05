@@ -78,7 +78,7 @@ export function PublicMatchActions({
         const args: Database['public']['Functions']['signup_for_match']['Args'] = {
           p_match_id: matchId,
         }
-        const { error: rpcError } = await (supabase as any).rpc('signup_for_match', args)
+        const { error: rpcError } = await supabase.rpc('signup_for_match', args)
         if (rpcError) throw rpcError
         router.refresh()
       } catch (err) {
@@ -97,7 +97,7 @@ export function PublicMatchActions({
         const args: Database['public']['Functions']['cancel_my_signup']['Args'] = {
           p_match_id: matchId,
         }
-        const { error: rpcError } = await (supabase as any).rpc('cancel_my_signup', args)
+        const { error: rpcError } = await supabase.rpc('cancel_my_signup', args)
         if (rpcError) throw rpcError
         router.refresh()
       } catch (err) {
@@ -194,13 +194,13 @@ export function PublicMatchActions({
         const joinArgs: Database['public']['Functions']['join_group_via_invite']['Args'] = {
           p_invite_code: inviteCode,
         }
-        const { error: joinError } = await (supabase as any).rpc('join_group_via_invite', joinArgs)
+        const { error: joinError } = await supabase.rpc('join_group_via_invite', joinArgs)
         if (joinError) throw joinError
 
         const signupArgs: Database['public']['Functions']['signup_for_match']['Args'] = {
           p_match_id: matchId,
         }
-        const { error: signupError } = await (supabase as any).rpc('signup_for_match', signupArgs)
+        const { error: signupError } = await supabase.rpc('signup_for_match', signupArgs)
         if (signupError) throw signupError
 
         router.refresh()

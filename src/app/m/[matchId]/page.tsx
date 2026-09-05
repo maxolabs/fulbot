@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Calendar, Clock, MapPin, Users, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Database } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -61,9 +62,12 @@ export default async function PublicMatchPage({ params }: PageProps) {
 
   // get_public_match works for anonymous visitors too -- it's the only way
   // this page reads match data, so RLS never needs to open matches to anon.
-  const { data: match } = (await (supabase as any).rpc('get_public_match', {
+  const args: Database['public']['Functions']['get_public_match']['Args'] = {
     p_match_id: matchId,
-  })) as { data: PublicMatch | null }
+  }
+  const { data: match } = (await supabase.rpc('get_public_match', args)) as {
+    data: PublicMatch | null
+  }
 
   if (!match || !match.id) {
     return <NotFoundCard />

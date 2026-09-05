@@ -43,7 +43,7 @@ export function SignupActions({
       const args: Database['public']['Functions']['signup_for_match']['Args'] = {
         p_match_id: matchId,
       }
-      const { error: signupError } = await (supabase as any).rpc('signup_for_match', args)
+      const { error: signupError } = await supabase.rpc('signup_for_match', args)
 
       if (signupError) {
         throw signupError
@@ -70,7 +70,7 @@ export function SignupActions({
       const args: Database['public']['Functions']['cancel_my_signup']['Args'] = {
         p_match_id: matchId,
       }
-      const { error: cancelError } = await (supabase as any).rpc('cancel_my_signup', args)
+      const { error: cancelError } = await supabase.rpc('cancel_my_signup', args)
 
       if (cancelError) {
         throw cancelError

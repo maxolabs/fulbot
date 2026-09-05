@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     p_display_name: displayName,
     p_token: token,
   }
-  const { data, error } = await (supabase as any).rpc('public_guest_signup', args)
+  const { data, error } = await supabase.rpc('public_guest_signup', args)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 })
@@ -74,7 +74,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     p_match_id: matchId,
     p_token: token,
   }
-  const { error } = await (supabase as any).rpc('cancel_guest_signup', args)
+  const { error } = await supabase.rpc('cancel_guest_signup', args)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 })

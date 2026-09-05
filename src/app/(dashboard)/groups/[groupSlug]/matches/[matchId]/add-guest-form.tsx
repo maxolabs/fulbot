@@ -44,7 +44,7 @@ export function AddGuestForm({
         p_display_name: name.trim(),
         p_notes: notes.trim() || undefined,
       }
-      const { error: signupError } = await (supabase as any).rpc('admin_add_guest_signup', args)
+      const { error: signupError } = await supabase.rpc('admin_add_guest_signup', args)
 
       if (signupError) throw signupError
 
