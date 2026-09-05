@@ -119,7 +119,11 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
       const { data: newRule, error } = await supabase
         .from('rule_sets')
         .insert({
-          group_id: groupId,
+          // rule_sets has CHECK rule_scope_check requiring exactly one of
+          // (group_id, match_id) to be non-null. This component is only ever
+          // rendered from the match page (matchId always set), so new rules
+          // are scoped to the match, matching fetchRules' read logic above.
+          group_id: matchId ? null : groupId,
           match_id: matchId || null,
           rule_type: addingType,
           data: data as unknown as Json,

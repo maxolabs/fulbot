@@ -8,6 +8,11 @@
 --    atomically for the match's two teams (used by manual drag/drop edits and by the
 --    team generation route).
 -- 3. Make sure get_recent_match_history is callable by authenticated users.
+-- 4. Fix rule_sets' "Admins can manage rules" RLS policy (00003) to allow captains,
+--    not just admins: the rules-manager.tsx UI (client-side insert/update straight
+--    against the table, no SECURITY DEFINER RPC) is shown to any admin OR captain
+--    (isAdminOrCaptain), matching the sibling teams/team_assignments policies which
+--    already use is_group_admin_or_captain.
 --
 -- Written defensively: idempotent (safe to run more than once).
 
@@ -111,3 +116,22 @@ GRANT EXECUTE ON FUNCTION public.save_team_assignments(UUID, JSONB) TO authentic
 -- ============================================
 
 GRANT EXECUTE ON FUNCTION public.get_recent_match_history(UUID, INTEGER) TO authenticated;
+
+-- ============================================
+-- 4. rule_sets RLS: admins AND captains can manage rules (not admins only)
+-- ============================================
+-- 00003 created this policy scoped to is_group_admin only, inconsistent with the
+-- teams/team_assignments policies (is_group_admin_or_captain) and with the UI, which
+-- shows RulesManager to isAdminOrCaptain. DROP + CREATE is idempotent (safe to rerun).
+
+DROP POLICY IF EXISTS "Admins can manage rules" ON public.rule_sets;
+
+CREATE POLICY "Admins can manage rules"
+    ON public.rule_sets FOR ALL
+    USING (
+        (group_id IS NOT NULL AND is_group_admin_or_captain(group_id)) OR
+        (match_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM public.matches m
+            WHERE m.id = match_id AND is_group_admin_or_captain(m.group_id)
+        ))
+    );
