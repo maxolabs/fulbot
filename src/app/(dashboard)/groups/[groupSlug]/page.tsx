@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { CopyButton } from '@/components/ui/copy-button'
+import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
@@ -48,6 +49,7 @@ interface Group {
   default_match_time: string | null
   default_max_players: number
   invite_code: string
+  timezone: string | null
 }
 
 interface Match {
@@ -86,6 +88,8 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .single() as { data: Group | null }
 
   if (!group) return notFound()
+
+  const timeZone = group.timezone || DEFAULT_TIMEZONE
 
   // Check if user is a member and get their role
   const { data: membership } = await supabase
@@ -332,10 +336,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-medium">
-                              {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}
+                              {formatMatchDate(date, timeZone)}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                              {formatMatchTime(date, timeZone)}
                               {match.location && ` · ${match.location}`}
                             </p>
                           </div>
@@ -372,7 +376,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         <CardContent className="py-3">
                           <div className="flex items-center justify-between">
                             <p className="text-sm">
-                              {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}
+                              {formatMatchDate(date, timeZone)}
                               {match.location && ` · ${match.location}`}
                             </p>
                             <Badge variant="outline">Finalizado</Badge>

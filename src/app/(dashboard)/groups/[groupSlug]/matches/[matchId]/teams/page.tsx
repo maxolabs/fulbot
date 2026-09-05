@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TeamsView } from './teams-view'
+import { DEFAULT_TIMEZONE, formatMatchDate } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
@@ -28,11 +29,13 @@ export default async function TeamsPage({ params }: PageProps) {
   // Get group
   const { data: group } = await supabase
     .from('groups')
-    .select('id, name, slug')
+    .select('id, name, slug, timezone')
     .eq('slug', groupSlug)
-    .single() as { data: { id: string; name: string; slug: string } | null }
+    .single() as { data: { id: string; name: string; slug: string; timezone: string | null } | null }
 
   if (!group) return notFound()
+
+  const timeZone = group.timezone || DEFAULT_TIMEZONE
 
   // Check membership and get role
   const { data: membership } = await supabase
@@ -181,7 +184,6 @@ export default async function TeamsPage({ params }: PageProps) {
   }
 
   const date = new Date(match.date_time)
-  const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
   return (
     <div className="space-y-6">
@@ -197,7 +199,7 @@ export default async function TeamsPage({ params }: PageProps) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Armar equipos</h1>
         <p className="text-muted-foreground">
-          {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')} · {players.length} jugadores
+          {formatMatchDate(date, timeZone)} · {players.length} jugadores
         </p>
       </div>
 

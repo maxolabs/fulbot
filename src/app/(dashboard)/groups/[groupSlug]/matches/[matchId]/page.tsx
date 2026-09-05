@@ -24,7 +24,8 @@ import { RealtimeWrapper } from './realtime-wrapper'
 import { MatchResults } from './match-results'
 import { MatchScoreDisplay } from './match-score-display'
 import { getT } from '@/i18n/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
@@ -70,11 +71,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // Get group
   const { data: group } = await supabase
     .from('groups')
-    .select('id, name, slug')
+    .select('id, name, slug, timezone')
     .eq('slug', groupSlug)
-    .single() as { data: { id: string; name: string; slug: string } | null }
+    .single() as { data: { id: string; name: string; slug: string; timezone: string | null } | null }
 
   if (!group) return notFound()
+
+  const timeZone = group.timezone || DEFAULT_TIMEZONE
 
   // Check membership and get role
   const { data: membership } = await supabase
@@ -366,7 +369,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-2xl font-bold tracking-tight">
-              {t(`days.${DAY_KEYS[date.getDay()]}`)} {date.toLocaleDateString('es-AR')}
+              {t(`days.${DAY_KEYS[weekdayIndexInTimezone(date, timeZone)]}`)} {formatMatchDateNumeric(date, timeZone)}
             </h1>
             <Badge variant={statusVariant}>{statusLabel}</Badge>
           </div>
@@ -381,7 +384,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
-              {date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+              {formatMatchTime(date, timeZone)}
             </span>
             {match.location && (
               <span className="flex items-center gap-1.5">
@@ -426,6 +429,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           confirmedCount={confirmedSignups.length}
           maxPlayers={match.max_players}
           matchId={match.id}
+          timeZone={timeZone}
         />
       )}
 

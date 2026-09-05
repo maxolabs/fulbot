@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getT } from '@/i18n/server'
-import type { Language } from '@/i18n/use-translations'
+import type { Language } from '@/i18n/core'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
 
 type GroupWithRole = {
   id: string
@@ -14,6 +15,7 @@ type GroupWithRole = {
   description: string | null
   default_match_day: number | null
   default_match_time: string | null
+  timezone: string | null
   role: 'admin' | 'captain' | 'member'
 }
 
@@ -66,7 +68,8 @@ export default async function GroupsPage() {
         slug,
         description,
         default_match_day,
-        default_match_time
+        default_match_time,
+        timezone
       )
     `)
     .eq('player_id', playerProfile.id)
@@ -130,7 +133,7 @@ export default async function GroupsPage() {
 
   // MVP voting nudge: most recent finished match (within 7 days) the user
   // played in and hasn't voted for MVP in yet.
-  type MvpNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string }
+  type MvpNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string; timezone: string | null }
   let mvpNudge: MvpNudge | null = null
 
   if (groups.length > 0) {
@@ -181,6 +184,7 @@ export default async function GroupsPage() {
             groupSlug: candidateGroup.slug,
             groupName: candidateGroup.name,
             dateTime: candidate.date_time,
+            timezone: candidateGroup.timezone,
           }
         }
       }
@@ -199,7 +203,7 @@ export default async function GroupsPage() {
                 <p className="truncate text-sm font-medium">
                   {t('groups.mvpNudgeTitle', {
                     group: mvpNudge.groupName,
-                    date: new Date(mvpNudge.dateTime).toLocaleDateString('es-AR'),
+                    date: formatMatchDateNumeric(mvpNudge.dateTime, mvpNudge.timezone || DEFAULT_TIMEZONE),
                   })}
                 </p>
                 <p className="text-xs text-muted-foreground">{t('groups.mvpNudgeSubtitle')}</p>
@@ -255,6 +259,7 @@ export default async function GroupsPage() {
           {groups.map((group) => {
             const nextMatch = nextMatchByGroup.get(group.id)
             const matchDate = nextMatch ? new Date(nextMatch.date_time) : null
+            const groupTimezone = group.timezone || DEFAULT_TIMEZONE
 
             return (
               <Card key={group.id} className="h-full transition-shadow hover:shadow-md">
@@ -295,8 +300,8 @@ export default async function GroupsPage() {
                         <Calendar className="h-4 w-4 shrink-0" />
                         <span className="truncate">
                           {t('groups.nextMatchSummary', {
-                            day: t(`days.${DAY_KEYS[matchDate.getDay()]}`),
-                            time: matchDate.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+                            day: t(`days.${DAY_KEYS[weekdayIndexInTimezone(matchDate, groupTimezone)]}`),
+                            time: formatMatchTime(matchDate, groupTimezone),
                             confirmed: nextMatch.confirmedCount,
                             max: nextMatch.max_players,
                           })}

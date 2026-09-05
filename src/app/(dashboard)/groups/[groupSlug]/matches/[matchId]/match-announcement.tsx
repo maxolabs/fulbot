@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Megaphone, Copy, Check, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
 interface MatchAnnouncementProps {
   groupName: string
@@ -12,12 +13,14 @@ interface MatchAnnouncementProps {
   confirmedCount: number
   maxPlayers: number
   matchId: string
+  timeZone?: string
 }
 
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-
 // Builds the Spanish WhatsApp-ready announcement text for a match (see
-// docs/rework-plan.md §2.4) and offers Copy + wa.me share actions.
+// docs/rework-plan.md §2.4) and offers Copy + wa.me share actions. Uses the
+// zone-aware formatters (with an explicit timeZone) so this renders
+// identically on the server and after hydration in the browser -- no
+// dependency on the runtime's local timezone or locale-default AM/PM.
 export function buildAnnouncementText({
   groupName,
   dateTime,
@@ -25,10 +28,10 @@ export function buildAnnouncementText({
   confirmedCount,
   maxPlayers,
   matchId,
+  timeZone = DEFAULT_TIMEZONE,
 }: MatchAnnouncementProps) {
-  const date = new Date(dateTime)
-  const dayLabel = `${DAY_NAMES[date.getDay()]} ${date.getDate()}/${date.getMonth() + 1}`
-  const timeLabel = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  const dayLabel = formatMatchDateShort(dateTime, timeZone)
+  const timeLabel = formatMatchTime(dateTime, timeZone)
   const spotsLeft = Math.max(0, maxPlayers - confirmedCount)
   const spotsLabel = spotsLeft > 0 ? `faltan ${spotsLeft} lugares` : 'no quedan lugares'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'

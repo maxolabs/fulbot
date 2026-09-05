@@ -7,6 +7,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types/database'
 import type { MatchReminderPayload } from './types'
+import { DEFAULT_TIMEZONE, formatMatchTime } from '@/lib/utils/datetime'
 
 export interface RemindersResult {
   emitted: number
@@ -69,11 +70,7 @@ export async function emitMatchReminders(
         continue
       }
 
-      const time = new Intl.DateTimeFormat('es-AR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: group?.timezone || 'America/Argentina/Buenos_Aires',
-      }).format(new Date(match.date_time))
+      const time = formatMatchTime(match.date_time, group?.timezone || DEFAULT_TIMEZONE)
 
       const payload: MatchReminderPayload = {
         match_id: match.id,

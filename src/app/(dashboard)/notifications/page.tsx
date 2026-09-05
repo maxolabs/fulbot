@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NotificationList } from './notification-list'
 import type { NotificationRow } from '@/lib/notifications/types'
+import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
 export default async function NotificationsPage() {
   const supabase = await createClient()
@@ -38,8 +39,8 @@ export default async function NotificationsPage() {
 
   const { data: groups } =
     groupIds.length > 0
-      ? await supabase.from('groups').select('id, slug, name').in('id', groupIds)
-      : { data: [] as { id: string; slug: string; name: string }[] }
+      ? await supabase.from('groups').select('id, slug, name, timezone').in('id', groupIds)
+      : { data: [] as { id: string; slug: string; name: string; timezone: string | null }[] }
 
   const groupById = new Map((groups ?? []).map((g) => [g.id, g]))
 
@@ -61,6 +62,7 @@ export default async function NotificationsPage() {
     ...n,
     groupSlug: groupById.get(n.group_id)?.slug ?? null,
     groupName: groupById.get(n.group_id)?.name ?? '',
+    groupTimezone: groupById.get(n.group_id)?.timezone ?? DEFAULT_TIMEZONE,
     isRead: readIds.has(n.id),
   }))
 

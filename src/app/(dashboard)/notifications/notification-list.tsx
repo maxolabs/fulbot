@@ -8,10 +8,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { renderNotificationText } from '@/lib/notifications/templates'
 import type { NotificationEvent, NotificationRow } from '@/lib/notifications/types'
+import { formatMatchTime } from '@/lib/utils/datetime'
 
 interface NotificationItem extends NotificationRow {
   groupSlug: string | null
   groupName: string
+  groupTimezone: string
   isRead: boolean
 }
 
@@ -23,20 +25,23 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   results_posted: Goal,
 }
 
-function formatWhen(iso: string): string {
-  return new Intl.DateTimeFormat('es-AR', {
+// Date/month via Intl's default formatting is fine here (no AM/PM
+// ambiguity); the hour/minute portion goes through formatMatchTime so it's
+// always 24h and deterministic between server render and hydration.
+function formatWhen(iso: string, timeZone: string): string {
+  const dateOnly = new Intl.DateTimeFormat('es-AR', {
     day: 'numeric',
     month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone,
   }).format(new Date(iso))
+  return `${dateOnly} ${formatMatchTime(iso, timeZone)}`
 }
 
 function safeRenderText(item: NotificationItem): string {
   try {
     return renderNotificationText(
-      { type: item.type, payload: item.payload } as unknown as NotificationEvent
+      { type: item.type, payload: item.payload } as unknown as NotificationEvent,
+      item.groupTimezone
     )
   } catch {
     return ''
@@ -126,7 +131,7 @@ export function NotificationList({
                   <p className="text-sm">{safeRenderText(n)}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {n.groupName ? `${n.groupName} · ` : ''}
-                    {formatWhen(n.created_at)}
+                    {formatWhen(n.created_at, n.groupTimezone)}
                   </p>
                 </div>
                 {!isRead && <span className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />}

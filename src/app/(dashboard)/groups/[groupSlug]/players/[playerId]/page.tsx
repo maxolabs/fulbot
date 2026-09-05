@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchDayMonth, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; playerId: string }>
@@ -57,11 +58,13 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   // Get group
   const { data: group } = await supabase
     .from('groups')
-    .select('id, name, slug')
+    .select('id, name, slug, timezone')
     .eq('slug', groupSlug)
-    .single() as { data: { id: string; name: string; slug: string } | null }
+    .single() as { data: { id: string; name: string; slug: string; timezone: string | null } | null }
 
   if (!group) return notFound()
+
+  const timeZone = group.timezone || DEFAULT_TIMEZONE
 
   // Get player profile
   type PlayerProfileFull = {
@@ -324,7 +327,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                     <div>
                       <p className="text-sm font-medium">{config.label}</p>
                       <p className="text-xs opacity-70">
-                        {new Date(badge.earned_at).toLocaleDateString('es-AR')}
+                        {formatMatchDateNumeric(badge.earned_at, timeZone)}
                       </p>
                     </div>
                   </div>
@@ -352,9 +355,9 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
                   >
                     <div className="text-center min-w-[48px]">
-                      <p className="text-xs text-muted-foreground">{DAYS[date.getDay()]}</p>
+                      <p className="text-xs text-muted-foreground">{DAYS[weekdayIndexInTimezone(date, timeZone)]}</p>
                       <p className="text-sm font-medium">
-                        {date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
+                        {formatMatchDayMonth(date, timeZone)}
                       </p>
                     </div>
                     <div className="flex-1">
@@ -362,7 +365,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                         {match.location || 'Sin ubicación'}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatMatchTime(date, timeZone)}
                       </p>
                     </div>
                     <Badge

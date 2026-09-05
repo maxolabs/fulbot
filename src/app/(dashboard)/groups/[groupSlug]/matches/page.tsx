@@ -5,12 +5,11 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
 }
-
-const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-800' },
@@ -42,11 +41,13 @@ export default async function MatchesListPage({ params }: PageProps) {
   // Get group
   const { data: group } = await supabase
     .from('groups')
-    .select('id, name, slug')
+    .select('id, name, slug, timezone')
     .eq('slug', groupSlug)
-    .single() as { data: { id: string; name: string; slug: string } | null }
+    .single() as { data: { id: string; name: string; slug: string; timezone: string | null } | null }
 
   if (!group) return notFound()
+
+  const timeZone = group.timezone || DEFAULT_TIMEZONE
 
   // Check membership and get role
   const { data: membership } = await supabase
@@ -145,10 +146,10 @@ export default async function MatchesListPage({ params }: PageProps) {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">
-                            {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}
+                            {formatMatchDate(date, timeZone)}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                            {formatMatchTime(date, timeZone)}
                             {match.location && ` · ${match.location}`}
                           </p>
                         </div>
@@ -207,7 +208,7 @@ export default async function MatchesListPage({ params }: PageProps) {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <p className="text-sm">
-                            {DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}
+                            {formatMatchDate(date, timeZone)}
                           </p>
                           {match.location && (
                             <span className="text-sm text-muted-foreground">

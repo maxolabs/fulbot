@@ -2,27 +2,23 @@
 // Used both for the WhatsApp outbox body and the /notifications page list.
 
 import type { NotificationEvent } from './types'
+import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
-function formatDateTime(iso: string): { date: string; time: string } {
-  const d = new Date(iso)
-  const date = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'numeric',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  }).format(d)
-  const time = new Intl.DateTimeFormat('es-AR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
-  }).format(d)
-  return { date, time }
+// Both formatters take an explicit timeZone and assemble the string
+// themselves (see src/lib/utils/datetime.ts), so this never depends on the
+// process's local timezone nor on locale-default AM/PM (which used to
+// differ between Node's ICU and the value stored on the outbox row).
+function formatDateTime(iso: string, timeZone: string): { date: string; time: string } {
+  return { date: formatMatchDateShort(iso, timeZone), time: formatMatchTime(iso, timeZone) }
 }
 
-export function renderNotificationText(event: NotificationEvent): string {
+export function renderNotificationText(
+  event: NotificationEvent,
+  timeZone: string = DEFAULT_TIMEZONE
+): string {
   switch (event.type) {
     case 'match_created': {
-      const { date, time } = formatDateTime(event.payload.date_time)
+      const { date, time } = formatDateTime(event.payload.date_time, timeZone)
       const location = event.payload.location ? ` en ${event.payload.location}` : ''
       return (
         `¡Partido confirmado! ${date} ${time}hs${location} -- ${event.payload.group_name}. ` +

@@ -8,12 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PublicMatchActions } from './public-match-actions'
+import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ matchId: string }>
 }
-
-const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 const STATUS_MESSAGES: Record<string, string> = {
   draft: 'Las inscripciones aún no están abiertas',
@@ -35,6 +34,7 @@ interface PublicMatch {
   waitlist_count: number
   confirmed_names: string[]
   waitlist_names: string[]
+  timezone: string | null
 }
 
 function NotFoundCard() {
@@ -74,6 +74,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
   }
 
   const date = new Date(match.date_time)
+  const timeZone = match.timezone || DEFAULT_TIMEZONE
   const isPast = date < new Date()
   const isSignupPhase = ['signup_open', 'full', 'signup_closed'].includes(match.status)
 
@@ -213,11 +214,11 @@ export default async function PublicMatchPage({ params }: PageProps) {
           <div className="space-y-3">
             <div className="flex items-center gap-3 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>{DAYS[date.getDay()]} {date.toLocaleDateString('es-AR')}</span>
+              <span>{formatMatchDate(date, timeZone)}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>{formatMatchTime(date, timeZone)}</span>
             </div>
             {match.location && (
               <div className="flex items-center gap-3 text-sm">
