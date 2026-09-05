@@ -7,14 +7,12 @@ import {
   MapPin,
   Users,
   Edit,
-  Share2,
-  Copy,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CopyButton } from '@/components/ui/copy-button'
+import { MatchAnnouncement } from './match-announcement'
 import { SignupList } from './signup-list'
 import { SignupActions } from './signup-actions'
 import { MatchAdminActions } from './match-admin-actions'
@@ -306,8 +304,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const statusVariant = STATUS_VARIANTS[match.status] || STATUS_VARIANTS.draft
   const statusLabel = t(`matches.status.${match.status}`)
 
-  const signupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
-
   return (
     <RealtimeWrapper matchId={matchId}>
       <div className="space-y-6">
@@ -369,29 +365,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
         </Card>
       )}
 
-      {/* Share Card */}
+      {/* Match Announcement (replaces the bare share link + copy) */}
       {(match.status === 'signup_open' || match.status === 'full') && (
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Share2 className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium">Compartir partido</p>
-                  <p className="text-sm text-muted-foreground">
-                    Envía este link para que se inscriban
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted px-3 py-1.5 rounded text-sm truncate max-w-[200px]">
-                  {signupUrl}
-                </code>
-                <CopyButton text={signupUrl} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <MatchAnnouncement
+          groupName={group.name}
+          dateTime={match.date_time}
+          location={match.location}
+          confirmedCount={confirmedSignups.length}
+          maxPlayers={match.max_players}
+          matchId={match.id}
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
