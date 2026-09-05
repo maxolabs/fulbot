@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create group with admin membership via RPC (bypasses RLS)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: group, error: groupError } = await (supabase as any)
       .rpc('create_group_with_admin', {
         p_name: name,

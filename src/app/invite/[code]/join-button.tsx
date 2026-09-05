@@ -31,7 +31,7 @@ export function JoinGroupButton({
     try {
       if (wasInactive) {
         // Reactivate membership
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error: updateError } = await (supabase as any)
           .from('group_memberships')
           .update({ is_active: true })
@@ -43,7 +43,7 @@ export function JoinGroupButton({
         }
       } else {
         // Create new membership
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error: insertError } = await (supabase as any)
           .from('group_memberships')
           .insert({

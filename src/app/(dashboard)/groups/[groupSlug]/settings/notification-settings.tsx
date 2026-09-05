@@ -76,7 +76,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
       if (settings.id) {
         // Update existing
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error: updateError } = await (supabase as any)
           .from('notification_settings')
           .update(data)
@@ -85,7 +85,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         if (updateError) throw updateError
       } else {
         // Insert new
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: newSettings, error: insertError } = await (supabase as any)
           .from('notification_settings')
           .insert(data)

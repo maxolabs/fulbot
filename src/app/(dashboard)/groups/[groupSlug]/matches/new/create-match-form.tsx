@@ -43,7 +43,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       // Combine date and time into an ISO datetime, honoring the group's timezone
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: match, error: insertError } = await (supabase as any)
         .from('matches')
         .insert({

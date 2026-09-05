@@ -51,7 +51,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
     setSuccess(false)
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: updateError } = await (supabase as any)
         .from('groups')
         .update({

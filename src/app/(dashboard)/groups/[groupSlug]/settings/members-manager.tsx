@@ -37,7 +37,7 @@ export function MembersManager({ groupId, members, currentUserId }: MembersManag
     setOpenMenu(null)
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error } = await (supabase as any)
         .from('group_memberships')
         .update({ role: newRole })
@@ -62,7 +62,7 @@ export function MembersManager({ groupId, members, currentUserId }: MembersManag
     setOpenMenu(null)
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error } = await (supabase as any)
         .from('group_memberships')
         .update({ is_active: false })

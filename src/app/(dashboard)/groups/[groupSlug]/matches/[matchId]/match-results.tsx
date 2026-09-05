@@ -149,7 +149,7 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
 
     try {
       // Delete existing events for this match
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (supabase as any)
         .from('match_events')
         .delete()
@@ -159,7 +159,7 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
       for (const goal of goals) {
         const scorerPlayer = allPlayers.find(p => p.id === goal.scorer_id)
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: goalEvent, error: goalError } = await (supabase as any)
           .from('match_events')
           .insert({
@@ -178,7 +178,7 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
         if (goal.assister_id) {
           const assisterPlayer = allPlayers.find(p => p.id === goal.assister_id)
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           const { error: assistError } = await (supabase as any)
             .from('match_events')
             .insert({
@@ -198,7 +198,7 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
       for (const team of teams) {
         const teamGoalCount = goals.filter(g => g.team_id === team.id).length
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { error: scoreError } = await (supabase as any)
           .from('teams')
           .update({ score: teamGoalCount })
@@ -208,7 +208,7 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
       }
 
       // Call finalize_match_results RPC
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: rpcError } = await (supabase as any)
         .rpc('finalize_match_results', { p_match_id: matchId })
 

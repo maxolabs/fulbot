@@ -57,7 +57,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
     setSuccess(false)
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: updateError } = await (supabase as any)
         .from('player_profiles')
         .update({
