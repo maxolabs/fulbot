@@ -15,6 +15,7 @@ const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-800' },
   signup_open: { label: 'Inscripción abierta', color: 'bg-green-100 text-green-800' },
+  signup_closed: { label: 'Inscripción cerrada', color: 'bg-orange-100 text-orange-800' },
   full: { label: 'Completo', color: 'bg-yellow-100 text-yellow-800' },
   teams_created: { label: 'Equipos armados', color: 'bg-blue-100 text-blue-800' },
   finished: { label: 'Finalizado', color: 'bg-gray-100 text-gray-600' },

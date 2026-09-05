@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { Database } from '@/types/database'
 
 interface AddGuestFormProps {
   matchId: string
-  groupId: string
   isFull: boolean
   maxPlayers: number
   confirmedCount: number
@@ -19,7 +19,6 @@ interface AddGuestFormProps {
 
 export function AddGuestForm({
   matchId,
-  groupId,
   isFull,
   maxPlayers,
   confirmedCount,
@@ -40,34 +39,12 @@ export function AddGuestForm({
     setError(null)
 
     try {
-      // Create guest player
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: guest, error: guestError } = await (supabase as any)
-        .from('guest_players')
-        .insert({
-          display_name: name.trim(),
-          notes: notes.trim() || null,
-          group_id: groupId,
-        })
-        .select('id')
-        .single()
-
-      if (guestError) throw guestError
-
-      // Create signup for this guest
-      const status = confirmedCount < maxPlayers ? 'confirmed' : 'waitlist'
-      const waitlistPosition = status === 'waitlist' ? confirmedCount - maxPlayers + 1 : null
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: signupError } = await (supabase as any)
-        .from('match_signups')
-        .insert({
-          match_id: matchId,
-          guest_player_id: guest.id,
-          status,
-          waitlist_position: waitlistPosition,
-          notes: notes.trim() || null,
-        })
+      const args: Database['public']['Functions']['admin_add_guest_signup']['Args'] = {
+        p_match_id: matchId,
+        p_display_name: name.trim(),
+        p_notes: notes.trim() || undefined,
+      }
+      const { error: signupError } = await (supabase as any).rpc('admin_add_guest_signup', args)
 
       if (signupError) throw signupError
 

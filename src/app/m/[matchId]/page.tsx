@@ -1,11 +1,12 @@
-import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { Calendar, Clock, MapPin, Users, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { PublicSignupButton } from './public-signup-button'
+import { PublicMatchActions } from './public-match-actions'
 
 interface PageProps {
   params: Promise<{ matchId: string }>
@@ -13,99 +14,79 @@ interface PageProps {
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
+const STATUS_MESSAGES: Record<string, string> = {
+  draft: 'Las inscripciones aún no están abiertas',
+  teams_created: 'Los equipos ya fueron armados',
+  finished: 'Este partido ya terminó',
+  cancelled: 'Este partido fue cancelado',
+}
+
+interface PublicMatch {
+  id: string
+  group_name: string
+  group_slug: string
+  date_time: string
+  location: string | null
+  notes: string | null
+  status: string
+  max_players: number
+  confirmed_count: number
+  waitlist_count: number
+  confirmed_names: string[]
+  waitlist_names: string[]
+}
+
+function NotFoundCard() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="flex flex-col items-center py-8">
+          <XCircle className="h-12 w-12 text-destructive mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Partido no encontrado</h2>
+          <p className="text-muted-foreground text-center mb-6">
+            Este partido no existe o ya no está disponible.
+          </p>
+          <Link href="/">
+            <Button>Ir al inicio</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 export default async function PublicMatchPage({ params }: PageProps) {
   const { matchId } = await params
   const supabase = await createClient()
 
-  // Get match with group info
-  type MatchWithGroup = {
-    id: string
-    date_time: string
-    location: string | null
-    status: string
-    max_players: number
-    notes: string | null
-    groups: {
-      id: string
-      name: string
-      slug: string
-    } | null
+  // get_public_match works for anonymous visitors too -- it's the only way
+  // this page reads match data, so RLS never needs to open matches to anon.
+  const { data: match } = (await (supabase as any).rpc('get_public_match', {
+    p_match_id: matchId,
+  })) as { data: PublicMatch | null }
+
+  if (!match || !match.id) {
+    return <NotFoundCard />
   }
 
-  const { data: match } = await supabase
-    .from('matches')
-    .select(`
-      id,
-      date_time,
-      location,
-      status,
-      max_players,
-      notes,
-      groups (
-        id,
-        name,
-        slug
-      )
-    `)
-    .eq('id', matchId)
-    .single() as { data: MatchWithGroup | null }
-
-  if (!match || !match.groups) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex flex-col items-center py-8">
-            <XCircle className="h-12 w-12 text-destructive mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Partido no encontrado</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              Este partido no existe o ya no está disponible.
-            </p>
-            <Link href="/">
-              <Button>Ir al inicio</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const group = match.groups
   const date = new Date(match.date_time)
   const isPast = date < new Date()
+  const isSignupPhase = ['signup_open', 'full', 'signup_closed'].includes(match.status)
 
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Count confirmed signups
-  const { count: confirmedCount } = await supabase
-    .from('match_signups')
-    .select('*', { count: 'exact', head: true })
-    .eq('match_id', matchId)
-    .eq('status', 'confirmed')
-
-  const signupCount = confirmedCount || 0
-  const isFull = signupCount >= match.max_players
-
-  // If match is not open for signup, show status
-  if (match.status !== 'signup_open' && match.status !== 'full') {
-    const statusMessages: Record<string, string> = {
-      draft: 'Las inscripciones aún no están abiertas',
-      teams_created: 'Los equipos ya fueron armados',
-      finished: 'Este partido ya terminó',
-      cancelled: 'Este partido fue cancelado',
-    }
-
+  if (!isSignupPhase) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center py-8">
             <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">{group.name}</h2>
+            <h2 className="text-xl font-semibold mb-2">{match.group_name}</h2>
             <p className="text-muted-foreground text-center mb-6">
-              {statusMessages[match.status] || 'Este partido no está disponible'}
+              {STATUS_MESSAGES[match.status] || 'Este partido no está disponible'}
             </p>
             {user && (
-              <Link href={`/groups/${group.slug}/matches/${matchId}`}>
+              <Link href={`/groups/${match.group_slug}/matches/${matchId}`}>
                 <Button>Ver detalles del partido</Button>
               </Link>
             )}
@@ -115,10 +96,10 @@ export default async function PublicMatchPage({ params }: PageProps) {
     )
   }
 
-  // If user is logged in, check membership and signup status
-  let playerProfile: { id: string } | null = null
+  // Resolve the logged-in visitor's relationship to the group (member vs not)
   let isMember = false
-  let currentSignup: { id: string; status: string; waitlist_position: number | null } | null = null
+  let memberSignup: { id: string; status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
+  let inviteCode: string | null = null
 
   if (user) {
     const { data: profile } = await supabase
@@ -127,30 +108,85 @@ export default async function PublicMatchPage({ params }: PageProps) {
       .eq('user_id', user.id)
       .single() as { data: { id: string } | null }
 
-    playerProfile = profile
-
     if (profile) {
-      // Check membership
-      const { data: membership } = await supabase
-        .from('group_memberships')
-        .select('id')
-        .eq('group_id', group.id)
-        .eq('player_id', profile.id)
-        .eq('is_active', true)
-        .single() as { data: { id: string } | null }
+      const { data: groupRow } = await supabase
+        .from('groups')
+        .select('id, invite_code')
+        .eq('slug', match.group_slug)
+        .single() as { data: { id: string; invite_code: string } | null }
 
-      isMember = !!membership
+      if (groupRow) {
+        inviteCode = groupRow.invite_code
 
-      // Check current signup
-      const { data: signup } = await supabase
-        .from('match_signups')
-        .select('id, status, waitlist_position')
-        .eq('match_id', matchId)
-        .eq('player_id', profile.id)
-        .in('status', ['confirmed', 'waitlist'])
-        .single() as { data: { id: string; status: string; waitlist_position: number | null } | null }
+        const { data: membership } = await supabase
+          .from('group_memberships')
+          .select('id')
+          .eq('group_id', groupRow.id)
+          .eq('player_id', profile.id)
+          .eq('is_active', true)
+          .single() as { data: { id: string } | null }
 
-      currentSignup = signup
+        isMember = !!membership
+
+        if (isMember) {
+          const { data: signup } = await supabase
+            .from('match_signups')
+            .select('id, status, waitlist_position')
+            .eq('match_id', matchId)
+            .eq('player_id', profile.id)
+            .in('status', ['confirmed', 'waitlist'])
+            .single() as { data: { id: string; status: string; waitlist_position: number | null } | null }
+
+          memberSignup = signup
+            ? {
+                id: signup.id,
+                status: signup.status as 'confirmed' | 'waitlist',
+                waitlistPosition: signup.waitlist_position,
+              }
+            : null
+        }
+      }
+    }
+  }
+
+  // Resolve the anonymous/guest identity from the httpOnly cookie, if any.
+  // guest_players/match_signups aren't readable by anon, so this lookup goes
+  // through the service-role client -- never trusting anything besides the
+  // opaque token itself.
+  let guestSignup: { status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
+
+  if (!isMember) {
+    const cookieStore = await cookies()
+    const guestToken = cookieStore.get(`fulbot_guest_${matchId}`)?.value
+
+    if (guestToken) {
+      try {
+        const admin = createAdminClient()
+        const { data: guestRow } = await admin
+          .from('guest_players')
+          .select('id')
+          .eq('self_signup_token', guestToken)
+          .maybeSingle() as { data: { id: string } | null }
+
+        if (guestRow) {
+          const { data: signupRow } = await admin
+            .from('match_signups')
+            .select('status, waitlist_position')
+            .eq('match_id', matchId)
+            .eq('guest_player_id', guestRow.id)
+            .in('status', ['confirmed', 'waitlist'])
+            .maybeSingle() as { data: { status: string; waitlist_position: number | null } | null }
+
+          if (signupRow) {
+            guestSignup = {
+              status: signupRow.status as 'confirmed' | 'waitlist',
+              waitlistPosition: signupRow.waitlist_position,
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error resolving guest signup:', err)
+      }
     }
   }
 
@@ -159,14 +195,17 @@ export default async function PublicMatchPage({ params }: PageProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-2">
-            <Badge variant={isFull ? 'secondary' : 'default'}>
-              {isFull ? 'Completo' : 'Inscripción abierta'}
+            <Badge variant={match.status === 'full' ? 'secondary' : match.status === 'signup_closed' ? 'outline' : 'default'}>
+              {match.status === 'full'
+                ? 'Completo'
+                : match.status === 'signup_closed'
+                  ? 'Inscripción cerrada'
+                  : 'Inscripción abierta'}
             </Badge>
           </div>
-          <CardTitle className="text-xl">{group.name}</CardTitle>
+          <CardTitle className="text-xl">{match.group_name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Match Info */}
           <div className="space-y-3">
             <div className="flex items-center gap-3 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -184,7 +223,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
             )}
             <div className="flex items-center gap-3 text-sm">
               <Users className="h-4 w-4 text-muted-foreground" />
-              <span>{signupCount}/{match.max_players} jugadores</span>
+              <span>{match.confirmed_count}/{match.max_players} jugadores</span>
             </div>
           </div>
 
@@ -194,40 +233,53 @@ export default async function PublicMatchPage({ params }: PageProps) {
             </p>
           )}
 
-          {/* Action based on auth status */}
-          {!user ? (
-            <div className="space-y-3">
-              <p className="text-center text-sm text-muted-foreground">
-                Inicia sesión para inscribirte
+          <PublicMatchActions
+            matchId={matchId}
+            groupSlug={match.group_slug}
+            status={match.status as 'signup_open' | 'full' | 'signup_closed'}
+            isPast={isPast}
+            isLoggedIn={!!user}
+            isMember={isMember}
+            memberSignup={memberSignup}
+            guestSignup={guestSignup}
+            inviteCode={inviteCode}
+          />
+
+          <div className="space-y-3 border-t border-border/50 pt-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                Confirmados ({match.confirmed_names.length})
               </p>
-              <div className="flex flex-col gap-2">
-                <Link href={`/login?redirect=/m/${matchId}`}>
-                  <Button className="w-full">Iniciar sesión</Button>
-                </Link>
-                <Link href={`/register?redirect=/m/${matchId}`}>
-                  <Button variant="outline" className="w-full">Crear cuenta</Button>
-                </Link>
+              {match.confirmed_names.length > 0 ? (
+                <ul className="text-sm space-y-1">
+                  {match.confirmed_names.map((name, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="w-5 text-center text-xs text-muted-foreground">{i + 1}</span>
+                      <span>{name}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nadie se inscribió todavía</p>
+              )}
+            </div>
+
+            {match.waitlist_names.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                  Lista de espera ({match.waitlist_names.length})
+                </p>
+                <ul className="text-sm space-y-1">
+                  {match.waitlist_names.map((name, i) => (
+                    <li key={i} className="flex items-center gap-2 text-muted-foreground">
+                      <span className="w-5 text-center text-xs">{i + 1}</span>
+                      <span>{name}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
-          ) : !isMember ? (
-            <div className="space-y-3">
-              <p className="text-center text-sm text-muted-foreground">
-                No sos miembro de este grupo
-              </p>
-              <Link href={`/groups/${group.slug}`}>
-                <Button variant="outline" className="w-full">Ver grupo</Button>
-              </Link>
-            </div>
-          ) : playerProfile ? (
-            <PublicSignupButton
-              matchId={matchId}
-              playerId={playerProfile.id}
-              groupSlug={group.slug}
-              currentSignup={currentSignup}
-              isFull={isFull}
-              isPast={isPast}
-            />
-          ) : null}
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

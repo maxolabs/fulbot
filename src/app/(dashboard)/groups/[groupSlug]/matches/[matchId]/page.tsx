@@ -34,6 +34,7 @@ const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   draft: { label: 'Borrador', variant: 'outline' },
   signup_open: { label: 'Inscripción abierta', variant: 'default' },
+  signup_closed: { label: 'Inscripción cerrada', variant: 'outline' },
   full: { label: 'Completo', variant: 'secondary' },
   teams_created: { label: 'Equipos armados', variant: 'default' },
   finished: { label: 'Finalizado', variant: 'outline' },
@@ -389,7 +390,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {!isPast && match.status !== 'cancelled' && match.status !== 'finished' && (
             <SignupActions
               matchId={match.id}
-              playerId={playerProfile.id}
               currentSignup={currentUserSignup ? {
                 id: currentUserSignup.id,
                 status: currentUserSignup.status,
@@ -412,6 +412,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 signups={confirmedSignups}
                 currentPlayerId={playerProfile.id}
                 emptyMessage="Nadie se inscribió todavía"
+                isAdminOrCaptain={isAdminOrCaptain}
               />
             </CardContent>
           </Card>
@@ -430,6 +431,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   currentPlayerId={playerProfile.id}
                   showWaitlistPosition
                   emptyMessage="No hay nadie en espera"
+                  isAdminOrCaptain={isAdminOrCaptain}
                 />
               </CardContent>
             </Card>
@@ -493,7 +495,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {isAdminOrCaptain && match.status !== 'finished' && match.status !== 'cancelled' && (
             <AddGuestForm
               matchId={match.id}
-              groupId={group.id}
               isFull={confirmedSignups.length >= match.max_players}
               maxPlayers={match.max_players}
               confirmedCount={confirmedSignups.length}

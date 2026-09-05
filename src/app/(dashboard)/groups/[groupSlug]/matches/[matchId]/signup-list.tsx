@@ -1,8 +1,14 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Star } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Star, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import type { Database } from '@/types/database'
 
 interface Signup {
   id: string
@@ -31,6 +37,7 @@ interface SignupListProps {
   currentPlayerId: string
   showWaitlistPosition?: boolean
   emptyMessage: string
+  isAdminOrCaptain?: boolean
 }
 
 const POSITION_LABELS: Record<string, string> = {
@@ -54,7 +61,36 @@ export function SignupList({
   currentPlayerId,
   showWaitlistPosition,
   emptyMessage,
+  isAdminOrCaptain,
 }: SignupListProps) {
+  const router = useRouter()
+  const supabase = createClient()
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
+  const handleRemove = async (signupId: string, displayName: string) => {
+    if (!confirm(`¿Seguro que querés sacar a ${displayName} del partido?`)) {
+      return
+    }
+
+    setRemovingId(signupId)
+
+    try {
+      const args: Database['public']['Functions']['admin_remove_signup']['Args'] = {
+        p_signup_id: signupId,
+      }
+      const { error } = await (supabase as any).rpc('admin_remove_signup', args)
+
+      if (error) throw error
+
+      router.refresh()
+    } catch (err) {
+      console.error('Error removing signup:', err)
+      alert('Error al sacar del partido')
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
   if (signups.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-4">
@@ -125,6 +161,20 @@ export function SignupList({
               <span className="text-xs text-muted-foreground max-w-[100px] truncate">
                 {signup.notes}
               </span>
+            )}
+
+            {isAdminOrCaptain && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => handleRemove(signup.id, displayName)}
+                disabled={removingId === signup.id}
+                title="Sacar del partido"
+              >
+                {removingId === signup.id ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
+              </Button>
             )}
           </div>
         )
