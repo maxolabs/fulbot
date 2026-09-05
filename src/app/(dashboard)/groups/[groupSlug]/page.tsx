@@ -11,6 +11,7 @@ import {
   Clock
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -150,6 +151,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
   // §2.4). Best-effort: a failure here must never break the group page.
   try {
     await supabase.rpc('generate_recurring_matches', { p_group_id: group.id })
+    // Emit match_created (§2.6) for whatever that just created (or a racing
+    // cron sweep already did); see src/lib/notifications/match-created.ts.
+    await emitPendingMatchCreatedNotifications(supabase, group.id)
   } catch {
     // ignore
   }

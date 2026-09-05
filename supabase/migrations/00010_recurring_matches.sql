@@ -110,7 +110,6 @@ DECLARE
     v_signup_local TIMESTAMP;
     v_signup_instant TIMESTAMPTZ;
     v_match_id UUID;
-    v_payload JSONB;
 BEGIN
     IF p_group_id IS NOT NULL THEN
         IF NOT is_group_member(p_group_id) THEN
@@ -174,19 +173,16 @@ BEGIN
 
                 v_created_count := v_created_count + 1;
 
-                v_payload := jsonb_build_object(
-                    'date_time', v_candidate_instant,
-                    'location', pattern.location,
-                    'max_players', pattern.max_players
-                );
-
-                -- T5 (notifications) is built in parallel and may not exist
-                -- yet on this branch; call it dynamically, and only if it
-                -- does, so this function compiles/runs either way.
-                IF to_regprocedure('emit_notification(uuid,uuid,text,jsonb)') IS NOT NULL THEN
-                    EXECUTE 'SELECT emit_notification($1, $2, $3, $4)'
-                    USING pattern.group_id, v_match_id, 'match_created', v_payload;
-                END IF;
+                -- The match_created notification (§2.6) is emitted by the TS
+                -- caller (src/lib/notifications/match-created.ts), not here:
+                -- its canonical MatchCreatedPayload needs match_id,
+                -- group_name and signup_url (built from NEXT_PUBLIC_APP_URL),
+                -- none of which this function can produce correctly in SQL.
+                -- Both callers of this RPC (GET /api/cron/recurring and the
+                -- group-page lazy call) invoke that helper right after this
+                -- RPC returns; it is idempotent (keyed on the absence of an
+                -- existing match_created notification for the match), so it
+                -- is safe regardless of how many times this function runs.
             EXCEPTION WHEN unique_violation THEN
                 -- Another concurrent call already created this occurrence.
                 NULL;
@@ -199,4 +195,4 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 REVOKE ALL ON FUNCTION generate_recurring_matches(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION generate_recurring_matches(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION generate_recurring_matches(UUID) TO authenticated, service_role;

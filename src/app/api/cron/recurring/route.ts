@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 
 // Daily sweep (see vercel.json) that materializes the next match instance for
 // every active recurring pattern, across all groups. Also called lazily,
@@ -20,5 +21,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ created: data ?? 0 })
+  // Emit match_created (§2.6) for whatever this sweep (or a racing lazy
+  // group-page call) just created; see src/lib/notifications/match-created.ts.
+  const notified = await emitPendingMatchCreatedNotifications(supabase)
+
+  return NextResponse.json({ created: data ?? 0, notified })
 }
