@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateTeams, PlayerInput, RuleInput } from '@/lib/ai/team-generator'
+import {
+  generateTeams,
+  guestPlayerDefaults,
+  PlayerInput,
+  RuleInput,
+  MatchHistoryEntry,
+} from '@/lib/ai/team-generator'
+import type { Json } from '@/types/database'
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
 }
+
+const KNOWN_RULE_TYPES = new Set<RuleInput['type']>([
+  'avoid_pair',
+  'force_pair',
+  'min_goalkeepers',
+  'min_defenders',
+])
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
@@ -22,7 +36,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .from('player_profiles')
       .select('id')
       .eq('user_id', user.id)
-      .single() as { data: { id: string } | null }
+      .single()
 
     if (!playerProfile) {
       return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 400 })
@@ -33,7 +47,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .from('matches')
       .select('id, group_id, status, max_players')
       .eq('id', matchId)
-      .single() as { data: { id: string; group_id: string; status: string; max_players: number } | null }
+      .single()
 
     if (!match) {
       return NextResponse.json({ error: 'Partido no encontrado' }, { status: 404 })
@@ -46,13 +60,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq('group_id', match.group_id)
       .eq('player_id', playerProfile.id)
       .eq('is_active', true)
-      .single() as { data: { role: string } | null }
+      .single()
 
     if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
-      return NextResponse.json({ error: 'No tenés permiso para armar equipos' }, { status: 403 })
+      return NextResponse.json({ error: 'No tenés permiso para armar equipos en este grupo' }, { status: 403 })
     }
 
-    // Get confirmed signups with player profiles and guest players
+    // Get confirmed signups with player profiles and guest players.
+    // The hand-written Database type doesn't carry FK relationship metadata, so the
+    // client can't infer the shape of this embedded select on its own - we assert the
+    // known shape here instead (same pattern used elsewhere in this codebase).
     type SignupWithPlayer = {
       id: string
       player_id: string | null
@@ -75,10 +92,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       guest_players: {
         id: string
         display_name: string
+        estimated_rating: number
+        preferred_positions: string[]
       } | null
     }
 
-    const { data: signups } = await supabase
+    const { data: signups, error: signupsError } = await supabase
       .from('match_signups')
       .select(`
         id,
@@ -101,15 +120,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
         ),
         guest_players (
           id,
-          display_name
+          display_name,
+          estimated_rating,
+          preferred_positions
         )
       `)
       .eq('match_id', matchId)
-      .eq('status', 'confirmed') as { data: SignupWithPlayer[] | null }
+      .eq('status', 'confirmed') as unknown as {
+        data: SignupWithPlayer[] | null
+        error: { message: string } | null
+      }
+
+    if (signupsError) {
+      console.error('Error fetching signups:', signupsError)
+      return NextResponse.json({ error: 'No se pudieron obtener los jugadores anotados' }, { status: 500 })
+    }
 
     if (!signups || signups.length < 4) {
       return NextResponse.json(
-        { error: 'Se necesitan al menos 4 jugadores confirmados' },
+        { error: 'Se necesitan al menos 4 jugadores confirmados para armar equipos' },
         { status: 400 }
       )
     }
@@ -119,192 +148,173 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .filter((s) => s.player_profiles !== null || s.guest_players !== null)
       .map((s) => {
         if (s.player_profiles) {
+          const pp = s.player_profiles
           return {
-            id: s.player_profiles.id,
-            displayName: s.player_profiles.display_name,
-            nickname: s.player_profiles.nickname,
-            mainPosition: s.player_profiles.main_position,
-            preferredPositions: s.player_profiles.preferred_positions,
-            overallRating: s.player_profiles.overall_rating,
-            footedness: s.player_profiles.footedness,
-            goalkeeperWillingness: s.player_profiles.goalkeeper_willingness,
-            fitnessStatus: s.player_profiles.fitness_status,
-            reliabilityScore: s.player_profiles.reliability_score,
-            matchesPlayed: s.player_profiles.matches_played,
-            goals: s.player_profiles.goals,
-            assists: s.player_profiles.assists,
+            id: pp.id,
+            displayName: pp.display_name,
+            nickname: pp.nickname,
+            mainPosition: pp.main_position,
+            preferredPositions: pp.preferred_positions,
+            overallRating: pp.overall_rating,
+            footedness: pp.footedness,
+            goalkeeperWillingness: pp.goalkeeper_willingness,
+            fitnessStatus: pp.fitness_status,
+            reliabilityScore: pp.reliability_score,
+            matchesPlayed: pp.matches_played,
+            goals: pp.goals,
+            assists: pp.assists,
           }
         }
-        // Guest player with sensible defaults
-        return {
-          id: s.guest_players!.id,
-          displayName: s.guest_players!.display_name,
-          nickname: null,
-          mainPosition: 'CM',
-          preferredPositions: ['CM', 'ST', 'CB'],
-          overallRating: 2.5,
-          footedness: 'right' as const,
-          goalkeeperWillingness: 1,
-          fitnessStatus: 'ok' as const,
-          reliabilityScore: 50,
-          matchesPlayed: 0,
-          goals: 0,
-          assists: 0,
-          isGuest: true,
-        }
+        const gp = s.guest_players!
+        return guestPlayerDefaults({
+          id: gp.id,
+          displayName: gp.display_name,
+          preferredPositions: gp.preferred_positions,
+          estimatedRating: gp.estimated_rating,
+        })
       })
 
-    // Get rules for this group/match
-    type RuleRow = {
-      rule_type: string
-      data: { player_ids?: string[]; value?: number }
-    }
+    // Guest player ids, used later to split assignments between player_id / guest_player_id
+    const guestPlayerIds = new Set(
+      signups.filter((s) => s.guest_player_id && s.guest_players).map((s) => s.guest_players!.id)
+    )
 
+    // Get rules for this group/match (canonical shapes only, see docs/rework-plan.md §2.2)
     const { data: rules } = await supabase
       .from('rule_sets')
       .select('rule_type, data')
       .or(`group_id.eq.${match.group_id},match_id.eq.${matchId}`)
-      .eq('is_active', true) as { data: RuleRow[] | null }
+      .eq('is_active', true)
 
-    const ruleInputs: RuleInput[] = (rules || []).map((r) => ({
-      type: r.rule_type as RuleInput['type'],
-      playerIds: r.data.player_ids,
-      value: r.data.value,
+    const ruleInputs: RuleInput[] = (rules || [])
+      .filter((r) => KNOWN_RULE_TYPES.has(r.rule_type as RuleInput['type']))
+      .map((r) => {
+        const d = (r.data ?? {}) as { player_ids?: string[]; min_count?: number }
+        return {
+          type: r.rule_type as RuleInput['type'],
+          playerIds: d.player_ids,
+          value: d.min_count,
+        }
+      })
+
+    // Recent match history, for teammate-pair rotation
+    const { data: historyRows } = await supabase.rpc('get_recent_match_history', {
+      p_group_id: match.group_id,
+      p_limit: 5,
+    })
+
+    const historyEntries: MatchHistoryEntry[] = (historyRows || []).map((row) => ({
+      matchId: row.match_id,
+      matchDate: row.match_date,
+      darkTeamPlayers: (row.dark_team_players as { player_id: string; name: string }[] | null) ?? null,
+      lightTeamPlayers: (row.light_team_players as { player_id: string; name: string }[] | null) ?? null,
     }))
 
-    // Generate teams using Claude
-    const generatedTeams = await generateTeams(players, ruleInputs)
+    // Generate teams (OpenAI with hard-constraint validation, falls back to the
+    // deterministic balancer when the key is missing or the AI keeps failing)
+    const teamSize = Math.ceil(players.length / 2)
+    const generatedTeams = await generateTeams(players, ruleInputs, teamSize, historyEntries)
 
-    // Delete existing teams for this match
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    // Persist teams + assignments atomically through the shared RPC (also used by
+    // manual drag/drop edits), then update match status + AI snapshot.
+    const assignmentsPayload = [
+      ...generatedTeams.dark.map((a, index) => ({
+        team: 'dark' as const,
+        player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
+        guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
+        position: a.position,
+        order_index: index,
+        source: 'ai' as const,
+      })),
+      ...generatedTeams.light.map((a, index) => ({
+        team: 'light' as const,
+        player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
+        guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
+        position: a.position,
+        order_index: index,
+        source: 'ai' as const,
+      })),
+    ]
+
+    const { error: saveError } = await supabase.rpc('save_team_assignments', {
+      p_match_id: matchId,
+      p_assignments: assignmentsPayload as unknown as Json,
+    })
+
+    if (saveError) {
+      console.error('Error saving team assignments:', saveError)
+      return NextResponse.json(
+        { error: 'No se pudieron guardar los equipos generados. Probá de nuevo.' },
+        { status: 500 }
+      )
+    }
+
+    const { data: teams } = await supabase
       .from('teams')
-      .delete()
+      .select('id, name')
       .eq('match_id', matchId)
 
-    // Create dark team
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: darkTeam, error: darkError } = await (supabase as any)
-      .from('teams')
-      .insert({
-        match_id: matchId,
-        name: 'dark',
-        color_hex: '#1a1a1a',
-        created_by_user_id: user.id,
-      })
-      .select('id')
-      .single()
+    const darkTeamId = teams?.find((t) => t.name === 'dark')?.id ?? null
+    const lightTeamId = teams?.find((t) => t.name === 'light')?.id ?? null
 
-    if (darkError) {
-      console.error('Error creating dark team:', darkError)
-      throw darkError
-    }
+    const generatedAt = new Date().toISOString()
+    const snapshot = {
+      input: {
+        players: players.map((p) => ({
+          id: p.id,
+          name: p.displayName,
+          rating: p.overallRating,
+          isGuest: p.isGuest ?? false,
+        })),
+        rules: ruleInputs,
+        recentMatchesConsidered: historyEntries.length,
+      },
+      output: {
+        dark: generatedTeams.dark,
+        light: generatedTeams.light,
+        reasoning: generatedTeams.reasoning,
+        balanceScore: generatedTeams.balanceScore,
+        warnings: generatedTeams.warnings,
+      },
+      provider: generatedTeams.provider,
+      model: generatedTeams.model ?? null,
+      generatedAt,
+    } as unknown as Json
 
-    // Create light team
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: lightTeam, error: lightError } = await (supabase as any)
-      .from('teams')
-      .insert({
-        match_id: matchId,
-        name: 'light',
-        color_hex: '#ffffff',
-        created_by_user_id: user.id,
-      })
-      .select('id')
-      .single()
-
-    if (lightError) {
-      console.error('Error creating light team:', lightError)
-      throw lightError
-    }
-
-    // Build a set of guest player IDs for assignment mapping
-    const guestPlayerIds = new Set(
-      signups.filter(s => s.guest_player_id).map(s => s.guest_players!.id)
-    )
-
-    // Create team assignments for dark team
-    const darkAssignments = generatedTeams.dark.map((a, index) => ({
-      team_id: darkTeam.id,
-      player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
-      guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
-      position: a.position,
-      order_index: index,
-      source: 'ai',
-    }))
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: darkAssignError } = await (supabase as any)
-      .from('team_assignments')
-      .insert(darkAssignments)
-
-    if (darkAssignError) {
-      console.error('Error inserting dark team assignments:', darkAssignError)
-      throw darkAssignError
-    }
-
-    // Create team assignments for light team
-    const lightAssignments = generatedTeams.light.map((a, index) => ({
-      team_id: lightTeam.id,
-      player_id: guestPlayerIds.has(a.playerId) ? null : a.playerId,
-      guest_player_id: guestPlayerIds.has(a.playerId) ? a.playerId : null,
-      position: a.position,
-      order_index: index,
-      source: 'ai',
-    }))
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: lightAssignError } = await (supabase as any)
-      .from('team_assignments')
-      .insert(lightAssignments)
-
-    if (lightAssignError) {
-      console.error('Error inserting light team assignments:', lightAssignError)
-      throw lightAssignError
-    }
-
-    // Update match status to teams_created
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from('matches')
-      .update({ status: 'teams_created' })
-      .eq('id', matchId)
-
-    // Store AI reasoning as snapshot
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { error: updateError } = await supabase
       .from('matches')
       .update({
-        ai_input_snapshot: {
-          players: players.map((p) => ({ id: p.id, name: p.displayName, rating: p.overallRating })),
-          reasoning: generatedTeams.reasoning,
-          balanceScore: generatedTeams.balanceScore,
-          warnings: generatedTeams.warnings,
-          generatedAt: new Date().toISOString(),
-        },
+        status: 'teams_created',
+        ai_input_snapshot: snapshot,
       })
       .eq('id', matchId)
+
+    if (updateError) {
+      console.error('Error updating match after team generation:', updateError)
+      // The teams were already saved, so this is a soft failure - keep going.
+    }
 
     return NextResponse.json({
       success: true,
       teams: {
         dark: {
-          id: darkTeam.id,
+          id: darkTeamId,
           assignments: generatedTeams.dark,
         },
         light: {
-          id: lightTeam.id,
+          id: lightTeamId,
           assignments: generatedTeams.light,
         },
       },
       reasoning: generatedTeams.reasoning,
       balanceScore: generatedTeams.balanceScore,
       warnings: generatedTeams.warnings,
+      provider: generatedTeams.provider,
     })
   } catch (error) {
     console.error('Team generation error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al generar equipos' },
+      { error: error instanceof Error ? error.message : 'Error al generar equipos. Probá de nuevo en un momento.' },
       { status: 500 }
     )
   }

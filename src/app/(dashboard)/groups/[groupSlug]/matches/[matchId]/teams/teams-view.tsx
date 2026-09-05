@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, RefreshCw, Users, AlertTriangle, LayoutGrid, List } from 'lucide-react'
+import { Sparkles, RefreshCw, Users, AlertTriangle, LayoutGrid, List, Bot, Calculator } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +47,7 @@ interface TeamsViewProps {
   aiReasoning?: string
   balanceScore?: number
   warnings?: string[]
+  provider?: 'openai' | 'fallback'
   isAdminOrCaptain: boolean
   hasTeams: boolean
 }
@@ -62,6 +63,7 @@ export function TeamsView({
   aiReasoning,
   balanceScore,
   warnings,
+  provider,
   isAdminOrCaptain,
   hasTeams,
 }: TeamsViewProps) {
@@ -95,20 +97,34 @@ export function TeamsView({
     }
   }
 
-  // Get players by team (match by player_id or guest_player_id)
+  // Get players by team (match by player_id or guest_player_id), carrying both ids
+  // through so manual edits (drag/drop, position changes) can be saved via
+  // save_team_assignments without losing track of whether it's a player or a guest.
   const darkPlayers = darkTeam.assignments.map((a) => {
     const id = a.player_id || a.guest_player_id
     const player = players.find((p) => p.id === id)
     if (!player) return null
-    return { ...player, position: a.position, assignmentId: a.id }
-  }).filter(Boolean) as (Player & { position: string; assignmentId: string })[]
+    return {
+      ...player,
+      position: a.position,
+      assignmentId: a.id,
+      playerId: a.player_id,
+      guestPlayerId: a.guest_player_id,
+    }
+  }).filter(Boolean) as (Player & { position: string; assignmentId: string; playerId: string | null; guestPlayerId: string | null })[]
 
   const lightPlayers = lightTeam.assignments.map((a) => {
     const id = a.player_id || a.guest_player_id
     const player = players.find((p) => p.id === id)
     if (!player) return null
-    return { ...player, position: a.position, assignmentId: a.id }
-  }).filter(Boolean) as (Player & { position: string; assignmentId: string })[]
+    return {
+      ...player,
+      position: a.position,
+      assignmentId: a.id,
+      playerId: a.player_id,
+      guestPlayerId: a.guest_player_id,
+    }
+  }).filter(Boolean) as (Player & { position: string; assignmentId: string; playerId: string | null; guestPlayerId: string | null })[]
 
   // Calculate team stats
   const darkAvgRating = darkPlayers.length > 0
@@ -191,9 +207,26 @@ export function TeamsView({
       {aiReasoning && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
-              Análisis de la IA
+            <CardTitle className="text-base flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Análisis
+              </span>
+              {provider && (
+                <Badge variant={provider === 'openai' ? 'default' : 'secondary'} className="gap-1 font-normal">
+                  {provider === 'openai' ? (
+                    <>
+                      <Bot className="h-3 w-3" />
+                      IA
+                    </>
+                  ) : (
+                    <>
+                      <Calculator className="h-3 w-3" />
+                      Determinístico
+                    </>
+                  )}
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>

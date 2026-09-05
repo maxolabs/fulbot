@@ -14,16 +14,24 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Star, Save } from 'lucide-react'
+import { GripVertical, Star, Save, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import type { Json } from '@/types/database'
+
+// Standard position abbreviations used across the app (AI prompt, fallback balancer, lineup field)
+export const POSITION_OPTIONS = [
+  'GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF',
+] as const
 
 interface Player {
-  id: string
+  id: string // player_profiles.id or guest_players.id - stable key across drag/drop
+  playerId: string | null
+  guestPlayerId: string | null
   displayName: string
   nickname: string | null
   mainPosition: string
@@ -45,9 +53,11 @@ interface DraggableTeamsProps {
 interface SortablePlayerProps {
   player: Player
   teamColor: 'dark' | 'light'
+  onMoveTeam: () => void
+  onPositionChange: (position: string) => void
 }
 
-function SortablePlayer({ player, teamColor }: SortablePlayerProps) {
+function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: SortablePlayerProps) {
   const {
     attributes,
     listeners,
@@ -69,7 +79,7 @@ function SortablePlayer({ player, teamColor }: SortablePlayerProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 rounded-lg border ${
+      className={`flex flex-wrap items-center gap-2 sm:gap-3 p-3 rounded-lg border ${
         isDragging ? 'shadow-lg z-50' : ''
       } ${
         isDark
@@ -78,25 +88,17 @@ function SortablePlayer({ player, teamColor }: SortablePlayerProps) {
       }`}
     >
       <button
-        className="cursor-grab touch-none"
+        className="cursor-grab touch-none shrink-0"
         {...attributes}
         {...listeners}
+        aria-label="Arrastrar jugador"
       >
         <GripVertical className={`h-4 w-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
       </button>
 
-      <Badge
-        variant="outline"
-        className={`font-mono text-xs ${
-          isDark ? 'border-gray-600' : 'border-gray-300'
-        }`}
-      >
-        {player.position}
-      </Badge>
-
       <Avatar fallback={player.displayName} size="sm" />
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-[120px]">
         <p className="text-sm font-medium truncate">
           {player.displayName}
           {player.nickname && (
@@ -105,15 +107,37 @@ function SortablePlayer({ player, teamColor }: SortablePlayerProps) {
             </span>
           )}
         </p>
-        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          {player.mainPosition}
+        <p className={`text-xs flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+          {player.overallRating.toFixed(1)}
         </p>
       </div>
 
-      <div className="flex items-center gap-1 text-xs">
-        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-        {player.overallRating.toFixed(1)}
-      </div>
+      <select
+        value={player.position}
+        onChange={(e) => onPositionChange(e.target.value)}
+        aria-label="Posición"
+        className={`h-9 rounded-md border px-2 text-xs font-mono ${
+          isDark
+            ? 'bg-gray-900 border-gray-600 text-white'
+            : 'bg-white border-gray-300 text-gray-900'
+        }`}
+      >
+        {POSITION_OPTIONS.map((pos) => (
+          <option key={pos} value={pos}>{pos}</option>
+        ))}
+      </select>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onMoveTeam}
+        className={`h-9 text-xs shrink-0 ${isDark ? 'text-white border-gray-600 hover:bg-gray-700' : ''}`}
+      >
+        <ArrowLeftRight className="mr-1 h-3 w-3" />
+        {isDark ? '→ Claro' : '→ Oscuro'}
+      </Button>
     </div>
   )
 }
@@ -148,6 +172,7 @@ export function DraggableTeams({
   const [activePlayer, setActivePlayer] = useState<Player | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -196,55 +221,64 @@ export function DraggableTeams({
     }
   }
 
+  // Touch-friendly fallback for drag and drop: move a player with a button tap
+  const moveToTeam = (playerId: string, from: 'dark' | 'light') => {
+    if (from === 'dark') {
+      const player = darkPlayers.find((p) => p.id === playerId)
+      if (!player) return
+      setDarkPlayers(darkPlayers.filter((p) => p.id !== playerId))
+      setLightPlayers([...lightPlayers, player])
+    } else {
+      const player = lightPlayers.find((p) => p.id === playerId)
+      if (!player) return
+      setLightPlayers(lightPlayers.filter((p) => p.id !== playerId))
+      setDarkPlayers([...darkPlayers, player])
+    }
+    setHasChanges(true)
+  }
+
+  const changePosition = (playerId: string, team: 'dark' | 'light', position: string) => {
+    const updater = (list: Player[]) => list.map((p) => (p.id === playerId ? { ...p, position } : p))
+    if (team === 'dark') setDarkPlayers(updater(darkPlayers))
+    else setLightPlayers(updater(lightPlayers))
+    setHasChanges(true)
+  }
+
   const handleSave = async () => {
     setSaving(true)
+    setError(null)
 
     try {
-      // Delete all existing assignments for both teams
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from('team_assignments')
-        .delete()
-        .in('team_id', [darkTeamId, lightTeamId])
+      const assignments = [
+        ...darkPlayers.map((p, i) => ({
+          team: 'dark' as const,
+          player_id: p.playerId,
+          guest_player_id: p.guestPlayerId,
+          position: p.position,
+          order_index: i,
+        })),
+        ...lightPlayers.map((p, i) => ({
+          team: 'light' as const,
+          player_id: p.playerId,
+          guest_player_id: p.guestPlayerId,
+          position: p.position,
+          order_index: i,
+        })),
+      ]
 
-      // Insert new assignments for dark team
-      if (darkPlayers.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('team_assignments')
-          .insert(
-            darkPlayers.map((p, i) => ({
-              team_id: darkTeamId,
-              player_id: p.id,
-              position: p.position,
-              order_index: i,
-              source: 'manual',
-            }))
-          )
-      }
+      const { error: saveError } = await supabase.rpc('save_team_assignments', {
+        p_match_id: matchId,
+        p_assignments: assignments as unknown as Json,
+      })
 
-      // Insert new assignments for light team
-      if (lightPlayers.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('team_assignments')
-          .insert(
-            lightPlayers.map((p, i) => ({
-              team_id: lightTeamId,
-              player_id: p.id,
-              position: p.position,
-              order_index: i,
-              source: 'manual',
-            }))
-          )
-      }
+      if (saveError) throw saveError
 
       setHasChanges(false)
       onUpdate()
       router.refresh()
     } catch (err) {
       console.error('Error saving teams:', err)
-      alert('Error al guardar los cambios')
+      setError('No se pudieron guardar los cambios. Probá de nuevo.')
     } finally {
       setSaving(false)
     }
@@ -264,11 +298,17 @@ export function DraggableTeams({
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* Save button */}
       {hasChanges && (
         <Card className="border-primary/50 bg-primary/5">
           <CardContent className="py-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <p className="text-sm">Hay cambios sin guardar</p>
               <Button onClick={handleSave} disabled={saving} size="sm">
                 {saving ? (
@@ -311,6 +351,8 @@ export function DraggableTeams({
                       key={player.id}
                       player={player}
                       teamColor="dark"
+                      onMoveTeam={() => moveToTeam(player.id, 'dark')}
+                      onPositionChange={(position) => changePosition(player.id, 'dark', position)}
                     />
                   ))}
                   {darkPlayers.length === 0 && (
@@ -324,11 +366,11 @@ export function DraggableTeams({
           </Card>
 
           {/* Light Team */}
-          <Card className="border-2 border-gray-300">
-            <CardHeader className="bg-gray-100 py-3">
-              <CardTitle className="text-base flex items-center justify-between">
+          <Card className="border-2 border-gray-400/50">
+            <CardHeader className="bg-gray-300 dark:bg-gray-600 py-3">
+              <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
                 <span>Equipo Claro</span>
-                <Badge variant="outline">
+                <Badge variant="outline" className="border-gray-500 text-gray-900 dark:text-white dark:border-gray-300">
                   {lightPlayers.length} · {lightAvg.toFixed(1)} avg
                 </Badge>
               </CardTitle>
@@ -344,6 +386,8 @@ export function DraggableTeams({
                       key={player.id}
                       player={player}
                       teamColor="light"
+                      onMoveTeam={() => moveToTeam(player.id, 'light')}
+                      onPositionChange={(position) => changePosition(player.id, 'light', position)}
                     />
                   ))}
                   {lightPlayers.length === 0 && (
