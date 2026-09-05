@@ -30,8 +30,8 @@ export function renderNotificationText(
     case 'teams_created':
       return (
         `¡Se armaron los equipos! ` +
-        `Oscuro: ${event.payload.dark_team_names.join(', ')}. ` +
-        `Claro: ${event.payload.light_team_names.join(', ')}.`
+        `Oscuro: ${(event.payload.dark_team_names ?? []).join(', ') || '—'}. ` +
+        `Claro: ${(event.payload.light_team_names ?? []).join(', ') || '—'}.`
       )
     case 'match_reminder':
       return `Hoy ${event.payload.time} -- ${event.payload.group_name} -- remera oscura/clara según tu equipo`
