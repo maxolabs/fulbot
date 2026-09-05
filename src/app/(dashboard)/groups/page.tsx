@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Users, Calendar, ChevronRight } from 'lucide-react'
+import { Plus, Users, Calendar, ChevronRight, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -128,8 +128,88 @@ export default async function GroupsPage() {
     }
   }
 
+  // MVP voting nudge: most recent finished match (within 7 days) the user
+  // played in and hasn't voted for MVP in yet.
+  type MvpNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string }
+  let mvpNudge: MvpNudge | null = null
+
+  if (groups.length > 0) {
+    const groupIds = groups.map((g) => g.id)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const sevenDaysAgoIso = sevenDaysAgo.toISOString()
+
+    const { data: finishedMatches } = await supabase
+      .from('matches')
+      .select('id, group_id, date_time')
+      .in('group_id', groupIds)
+      .eq('status', 'finished')
+      .gte('date_time', sevenDaysAgoIso)
+      .order('date_time', { ascending: false }) as {
+        data: { id: string; group_id: string; date_time: string }[] | null
+      }
+
+    if (finishedMatches && finishedMatches.length > 0) {
+      const matchIds = finishedMatches.map((m) => m.id)
+
+      const { data: mySignups } = await supabase
+        .from('match_signups')
+        .select('match_id')
+        .in('match_id', matchIds)
+        .eq('player_id', playerProfile.id)
+        .eq('status', 'confirmed') as { data: { match_id: string }[] | null }
+
+      const playedMatchIds = new Set((mySignups || []).map((s) => s.match_id))
+
+      const { data: myVotes } = await supabase
+        .from('match_mvp_votes')
+        .select('match_id')
+        .in('match_id', matchIds)
+        .eq('voter_player_id', playerProfile.id) as { data: { match_id: string }[] | null }
+
+      const votedMatchIds = new Set((myVotes || []).map((v) => v.match_id))
+
+      const candidate = finishedMatches.find(
+        (m) => playedMatchIds.has(m.id) && !votedMatchIds.has(m.id)
+      )
+
+      if (candidate) {
+        const candidateGroup = groups.find((g) => g.id === candidate.group_id)
+        if (candidateGroup) {
+          mvpNudge = {
+            matchId: candidate.id,
+            groupSlug: candidateGroup.slug,
+            groupName: candidateGroup.name,
+            dateTime: candidate.date_time,
+          }
+        }
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* MVP voting nudge */}
+      {mvpNudge && (
+        <Link href={`/groups/${mvpNudge.groupSlug}/matches/${mvpNudge.matchId}`}>
+          <Card className="border-yellow-500/30 bg-yellow-500/5 transition-colors hover:bg-yellow-500/10">
+            <CardContent className="flex items-center gap-3 py-4">
+              <Trophy className="h-5 w-5 shrink-0 text-yellow-500" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {t('groups.mvpNudgeTitle', {
+                    group: mvpNudge.groupName,
+                    date: new Date(mvpNudge.dateTime).toLocaleDateString('es-AR'),
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground">{t('groups.mvpNudgeSubtitle')}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -192,6 +192,7 @@ export type Database = {
           ai_input_snapshot: Json | null
           notes: string | null
           results_finalized: boolean
+          mvp_player_id: string | null
           created_at: string
           updated_at: string
         }
@@ -206,6 +207,7 @@ export type Database = {
           ai_input_snapshot?: Json | null
           notes?: string | null
           results_finalized?: boolean
+          mvp_player_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -220,6 +222,7 @@ export type Database = {
           ai_input_snapshot?: Json | null
           notes?: string | null
           results_finalized?: boolean
+          mvp_player_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -717,6 +720,18 @@ export type Database = {
         Returns: boolean
       }
       finalize_match_results: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      recompute_match_mvp: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      award_badges_for_match: {
         Args: {
           p_match_id: string
         }

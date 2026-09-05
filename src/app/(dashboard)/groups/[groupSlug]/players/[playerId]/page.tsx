@@ -41,6 +41,7 @@ const BADGE_LABELS: Record<string, { label: string; icon: string; color: string 
   playmaker: { label: 'Playmaker', icon: '🎯', color: 'bg-blue-500/10 text-blue-700' },
   ironman: { label: 'Ironman', icon: '💪', color: 'bg-red-500/10 text-red-700' },
   safe_hands: { label: 'Safe Hands', icon: '🧤', color: 'bg-green-500/10 text-green-700' },
+  mvp: { label: 'MVP', icon: '🏆', color: 'bg-purple-500/10 text-purple-700' },
   mvp_streak: { label: 'MVP Streak', icon: '🏆', color: 'bg-purple-500/10 text-purple-700' },
   first_match: { label: 'Primera vez', icon: '🌟', color: 'bg-cyan-500/10 text-cyan-700' },
 }

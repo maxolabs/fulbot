@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trophy, Star, Check } from 'lucide-react'
+import { Trophy, Star, Check, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+
+const VOTING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 interface Player {
   id: string
@@ -20,12 +22,14 @@ interface PostMatchVotingProps {
   matchId: string
   currentPlayerId: string
   players: Player[]
+  matchDateTime: string
 }
 
 export function PostMatchVoting({
   matchId,
   currentPlayerId,
   players,
+  matchDateTime,
 }: PostMatchVotingProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -36,13 +40,16 @@ export function PostMatchVoting({
   const [existingVote, setExistingVote] = useState(false)
   const [mvpResults, setMvpResults] = useState<{ player_id: string; votes: number }[]>([])
 
+  // Players who didn't show up are never candidates (they're excluded from
+  // `players` upstream too, but this keeps the component defensive on its own).
   const otherPlayers = players.filter(p => p.id !== currentPlayerId)
+
+  const votingOpen = Date.now() - new Date(matchDateTime).getTime() < VOTING_WINDOW_MS
 
   useEffect(() => {
     // Check if already voted
     const checkExisting = async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existingMvp } = await (supabase as any)
+      const { data: existingMvp } = await supabase
         .from('match_mvp_votes')
         .select('id')
         .eq('match_id', matchId)
@@ -54,8 +61,7 @@ export function PostMatchVoting({
       }
 
       // Get MVP results
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: votes } = await (supabase as any)
+      const { data: votes } = await supabase
         .from('match_mvp_votes')
         .select('candidate_player_id')
         .eq('match_id', matchId)
@@ -75,14 +81,13 @@ export function PostMatchVoting({
   }, [matchId, currentPlayerId, supabase])
 
   const handleSubmit = async () => {
-    if (!mvpVote) return
+    if (!mvpVote || !votingOpen) return
 
     setLoading(true)
 
     try {
       // Submit MVP vote
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: mvpError } = await (supabase as any)
+      const { error: mvpError } = await supabase
         .from('match_mvp_votes')
         .insert({
           match_id: matchId,
@@ -95,8 +100,7 @@ export function PostMatchVoting({
       // Submit ratings
       const ratingEntries = Object.entries(ratings).filter(([, r]) => r > 0)
       if (ratingEntries.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: ratingsError } = await (supabase as any)
+        const { error: ratingsError } = await supabase
           .from('match_ratings')
           .insert(
             ratingEntries.map(([playerId, rating]) => ({
@@ -121,8 +125,9 @@ export function PostMatchVoting({
     }
   }
 
-  // Already voted - show results
-  if (existingVote || submitted) {
+  // Already voted, or the 7-day window closed - show results (top 3 only,
+  // no shaming of anyone at the bottom).
+  if (existingVote || submitted || !votingOpen) {
     return (
       <Card>
         <CardHeader>
@@ -130,11 +135,17 @@ export function PostMatchVoting({
             <Trophy className="h-5 w-5 text-yellow-500" />
             {submitted ? '¡Voto registrado!' : 'MVP del partido'}
           </CardTitle>
+          {!votingOpen && !submitted && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+              <Lock className="h-3.5 w-3.5" />
+              La votación cerró
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {mvpResults.length > 0 ? (
             <div className="space-y-2">
-              {mvpResults.slice(0, 5).map((result, i) => {
+              {mvpResults.slice(0, 3).map((result, i) => {
                 const player = players.find(p => p.id === result.player_id)
                 if (!player) return null
                 return (
