@@ -3,7 +3,33 @@
 @tailwind utilities;
 
 @layer base {
+  /* Light palette (default — no .dark class on <html>) */
   :root {
+    --background: 240 20% 99%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 152 68% 34%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 6% 94%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 240 6% 93%;
+    --muted-foreground: 240 4% 40%;
+    --accent: 240 6% 93%;
+    --accent-foreground: 240 10% 10%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 87%;
+    --input: 240 6% 87%;
+    --ring: 152 68% 34%;
+    --radius: 0.75rem;
+  }
+
+  /* Dark palette — applied when <html> carries the .dark class
+     (set server-side from the fulbot_theme cookie, see root layout). */
+  .dark {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 5.5%;
@@ -23,7 +49,6 @@
     --border: 240 6% 16%;
     --input: 240 6% 16%;
     --ring: 152 76% 48%;
-    --radius: 0.75rem;
   }
 }
 

@@ -29,7 +29,7 @@ export default async function CreateMatchPage({ params }: PageProps) {
   // Get group
   const { data: group } = await supabase
     .from('groups')
-    .select('id, name, slug, default_match_day, default_match_time, default_max_players')
+    .select('id, name, slug, default_match_day, default_match_time, default_max_players, timezone')
     .eq('slug', groupSlug)
     .single() as { data: {
       id: string
@@ -38,6 +38,7 @@ export default async function CreateMatchPage({ params }: PageProps) {
       default_match_day: number | null
       default_match_time: string | null
       default_max_players: number
+      timezone: string
     } | null }
 
   if (!group) return notFound()
@@ -101,6 +102,7 @@ export default async function CreateMatchPage({ params }: PageProps) {
           <CreateMatchForm
             groupId={group.id}
             groupSlug={group.slug}
+            timezone={group.timezone}
             defaults={{
               date: getNextMatchDate(),
               time: group.default_match_time?.slice(0, 5) || '21:00',

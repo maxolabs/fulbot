@@ -1,9 +1,11 @@
 import Link from 'next/link'
-import { Plus, Users, Calendar } from 'lucide-react'
+import { Plus, Users, Calendar, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/use-translations'
 
 type GroupWithRole = {
   id: string
@@ -15,6 +17,15 @@ type GroupWithRole = {
   role: 'admin' | 'captain' | 'member'
 }
 
+type NextMatch = {
+  id: string
+  date_time: string
+  max_players: number
+  confirmedCount: number
+}
+
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+
 export default async function GroupsPage() {
   const supabase = await createClient()
 
@@ -24,6 +35,14 @@ export default async function GroupsPage() {
   if (!user) {
     return null
   }
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+
+  const t = getT(userData?.preferred_language ?? 'es')
 
   // Get player profile
   const { data: playerProfile } = await supabase
@@ -60,22 +79,69 @@ export default async function GroupsPage() {
       role: m.role,
     }))
 
-  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+  // Next upcoming, joinable match per group
+  const nextMatchByGroup = new Map<string, NextMatch>()
+
+  if (groups.length > 0) {
+    const groupIds = groups.map((g) => g.id)
+    const nowIso = new Date().toISOString()
+
+    const { data: upcomingMatches } = await supabase
+      .from('matches')
+      .select('id, group_id, date_time, max_players, status')
+      .in('group_id', groupIds)
+      .gte('date_time', nowIso)
+      .in('status', ['signup_open', 'full', 'teams_created'])
+      .order('date_time', { ascending: true }) as {
+        data: { id: string; group_id: string; date_time: string; max_players: number; status: string }[] | null
+      }
+
+    const earliestPerGroup = new Map<string, { id: string; group_id: string; date_time: string; max_players: number }>()
+    for (const match of upcomingMatches || []) {
+      if (!earliestPerGroup.has(match.group_id)) {
+        earliestPerGroup.set(match.group_id, match)
+      }
+    }
+
+    const matchIds = Array.from(earliestPerGroup.values()).map((m) => m.id)
+
+    if (matchIds.length > 0) {
+      const { data: signups } = await supabase
+        .from('match_signups')
+        .select('match_id, status')
+        .in('match_id', matchIds)
+        .eq('status', 'confirmed') as { data: { match_id: string; status: string }[] | null }
+
+      const confirmedCounts = new Map<string, number>()
+      for (const s of signups || []) {
+        confirmedCounts.set(s.match_id, (confirmedCounts.get(s.match_id) || 0) + 1)
+      }
+
+      for (const [groupId, match] of Array.from(earliestPerGroup.entries())) {
+        nextMatchByGroup.set(groupId, {
+          id: match.id,
+          date_time: match.date_time,
+          max_players: match.max_players,
+          confirmedCount: confirmedCounts.get(match.id) || 0,
+        })
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Mis grupos</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('groups.title')}</h1>
           <p className="text-muted-foreground">
-            Organiza partidos de fútbol con tus amigos
+            {t('groups.subtitle')}
           </p>
         </div>
         <Link href="/groups/new">
           <Button>
             <Plus className="mr-2 h-4 w-4" />
-            Crear grupo
+            {t('groups.create')}
           </Button>
         </Link>
       </div>
@@ -85,20 +151,20 @@ export default async function GroupsPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No tienes grupos todavía</h3>
+            <h3 className="text-lg font-semibold mb-2">{t('groups.noGroups')}</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Crea un grupo para organizar partidos con tus amigos o únete a uno existente con un código de invitación.
+              {t('groups.noGroupsDescription')}
             </p>
             <div className="flex gap-3">
               <Link href="/groups/new">
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  Crear grupo
+                  {t('groups.create')}
                 </Button>
               </Link>
               <Link href="/invite">
                 <Button variant="outline">
-                  Unirme con código
+                  {t('groups.join')}
                 </Button>
               </Link>
             </div>
@@ -106,48 +172,68 @@ export default async function GroupsPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {groups.map((group) => (
-            <Link key={group.id} href={`/groups/${group.slug}`}>
-              <Card className="h-full transition-shadow hover:shadow-md">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg">{group.name}</CardTitle>
-                    <Badge
-                      variant={
-                        group.role === 'admin'
-                          ? 'default'
+          {groups.map((group) => {
+            const nextMatch = nextMatchByGroup.get(group.id)
+            const matchDate = nextMatch ? new Date(nextMatch.date_time) : null
+
+            return (
+              <Card key={group.id} className="h-full transition-shadow hover:shadow-md">
+                <Link href={`/groups/${group.slug}`}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-lg">{group.name}</CardTitle>
+                      <Badge
+                        variant={
+                          group.role === 'admin'
+                            ? 'default'
+                            : group.role === 'captain'
+                            ? 'secondary'
+                            : 'outline'
+                        }
+                      >
+                        {group.role === 'admin'
+                          ? t('groups.roles.admin')
                           : group.role === 'captain'
-                          ? 'secondary'
-                          : 'outline'
-                      }
-                    >
-                      {group.role === 'admin'
-                        ? 'Admin'
-                        : group.role === 'captain'
-                        ? 'Capitán'
-                        : 'Miembro'}
-                    </Badge>
-                  </div>
-                  {group.description && (
-                    <CardDescription className="line-clamp-2">
-                      {group.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
+                          ? t('groups.roles.captain')
+                          : t('groups.roles.member')}
+                      </Badge>
+                    </div>
+                    {group.description && (
+                      <CardDescription className="line-clamp-2">
+                        {group.description}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                </Link>
                 <CardContent>
-                  {group.default_match_day !== null && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      <span>
-                        {dayNames[group.default_match_day]}
-                        {group.default_match_time && ` ${group.default_match_time.slice(0, 5)}`}
+                  {nextMatch && matchDate ? (
+                    <Link
+                      href={`/groups/${group.slug}/matches/${nextMatch.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg -mx-2 -my-1 px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Calendar className="h-4 w-4 shrink-0" />
+                        <span className="truncate">
+                          {t('groups.nextMatchSummary', {
+                            day: t(`days.${DAY_KEYS[matchDate.getDay()]}`),
+                            time: matchDate.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+                            confirmed: nextMatch.confirmedCount,
+                            max: nextMatch.max_players,
+                          })}
+                        </span>
                       </span>
+                      <ChevronRight className="h-4 w-4 shrink-0" />
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground/70">
+                      <Calendar className="h-4 w-4" />
+                      <span>{t('groups.noUpcomingMatch')}</span>
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </Link>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

@@ -16,6 +16,7 @@ export type Database = {
           name: string
           avatar_url: string | null
           preferred_language: 'es' | 'en'
+          notification_prefs: Json
           created_at: string
           updated_at: string
         }
@@ -25,6 +26,7 @@ export type Database = {
           name: string
           avatar_url?: string | null
           preferred_language?: 'es' | 'en'
+          notification_prefs?: Json
           created_at?: string
           updated_at?: string
         }
@@ -34,9 +36,11 @@ export type Database = {
           name?: string
           avatar_url?: string | null
           preferred_language?: 'es' | 'en'
+          notification_prefs?: Json
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       player_profiles: {
         Row: {
@@ -99,6 +103,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       groups: {
         Row: {
@@ -146,6 +151,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       group_memberships: {
         Row: {
@@ -172,6 +178,7 @@ export type Database = {
           is_active?: boolean
           joined_at?: string
         }
+        Relationships: []
       }
       matches: {
         Row: {
@@ -216,6 +223,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       guest_players: {
         Row: {
@@ -248,6 +256,7 @@ export type Database = {
           group_id?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       match_signups: {
         Row: {
@@ -286,6 +295,7 @@ export type Database = {
           notes?: string | null
           waitlist_position?: number | null
         }
+        Relationships: []
       }
       teams: {
         Row: {
@@ -318,6 +328,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       team_assignments: {
         Row: {
@@ -353,6 +364,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       match_ratings: {
         Row: {
@@ -382,6 +394,7 @@ export type Database = {
           comment?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       match_mvp_votes: {
         Row: {
@@ -405,6 +418,7 @@ export type Database = {
           candidate_player_id?: string
           created_at?: string
         }
+        Relationships: []
       }
       rule_sets: {
         Row: {
@@ -437,6 +451,7 @@ export type Database = {
           created_by_user_id?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       notification_settings: {
         Row: {
@@ -472,6 +487,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       player_badges: {
         Row: {
@@ -498,6 +514,7 @@ export type Database = {
           match_id?: string | null
           metadata?: Json
         }
+        Relationships: []
       }
       match_events: {
         Row: {
@@ -533,6 +550,7 @@ export type Database = {
           minute?: number | null
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: {
