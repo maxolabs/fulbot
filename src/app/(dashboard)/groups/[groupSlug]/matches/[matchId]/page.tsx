@@ -460,6 +460,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {match.status === 'finished' && isAdminOrCaptain && teamsForResults.length > 0 && (
             <MatchResults
               matchId={match.id}
+              groupId={group.id}
               teams={teamsForResults}
               existingEvents={matchEvents.map(e => ({
                 id: e.id,

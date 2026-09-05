@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X, User, LogOut, Settings } from 'lucide-react'
-import { useState } from 'react'
+import { Menu, X, User, LogOut, Settings, Bell } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils/cn'
 import { Avatar } from '@/components/ui/avatar'
 import { createClient } from '@/lib/supabase/client'
@@ -25,11 +25,31 @@ export function Header({ user }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
   const t = useT()
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  // Fetch the unread notification count on mount and whenever the route
+  // changes (e.g. after visiting /notifications and marking things read).
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+
+    supabase
+      .rpc('get_unread_notification_count')
+      .then(({ data, error }) => {
+        if (cancelled || error) return
+        if (typeof data === 'number') setUnreadCount(data)
+      })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, pathname])
 
   const navigation = [
     { name: t('nav.groups'), href: '/groups' },
@@ -67,6 +87,20 @@ export function Header({ user }: HeaderProps) {
 
         {/* User Menu */}
         <div className="flex items-center gap-3">
+          {user && (
+            <Link
+              href="/notifications"
+              className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Notificaciones"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
           {user ? (
             <div className="relative">
               <button
