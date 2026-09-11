@@ -70,7 +70,7 @@ function errorMessage(err: unknown, fallback: string): string {
 function goalsFromEvents(events: MatchResultsProps['existingEvents']): GoalEntry[] {
   const goalEvents = events.filter(e => e.event_type === 'goal' && (e.player_id || e.guest_player_id))
   const assistEvents = events.filter(e => e.event_type === 'assist')
-  return goalEvents.map(goal => {
+  const rows = goalEvents.map(goal => {
     const assist = assistEvents.find(a => a.linked_event_id === goal.id)
     return {
       team_id: goal.team_id,
@@ -78,6 +78,16 @@ function goalsFromEvents(events: MatchResultsProps['existingEvents']): GoalEntry
       assister_id: assist ? (assist.player_id || assist.guest_player_id || null) : null,
     }
   })
+  // Consensus assists are not linked to a goal (§4): attach each one to a goal
+  // of the same team that has no assister yet and a different scorer, so the
+  // admin editor keeps them when it locks the consensus as-is.
+  for (const assist of assistEvents.filter(a => !a.linked_event_id)) {
+    const assister = assist.player_id || assist.guest_player_id
+    if (!assister) continue
+    const target = rows.find(r => r.team_id === assist.team_id && !r.assister_id && r.scorer_id !== assister)
+    if (target) target.assister_id = assister
+  }
+  return rows
 }
 
 export function MatchResults({

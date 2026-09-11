@@ -124,8 +124,12 @@ export interface ResultsChangedPayload {
   match_id: string
   group_name: string
   date_time: string // ISO timestamp
+  // Internal keys ("dark-light|mvp_id"): what the admin last saw vs now.
   previous: string
   current: string
+  // Display strings ("4-1").
+  previous_score: string
+  current_score: string
   mvp_name?: string | null
 }
 

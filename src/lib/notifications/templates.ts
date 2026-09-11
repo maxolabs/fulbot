@@ -121,8 +121,8 @@ export function renderNotificationText(
       const { date } = formatDateTime(event.payload.date_time, timeZone)
       const mvp = event.payload.mvp_name ? ` MVP: ${event.payload.mvp_name}.` : ''
       return (
-        `El resultado del ${date} (${event.payload.group_name}) cambió de ${event.payload.previous} ` +
-        `a ${event.payload.current} después de ser publicado.${mvp} Revisalo y cerralo si corresponde.`
+        `El resultado del ${date} (${event.payload.group_name}) cambió de ${event.payload.previous_score} ` +
+        `a ${event.payload.current_score} después de ser publicado.${mvp} Revisalo y cerralo si corresponde.`
       )
     }
     default: {

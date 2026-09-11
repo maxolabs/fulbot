@@ -14,6 +14,7 @@
 // the detached work, not in the page).
 import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { SchedulerState } from '@/types/database'
 import { runTick } from './tick'
 
 const MIN_INTERVAL_MS = 60_000
@@ -35,19 +36,11 @@ async function tickIfStale(): Promise<void> {
     // table can't be read, fall through and tick anyway.
     let lastTick = 0
     try {
-      const { data: state } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (cols: string) => {
-            eq: (col: string, v: number) => {
-              maybeSingle: () => Promise<{ data: { last_tick_at: string | null } | null }>
-            }
-          }
-        }
-      })
+      const { data: state } = await supabase
         .from('scheduler_state')
         .select('last_tick_at')
         .eq('id', 1)
-        .maybeSingle()
+        .maybeSingle() as { data: Pick<SchedulerState, 'last_tick_at'> | null }
       lastTick = state?.last_tick_at ? new Date(state.last_tick_at).getTime() : 0
     } catch {
       lastTick = 0
