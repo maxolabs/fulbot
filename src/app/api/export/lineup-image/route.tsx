@@ -1,5 +1,6 @@
 import { ImageResponse } from '@vercel/og'
 import { NextRequest } from 'next/server'
+import { placePlayersInFormation } from '@/lib/formations'
 
 export const runtime = 'edge'
 
@@ -9,46 +10,13 @@ interface Player {
   rating: number
 }
 
+type PositionedPlayer = Player & { slotPosition: string }
+
 interface LineupData {
   groupName: string
   matchDate: string
   darkTeam: Player[]
   lightTeam: Player[]
-}
-
-// Position coordinates on the field (as percentages)
-const POSITION_COORDS: Record<string, { x: number; y: number }> = {
-  GK: { x: 50, y: 88 },
-  CB: { x: 50, y: 72 },
-  LB: { x: 18, y: 68 },
-  RB: { x: 82, y: 68 },
-  CDM: { x: 50, y: 55 },
-  LM: { x: 15, y: 48 },
-  CM: { x: 50, y: 45 },
-  RM: { x: 85, y: 48 },
-  CAM: { x: 50, y: 35 },
-  LW: { x: 18, y: 25 },
-  RW: { x: 82, y: 25 },
-  ST: { x: 50, y: 15 },
-  CF: { x: 50, y: 20 },
-}
-
-function getPlayerPosition(
-  position: string,
-  index: number,
-  totalInPosition: number
-): { x: number; y: number } {
-  const baseCoords = POSITION_COORDS[position] || { x: 50, y: 50 }
-
-  if (totalInPosition <= 1) {
-    return baseCoords
-  }
-
-  const offset = (index - (totalInPosition - 1) / 2) * 15
-  return {
-    x: Math.max(10, Math.min(90, baseCoords.x + offset)),
-    y: baseCoords.y,
-  }
 }
 
 function PlayerCircle({
@@ -57,7 +25,7 @@ function PlayerCircle({
   y,
   isDark,
 }: {
-  player: Player
+  player: PositionedPlayer
   x: number
   y: number
   isDark: boolean
@@ -92,7 +60,7 @@ function PlayerCircle({
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}
       >
-        {player.position}
+        {player.slotPosition}
       </div>
       {/* Player name */}
       <div
@@ -136,25 +104,12 @@ function Field({
   isDark: boolean
   teamName: string
 }) {
-  // Group players by position
-  const playersByPosition = players.reduce(
-    (acc, player) => {
-      if (!acc[player.position]) {
-        acc[player.position] = []
-      }
-      acc[player.position].push(player)
-      return acc
-    },
-    {} as Record<string, Player[]>
-  )
-
-  // Calculate positions
-  const positionedPlayers = players.map((player) => {
-    const samePos = playersByPosition[player.position]
-    const idx = samePos.indexOf(player)
-    const coords = getPlayerPosition(player.position, idx, samePos.length)
-    return { ...player, coords }
-  })
+  // Slot every player into the fixed formation for this team size
+  const positionedPlayers = placePlayersInFormation(players).map(({ player, slot }) => ({
+    ...player,
+    slotPosition: slot.position,
+    coords: { x: slot.x, y: slot.y },
+  }))
 
   const avgRating =
     players.length > 0 ? players.reduce((sum, p) => sum + p.rating, 0) / players.length : 0

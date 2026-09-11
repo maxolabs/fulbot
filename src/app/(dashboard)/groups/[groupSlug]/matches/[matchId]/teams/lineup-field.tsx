@@ -1,6 +1,7 @@
 'use client'
 
 import { Star } from 'lucide-react'
+import { placePlayersInFormation } from '@/lib/formations'
 
 interface Player {
   id: string
@@ -17,67 +18,13 @@ interface LineupFieldProps {
   teamColor: 'dark' | 'light'
 }
 
-// Position coordinates on the field (as percentages)
-// These are for a vertical field layout
-const POSITION_COORDS: Record<string, { x: number; y: number }> = {
-  // Goalkeeper
-  GK: { x: 50, y: 90 },
-  // Defenders
-  CB: { x: 50, y: 75 },
-  LB: { x: 20, y: 70 },
-  RB: { x: 80, y: 70 },
-  // Defensive Midfielders
-  CDM: { x: 50, y: 55 },
-  // Midfielders
-  LM: { x: 15, y: 50 },
-  CM: { x: 50, y: 45 },
-  RM: { x: 85, y: 50 },
-  CAM: { x: 50, y: 35 },
-  // Wingers
-  LW: { x: 20, y: 25 },
-  RW: { x: 80, y: 25 },
-  // Forwards
-  ST: { x: 50, y: 15 },
-  CF: { x: 50, y: 20 },
-}
-
-// Stack multiple players in same position
-function getPlayerPosition(
-  position: string,
-  index: number,
-  totalInPosition: number
-): { x: number; y: number } {
-  const baseCoords = POSITION_COORDS[position] || { x: 50, y: 50 }
-
-  if (totalInPosition <= 1) {
-    return baseCoords
-  }
-
-  // Offset players horizontally if multiple in same position
-  const offset = (index - (totalInPosition - 1) / 2) * 15
-  return {
-    x: Math.max(10, Math.min(90, baseCoords.x + offset)),
-    y: baseCoords.y,
-  }
-}
-
 export function LineupField({ players, teamColor }: LineupFieldProps) {
-  // Group players by position
-  const playersByPosition = players.reduce((acc, player) => {
-    if (!acc[player.position]) {
-      acc[player.position] = []
-    }
-    acc[player.position].push(player)
-    return acc
-  }, {} as Record<string, Player[]>)
-
-  // Calculate positions for each player
-  const positionedPlayers = players.map((player) => {
-    const samePositionPlayers = playersByPosition[player.position]
-    const index = samePositionPlayers.indexOf(player)
-    const coords = getPlayerPosition(player.position, index, samePositionPlayers.length)
-    return { ...player, coords }
-  })
+  // Slot every player into the fixed formation for this team size
+  const positionedPlayers = placePlayersInFormation(players).map(({ player, slot }) => ({
+    ...player,
+    slotPosition: slot.position,
+    coords: { x: slot.x, y: slot.y },
+  }))
 
   const isDark = teamColor === 'dark'
 
@@ -178,7 +125,7 @@ export function LineupField({ players, teamColor }: LineupFieldProps) {
                 : 'bg-gray-100 text-gray-900 border-gray-400 shadow-white/30'
             }`}
           >
-            {player.position}
+            {player.slotPosition}
           </div>
           {/* Player name */}
           <div

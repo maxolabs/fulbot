@@ -1,4 +1,5 @@
 import type { PlayerInput, RuleInput, GeneratedTeams, TeamAssignment } from './team-generator'
+import { getFormation } from '@/lib/formations'
 
 // Deterministic team balancer used when OPENAI_API_KEY is missing, or when the AI
 // response keeps failing hard-constraint validation after a retry.
@@ -19,35 +20,6 @@ interface Unit {
   ids: string[]
   members: PlayerInput[]
   rating: number
-}
-
-const DEF_POOL = ['CB', 'RB', 'LB', 'CB']
-const MID_POOL = ['CDM', 'CM', 'CM', 'CAM', 'RM', 'LM']
-const FWD_POOL = ['ST', 'CF', 'ST']
-
-// Simple formation scaled to team size: for 7 -> GK + 2 DEF + 3 MID + 1 ST.
-function buildFormation(size: number): string[] {
-  if (size <= 0) return []
-  const positions: string[] = ['GK']
-  const outfield = size - 1
-  if (outfield <= 0) return positions
-
-  let defCount = Math.round(outfield * (2 / 6))
-  let fwdCount = Math.round(outfield * (1 / 6))
-
-  if (outfield >= 3) defCount = Math.max(defCount, 1)
-  if (outfield >= 2) fwdCount = Math.max(fwdCount, 1)
-  else if (defCount === 0) fwdCount = Math.max(fwdCount, 1)
-
-  defCount = Math.min(defCount, outfield)
-  fwdCount = Math.min(fwdCount, outfield - defCount)
-  const midCount = Math.max(0, outfield - defCount - fwdCount)
-
-  for (let i = 0; i < defCount; i++) positions.push(DEF_POOL[i % DEF_POOL.length])
-  for (let i = 0; i < midCount; i++) positions.push(MID_POOL[i % MID_POOL.length])
-  for (let i = 0; i < fwdCount; i++) positions.push(FWD_POOL[i % FWD_POOL.length])
-
-  return positions
 }
 
 function findRoot(parents: Map<string, string>, id: string): string {
@@ -224,7 +196,7 @@ export function generateFallbackTeams(
       .filter((p): p is PlayerInput => Boolean(p))
       .sort((a, b) => b.overallRating - a.overallRating)
 
-    const formation = buildFormation(teamPlayers.length)
+    const formation = getFormation(teamPlayers.length)
     const remaining = [...teamPlayers]
     const assignments: TeamAssignment[] = []
 

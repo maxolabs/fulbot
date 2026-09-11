@@ -206,10 +206,14 @@ ${historyDescription}
 ${violationsBlock}
 ## Formation Context
 
-For ${teamSize}-a-side, typical formations are:
-- 7 players: 1-2-3-1 or 1-3-2-1 (GK + field players)
-- 6 players: 1-2-2-1 or 1-3-1-1
-- 5 players: 1-2-1-1 or 1-1-2-1
+Teams are rendered with a fixed formation per team size; assign positions that fill it:
+- 5 players: GK, CB, CM, CM, ST
+- 6 players: GK, CB, CB, CM, CM, ST
+- 7 players: GK, RB, CB, LB, CM, CM, ST
+- 8 players: GK, RB, CB, LB, CM, CDM, CM, ST
+- 9 players: GK, RB, CB, LB, CM, CDM, CM, ST, ST
+- 11 players: GK, RB, CB, CB, LB, CM, CDM, CDM, CM, ST, ST
+This match is ${teamSize}-a-side.
 
 ## Your Task
 
