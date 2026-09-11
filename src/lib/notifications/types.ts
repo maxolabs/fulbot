@@ -110,7 +110,7 @@ export interface ResultsNeedsReviewPayload {
   reports_count: number
 }
 
-// Emitted by a trigger on group_memberships (00017_peer_ratings.sql) when someone
+// Emitted by a trigger on group_memberships (00018_peer_ratings.sql) when someone
 // joins or is reactivated; group-wide, in-app only (never to the WhatsApp outbox).
 export interface RateNewMemberPayload {
   player_id: string

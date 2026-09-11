@@ -839,7 +839,7 @@ export type Database = {
         }
         Relationships: []
       }
-      // Single-row scheduler heartbeat (00018); service role only.
+      // Single-row scheduler heartbeat (00019); service role only.
       scheduler_state: {
         Row: {
           id: number
@@ -1246,7 +1246,7 @@ export type MatchReport = Database['public']['Tables']['match_reports']['Row']
 export type MatchReportStat = Database['public']['Tables']['match_report_stats']['Row']
 export type MatchResultStatus = Database['public']['Tables']['matches']['Row']['result_status']
 
-// Shapes of the jsonb arguments of the report/result RPCs (00019).
+// Shapes of the jsonb arguments of the report/result RPCs (00020).
 export interface MatchReportStatInput {
   team_id: string
   player_id?: string | null

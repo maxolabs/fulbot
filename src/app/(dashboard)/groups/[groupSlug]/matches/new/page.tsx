@@ -56,7 +56,7 @@ export default async function CreateMatchPage({ params }: PageProps) {
     redirect(`/groups/${groupSlug}`)
   }
 
-  // Group defaults for the scheduler fields (00018); fall back when the row is missing.
+  // Group defaults for the scheduler fields (00019); fall back when the row is missing.
   const { data: notifDefaults } = await supabase
     .from('notification_settings')
     .select('default_duration_minutes, default_results_request_delay_minutes')

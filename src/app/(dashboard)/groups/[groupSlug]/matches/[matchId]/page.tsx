@@ -472,7 +472,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
     hasTeams = (count ?? 0) > 0
   }
 
-  // Result consensus/lock columns (00018). `select('*')` already returns them; the
+  // Result consensus/lock columns (00019). `select('*')` already returns them; the
   // narrow cast above predates them, so read them through a local cast here.
   const resultMeta = match as unknown as {
     result_status?: MatchResultStatus

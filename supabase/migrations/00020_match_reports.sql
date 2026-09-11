@@ -212,7 +212,7 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 -- ============================================
 
 -- Sets matches.mvp_player_id and keeps the 'mvp' badge in sync. mvp_count is
--- owned by recompute_player_stats (00018).
+-- owned by recompute_player_stats (00019).
 CREATE OR REPLACE FUNCTION set_match_mvp(p_match_id UUID, p_new_mvp UUID)
 RETURNS void AS $$
 DECLARE
@@ -224,7 +224,7 @@ BEGIN
         RETURN;
     END IF;
 
-    -- The 'mvp' badge is maintained by award_badges_for_match (00018), which
+    -- The 'mvp' badge is maintained by award_badges_for_match (00019), which
     -- runs from finalize_match_results once the result is consensus/locked.
     UPDATE public.matches SET mvp_player_id = p_new_mvp WHERE id = p_match_id;
 END;

@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 // Optional teammate ratings (1-5) after a match. The MVP vote moved into the
 // report form (report-form.tsx); this card is independent of it and can be
 // filled or edited any time inside the reporting window (RLS allows own
-// UPDATE/DELETE there, see 00019_match_reports.sql).
+// UPDATE/DELETE there, see 00020_match_reports.sql).
 
 interface Player {
   id: string

@@ -283,7 +283,7 @@ of `futbol-jueves`). App env for the stack is in the scratchpad `stack/app.env`.
 
 ### 11.1 Migrations (track S0)
 
-`supabase/migrations/00018_scheduler.sql`
+`supabase/migrations/00019_scheduler.sql`
 
 ```sql
 -- matches
@@ -346,7 +346,7 @@ Job handlers inside `run_scheduled_job`:
 
 Backfill in 00018: `finished_at = date_time + duration` for existing finished matches; `result_status = 'locked'` where `results_finalized = true`; `schedule_match_jobs` for every non-cancelled match.
 
-`supabase/migrations/00019_match_reports.sql`
+`supabase/migrations/00020_match_reports.sql`
 
 ```sql
 match_events.source text not null default 'admin' check (source in ('admin','consensus'))
