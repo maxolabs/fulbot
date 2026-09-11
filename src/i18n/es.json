@@ -241,6 +241,10 @@
     "notifMatchReminderDesc": "Antes de que empiece un partido en el que estás anotado",
     "notifResultsPostedTitle": "Resultados publicados",
     "notifResultsPostedDesc": "Cuando se cargan los resultados de un partido",
+    "notifResultsRequestTitle": "Pedido de resultado",
+    "notifResultsRequestDesc": "Después de un partido que jugaste, para cargar el resultado, los goles y el MVP",
+    "notifResultsReminderTitle": "Recordatorio de resultado",
+    "notifResultsReminderDesc": "Si todavía no reportaste el resultado de un partido",
     "saved": "Configuración guardada correctamente",
     "saveError": "Error al guardar la configuración"
   }

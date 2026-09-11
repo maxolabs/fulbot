@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, MessageCircle, Clock, Save, Users } from 'lucide-react'
+import { Bell, MessageCircle, Clock, Save, Users, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -18,7 +18,18 @@ interface NotificationSettingsProps {
     notify_on_waitlist_promotion: boolean
     notify_on_teams_created: boolean
     whatsapp_webhook_url: string | null
+    // Crowd-sourced results (docs/match-results-consensus.md §11.1): group
+    // defaults copied onto each new match, plus the reminder/window timing.
+    default_duration_minutes: number
+    default_results_request_delay_minutes: number
+    results_reminder_hours: number
+    results_window_days: number
   }
+}
+
+function toInt(value: string, fallback: number): number {
+  const n = parseInt(value, 10)
+  return Number.isFinite(n) ? n : fallback
 }
 
 function Toggle({
@@ -72,6 +83,10 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         notify_on_waitlist_promotion: settings.notify_on_waitlist_promotion,
         notify_on_teams_created: settings.notify_on_teams_created,
         whatsapp_webhook_url: settings.whatsapp_webhook_url || null,
+        default_duration_minutes: settings.default_duration_minutes,
+        default_results_request_delay_minutes: settings.default_results_request_delay_minutes,
+        results_reminder_hours: settings.results_reminder_hours,
+        results_window_days: settings.results_window_days,
       }
 
       if (settings.id) {
@@ -215,6 +230,120 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             setSettings((prev) => ({ ...prev, notify_on_teams_created: checked }))
           }
         />
+      </div>
+
+      {/* Crowd-sourced results: timing defaults */}
+      <div className="space-y-4 pt-4 border-t">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
+            <ClipboardList className="h-5 w-5 text-amber-600" />
+          </div>
+          <div>
+            <Label className="text-base">Resultado después del partido</Label>
+            <p className="text-sm text-muted-foreground">
+              Cuándo pedirle a los jugadores el resultado, los goles y el MVP. Los partidos
+              nuevos copian estos valores; cada partido puede cambiarlos.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="default_duration_minutes">Duración del partido</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="default_duration_minutes"
+                type="number"
+                min={10}
+                max={240}
+                step={5}
+                value={settings.default_duration_minutes}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    default_duration_minutes: toInt(e.target.value, prev.default_duration_minutes),
+                  }))
+                }
+                className="w-24 text-center"
+              />
+              <span className="text-sm text-muted-foreground">minutos</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              El partido se marca como terminado solo cuando pasa este tiempo.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="default_results_request_delay_minutes">Pedir el resultado</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="default_results_request_delay_minutes"
+                type="number"
+                min={0}
+                max={1440}
+                step={5}
+                value={settings.default_results_request_delay_minutes}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    default_results_request_delay_minutes: toInt(
+                      e.target.value,
+                      prev.default_results_request_delay_minutes
+                    ),
+                  }))
+                }
+                className="w-24 text-center"
+              />
+              <span className="text-sm text-muted-foreground">minutos después del final</span>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="results_reminder_hours">Recordatorio a los que faltan</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="results_reminder_hours"
+                type="number"
+                min={0}
+                max={168}
+                value={settings.results_reminder_hours}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    results_reminder_hours: toInt(e.target.value, prev.results_reminder_hours),
+                  }))
+                }
+                className="w-24 text-center"
+              />
+              <span className="text-sm text-muted-foreground">horas después del pedido</span>
+            </div>
+            <p className="text-xs text-muted-foreground">0 = sin recordatorio.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="results_window_days">Ventana para reportar</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="results_window_days"
+                type="number"
+                min={1}
+                max={30}
+                value={settings.results_window_days}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    results_window_days: toInt(e.target.value, prev.results_window_days),
+                  }))
+                }
+                className="w-24 text-center"
+              />
+              <span className="text-sm text-muted-foreground">días desde el partido</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Después se cierra el resultado con lo que haya y se avisa a los admins si no hubo reportes.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* WhatsApp webhook */}

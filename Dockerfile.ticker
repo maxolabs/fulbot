@@ -1,0 +1,26 @@
+# Scheduler ticker for fulbot (docs/match-results-consensus.md §5, §11.2).
+#
+# A tiny always-on container that POSTs /api/cron/tick every minute so
+# finished matches get their result request, reminder and window close on
+# time even though the app itself runs on a serverless host.
+#
+#   docker build -f Dockerfile.ticker -t fulbot-ticker .
+#   docker run -d --restart unless-stopped \
+#     -e NEXT_PUBLIC_APP_URL=https://your-app.vercel.app \
+#     -e CRON_SECRET=... \
+#     fulbot-ticker
+#
+# Optional: TICKER_INTERVAL_MS (default 60000).
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Only the runner and the script: no Next.js build, no app dependencies.
+COPY scripts/ticker.ts ./scripts/ticker.ts
+RUN npm install --no-audit --no-fund --save-exact tsx@4.23.13
+
+ENV NODE_ENV=production
+ENV TICKER_INTERVAL_MS=60000
+
+USER node
+CMD ["npx", "tsx", "scripts/ticker.ts"]

@@ -6,6 +6,10 @@
 // would exceed that limit, so this route is the only one wired up in
 // vercel.json and runs, in order, everything those three used to do on their
 // own schedule:
+//   0. scheduler tick: run every due scheduled_jobs row (auto_finish,
+//      results_request, results_reminder, results_window_close) and drain
+//      the outbox -- the daily floor when no scripts/ticker.ts is running
+//      (docs/match-results-consensus.md §5).
 //   1. generate_recurring_matches + emit match_created for whatever it (or a
 //      racing group-page lazy call) just created (§2.4).
 //   2. drain notification_outbox (WhatsApp webhook deliveries) (§2.6).
@@ -20,6 +24,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 import { drainOutbox } from '@/lib/notifications/dispatch'
 import { emitMatchReminders } from '@/lib/notifications/reminders'
+import { runTick, type TickResult } from '@/lib/notifications/tick'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Error desconocido'
@@ -33,10 +38,19 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient()
   const result: {
+    tick?: Omit<TickResult, 'jobs'> | { error: string }
     recurring?: { created: number; notified: number } | { error: string }
     outbox?: Awaited<ReturnType<typeof drainOutbox>> | { error: string }
     reminders?: Awaited<ReturnType<typeof emitMatchReminders>> | { error: string }
   } = {}
+
+  try {
+    const { jobs: _jobs, ...tick } = await runTick()
+    result.tick = tick
+  } catch (error) {
+    console.error('Error running scheduler tick:', error)
+    result.tick = { error: errorMessage(error) }
+  }
 
   try {
     const { data, error } = await supabase.rpc('generate_recurring_matches', {})

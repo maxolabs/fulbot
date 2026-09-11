@@ -110,6 +110,10 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     notify_on_waitlist_promotion: boolean
     notify_on_teams_created: boolean
     whatsapp_webhook_url: string | null
+    default_duration_minutes: number
+    default_results_request_delay_minutes: number
+    results_reminder_hours: number
+    results_window_days: number
   }
 
   const { data: notificationSettings } = await supabase
@@ -118,14 +122,30 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     .eq('group_id', group.id)
     .single() as { data: NotificationSettingsType | null }
 
-  const notifSettings = notificationSettings || {
-    id: null,
-    send_signup_link_on_create: true,
-    reminder_hours_before: 3,
-    notify_on_waitlist_promotion: true,
-    notify_on_teams_created: true,
-    whatsapp_webhook_url: null,
-  }
+  const notifSettings = notificationSettings
+    ? {
+        ...notificationSettings,
+        // Rows created before 00018 come back without these columns until the
+        // migration is applied; keep the inputs controlled with the same
+        // defaults the migration uses.
+        default_duration_minutes: notificationSettings.default_duration_minutes ?? 60,
+        default_results_request_delay_minutes:
+          notificationSettings.default_results_request_delay_minutes ?? 60,
+        results_reminder_hours: notificationSettings.results_reminder_hours ?? 24,
+        results_window_days: notificationSettings.results_window_days ?? 7,
+      }
+    : {
+        id: null,
+        send_signup_link_on_create: true,
+        reminder_hours_before: 3,
+        notify_on_waitlist_promotion: true,
+        notify_on_teams_created: true,
+        whatsapp_webhook_url: null,
+        default_duration_minutes: 60,
+        default_results_request_delay_minutes: 60,
+        results_reminder_hours: 24,
+        results_window_days: 7,
+      }
 
   // Get recurring pattern (one per group; UI creates/edits/deactivates it)
   const { data: recurringPattern } = await supabase

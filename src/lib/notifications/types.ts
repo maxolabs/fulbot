@@ -10,6 +10,9 @@ export type NotificationType =
   | 'match_reminder'
   | 'results_posted'
   | 'rate_new_member'
+  | 'results_request'
+  | 'results_reminder'
+  | 'results_needs_review'
 
 export const NOTIFICATION_TYPES: NotificationType[] = [
   'match_created',
@@ -18,6 +21,9 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'match_reminder',
   'results_posted',
   'rate_new_member',
+  'results_request',
+  'results_reminder',
+  'results_needs_review',
 ]
 
 export interface MatchCreatedPayload {
@@ -51,10 +57,51 @@ export interface MatchReminderPayload {
   location: string | null
 }
 
+// Crowd-sourced results (docs/match-results-consensus.md §11.1). Emitted from
+// SQL by recompute_match_consensus / admin_set_match_result; the pre-consensus
+// shape only had match_id + scores, so every extra field is optional here and
+// the template degrades to "Oscuro X - Claro Y" for old rows.
 export interface ResultsPostedPayload {
   match_id: string
   dark_score: number
   light_score: number
+  scorers?: { name: string; team: 'dark' | 'light'; goals: number }[]
+  assisters?: { name: string; team: 'dark' | 'light'; assists: number }[]
+  unattributed?: { dark: number; light: number }
+  mvp_name?: string | null
+  mvp_player_id?: string | null
+  status?: 'consensus' | 'locked'
+}
+
+// Sent by the `results_request` scheduled job once the match is finished and
+// the admin's per-match delay has elapsed. report_url may be stored relative
+// (the SQL layer has no app URL); resolveReportUrl() prefixes it at render time.
+export interface ResultsRequestPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  report_url: string
+}
+
+// One group-wide row per match (never one per player): the list of players
+// who still haven't reported. The /notifications page shows it only to users
+// whose player id is in pending_player_ids; WhatsApp gets a single message.
+export interface ResultsReminderPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  report_url: string
+  pending_player_ids: string[]
+  pending_player_names: string[]
+}
+
+// In-app only (no outbox row), one per group admin with recipient_player_id
+// set, when the reporting window closed without a single report.
+export interface ResultsNeedsReviewPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  reports_count: number
 }
 
 // Emitted by a trigger on group_memberships (00017_peer_ratings.sql) when someone
@@ -71,6 +118,9 @@ export interface NotificationPayloadMap {
   match_reminder: MatchReminderPayload
   results_posted: ResultsPostedPayload
   rate_new_member: RateNewMemberPayload
+  results_request: ResultsRequestPayload
+  results_reminder: ResultsReminderPayload
+  results_needs_review: ResultsNeedsReviewPayload
 }
 
 // Discriminated union so templates.ts (and anything else switching on `type`)
@@ -82,6 +132,9 @@ export type NotificationEvent =
   | { type: 'match_reminder'; payload: MatchReminderPayload }
   | { type: 'results_posted'; payload: ResultsPostedPayload }
   | { type: 'rate_new_member'; payload: RateNewMemberPayload }
+  | { type: 'results_request'; payload: ResultsRequestPayload }
+  | { type: 'results_reminder'; payload: ResultsReminderPayload }
+  | { type: 'results_needs_review'; payload: ResultsNeedsReviewPayload }
 
 export interface NotificationRow {
   id: string
