@@ -17,6 +17,9 @@ SELECT (current_date + (CASE WHEN (8 - extract(dow FROM current_date)::int) % 7 
 BEGIN;
 
 -- ---------------------------------------------------------------- clean slate
+DELETE FROM public.scheduled_jobs;
+DELETE FROM public.match_report_stats;
+DELETE FROM public.match_reports;
 DELETE FROM public.notification_reads;
 DELETE FROM public.peer_ratings;
 DELETE FROM public.notification_outbox;
@@ -247,8 +250,8 @@ BEGIN
     FOR v_k IN 1..array_length(v_dates, 1) LOOP
         v_when := (v_dates[v_k]::text || ' 21:00')::timestamp AT TIME ZONE v_tz;
 
-        INSERT INTO public.matches (group_id, date_time, location, status, max_players, recurring_pattern_id, created_at)
-        VALUES (v_group, v_when, 'Club Ferro, cancha 3', 'finished', 14, '33333333-3333-4333-8333-333333333333', v_when - interval '2 days')
+        INSERT INTO public.matches (group_id, date_time, location, status, max_players, recurring_pattern_id, created_at, finished_at)
+        VALUES (v_group, v_when, 'Club Ferro, cancha 3', 'finished', 14, '33333333-3333-4333-8333-333333333333', v_when - interval '2 days', v_when + interval '60 minutes')
         RETURNING id INTO v_match;
 
         -- 14 confirmed players, chosen by a per-match shuffle so lineups rotate. Fede and
@@ -324,8 +327,10 @@ BEGIN
             END LOOP;
         END LOOP;
 
-        -- Stats, clean sheets, badges.
-        PERFORM finalize_match_results(v_match);
+        -- Scores come from the goal list (admin-entered results are authoritative).
+        UPDATE public.teams t
+        SET score = (SELECT count(*) FROM public.match_events me WHERE me.match_id = v_match AND me.team_id = t.id AND me.event_type = 'goal')
+        WHERE t.match_id = v_match;
 
         -- MVP votes: most players vote for the top scorer of the match, a few vote elsewhere.
         SELECT me.player_id INTO v_cand
@@ -346,6 +351,12 @@ BEGIN
             END IF;
         END LOOP;
 
+        -- Lock the result as if the admin had loaded it, drop the results-request
+        -- jobs the insert trigger scheduled, then stats/badges.
+        UPDATE public.matches SET result_status = 'locked', result_locked_at = v_when + interval '2 hours' WHERE id = v_match;
+        PERFORM schedule_match_jobs(v_match);
+        PERFORM finalize_match_results(v_match);
+
         -- A few 1-5 ratings so overall_rating moves.
         INSERT INTO public.match_ratings (match_id, voter_player_id, rated_player_id, rating)
         SELECT v_match, a.player_id, b.player_id, 3 + ((abs(hashtext(a.player_id::text || b.player_id::text)) % 3))
@@ -354,9 +365,9 @@ BEGIN
           AND abs(hashtext(a.player_id::text || b.player_id::text || v_k::text)) % 5 = 0
         ON CONFLICT DO NOTHING;
 
-        PERFORM update_player_rating(pp.id) FROM public.player_profiles pp;
-        PERFORM update_player_reliability(pp.id) FROM public.player_profiles pp;
     END LOOP;
+
+    PERFORM recompute_player_stats(pp.id) FROM public.player_profiles pp;
 END $$;
 
 -- ---------------------------------------------------------------- upcoming matches
@@ -425,6 +436,38 @@ SELECT '66666666-6666-4666-8666-666666666663', pp.id, 'confirmed', now() - inter
 FROM public.player_profiles pp JOIN public.group_memberships gm ON gm.player_id = pp.id
 WHERE gm.group_id = '22222222-2222-4222-8222-222222222222' AND pp.nickname IN ('Nico','Facu','Pablito','Gonza','Tomi','Santi');
 
+-- Lunes: a match that ended a while ago with teams but no result yet. Its
+-- auto_finish job is already due, so the first /api/cron/tick finishes it and
+-- schedules the results request. Maxo (admin) and Juan (captain) play in it.
+INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, notes, duration_minutes, results_request_delay_minutes)
+VALUES ('66666666-6666-4666-8666-666666666664', '11111111-1111-4111-8111-111111111111',
+        now() - interval '3 hours', 'Club Ferro, cancha 3', 'teams_created', 14,
+        'Partido de prueba para el reporte de resultados', 60, 60);
+INSERT INTO public.match_signups (match_id, player_id, status, signup_time)
+SELECT '66666666-6666-4666-8666-666666666664', pp.id, 'confirmed', now() - interval '2 days' + (rn || ' minutes')::interval
+FROM (
+    SELECT pp.id, row_number() OVER (ORDER BY
+        CASE WHEN u.email IN ('maxo@test.local','juan@test.local') OR pp.nickname IN ('Fede','Dieguito','Pedrito','Santi') THEN 0 ELSE 1 END,
+        md5('past' || pp.id::text)) AS rn
+    FROM public.player_profiles pp JOIN public.group_memberships gm ON gm.player_id = pp.id
+    JOIN public.users u ON u.id = pp.user_id
+    WHERE gm.group_id = '11111111-1111-4111-8111-111111111111' AND pp.nickname <> 'Seba'
+) pp WHERE rn <= 14;
+INSERT INTO public.teams (id, match_id, name, color_hex) VALUES
+    ('77777777-7777-4777-8777-777777777771', '66666666-6666-4666-8666-666666666664', 'dark', '#1a1a1a'),
+    ('77777777-7777-4777-8777-777777777772', '66666666-6666-4666-8666-666666666664', 'light', '#ffffff');
+INSERT INTO public.team_assignments (team_id, player_id, position, order_index, source)
+SELECT CASE WHEN rn % 2 = 1 THEN '77777777-7777-4777-8777-777777777771' ELSE '77777777-7777-4777-8777-777777777772' END::uuid,
+       player_id,
+       CASE WHEN rn <= 2 THEN 'GK' WHEN main_position = 'GK' THEN 'CB' ELSE main_position END,
+       (rn - 1) / 2, 'ai'
+FROM (
+    SELECT ms.player_id, pp.main_position,
+           row_number() OVER (ORDER BY pp.goalkeeper_willingness DESC, md5('pastteam' || pp.id::text)) AS rn
+    FROM public.match_signups ms JOIN public.player_profiles pp ON pp.id = ms.player_id
+    WHERE ms.match_id = '66666666-6666-4666-8666-666666666664' AND ms.status = 'confirmed'
+) x;
+
 -- ---------------------------------------------------------------- notifications
 -- emit_notification requires a member or the service role; act as the service role.
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
@@ -433,11 +476,8 @@ SELECT emit_notification('11111111-1111-4111-8111-111111111111', '66666666-6666-
         'date_time', ((:'next_monday' || ' 21:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'location', 'Club Ferro, cancha 3', 'max_players', 14,
         'signup_url', 'http://localhost:3000/m/66666666-6666-4666-8666-666666666661'));
-SELECT emit_notification('11111111-1111-4111-8111-111111111111',
-    (SELECT id FROM public.matches WHERE status='finished' ORDER BY date_time DESC LIMIT 1), 'results_posted',
-    jsonb_build_object('match_id', (SELECT id FROM public.matches WHERE status='finished' ORDER BY date_time DESC LIMIT 1),
-        'dark_score', (SELECT score FROM public.teams t JOIN public.matches m ON m.id=t.match_id WHERE m.status='finished' AND t.name='dark' ORDER BY m.date_time DESC LIMIT 1),
-        'light_score', (SELECT score FROM public.teams t JOIN public.matches m ON m.id=t.match_id WHERE m.status='finished' AND t.name='light' ORDER BY m.date_time DESC LIMIT 1)));
+SELECT emit_notification('11111111-1111-4111-8111-111111111111', m.id, 'results_posted', build_results_posted_payload(m.id))
+FROM (SELECT id FROM public.matches WHERE status='finished' ORDER BY date_time DESC LIMIT 1) m;
 
 COMMIT;
 
@@ -452,3 +492,4 @@ SELECT 'mvps: ' || string_agg(nickname || ' x' || mvp_count, ', ') FROM public.p
 SELECT 'badges: ' || string_agg(badge_type || '=' || c, ', ') FROM (SELECT badge_type, count(*) c FROM public.player_badges GROUP BY badge_type) b;
 SELECT 'reliability < 1: ' || string_agg(nickname || ' ' || reliability_score, ', ') FROM public.player_profiles WHERE reliability_score < 1;
 SELECT 'notifications: ' || count(*) FROM public.notifications;
+SELECT 'jobs: ' || string_agg(job_type || '/' || status || '=' || c, ', ') FROM (SELECT job_type, status, count(*) c FROM public.scheduled_jobs GROUP BY 1, 2 ORDER BY 1, 2) j;
