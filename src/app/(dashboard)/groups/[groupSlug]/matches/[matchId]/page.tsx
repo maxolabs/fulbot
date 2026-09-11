@@ -26,6 +26,7 @@ import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
 import type { MatchResultStatus } from '@/types/database'
 import { MatchReportsTable } from './match-reports-table'
+import { ConductCheck } from './conduct-check'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
@@ -697,6 +698,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
               ]}
               confirmedCount={matchPlayers.length}
+            />
+          )}
+
+          {/* Conduct check (docs/member-scoring.md §4.2) - admins, and captains when allowed; hidden when scoring is off */}
+          {match.status === 'finished' && isAdminOrCaptain && (
+            <ConductCheck
+              matchId={match.id}
+              groupId={group.id}
+              role={membership.role as 'admin' | 'captain' | 'member'}
             />
           )}
 
