@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Plus, Users, Calendar, ChevronRight, Trophy } from 'lucide-react'
+import { Plus, Users, Calendar, ChevronRight, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -131,10 +131,10 @@ export default async function GroupsPage() {
     }
   }
 
-  // MVP voting nudge: most recent finished match (within 7 days) the user
-  // played in and hasn't voted for MVP in yet.
-  type MvpNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string; timezone: string | null }
-  let mvpNudge: MvpNudge | null = null
+  // Result nudge: most recent finished match (inside the reporting window)
+  // the user played in and hasn't reported yet (docs/match-results-consensus.md §6).
+  type ResultNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string; timezone: string | null }
+  let resultNudge: ResultNudge | null = null
 
   if (groups.length > 0) {
     const groupIds = groups.map((g) => g.id)
@@ -144,12 +144,13 @@ export default async function GroupsPage() {
 
     const { data: finishedMatches } = await supabase
       .from('matches')
-      .select('id, group_id, date_time')
+      .select('id, group_id, date_time, result_status')
       .in('group_id', groupIds)
       .eq('status', 'finished')
+      .neq('result_status', 'locked')
       .gte('date_time', sevenDaysAgoIso)
       .order('date_time', { ascending: false }) as {
-        data: { id: string; group_id: string; date_time: string }[] | null
+        data: { id: string; group_id: string; date_time: string; result_status: string }[] | null
       }
 
     if (finishedMatches && finishedMatches.length > 0) {
@@ -164,22 +165,22 @@ export default async function GroupsPage() {
 
       const playedMatchIds = new Set((mySignups || []).map((s) => s.match_id))
 
-      const { data: myVotes } = await supabase
-        .from('match_mvp_votes')
+      const { data: myReports } = await supabase
+        .from('match_reports')
         .select('match_id')
         .in('match_id', matchIds)
-        .eq('voter_player_id', playerProfile.id) as { data: { match_id: string }[] | null }
+        .eq('reporter_player_id', playerProfile.id) as { data: { match_id: string }[] | null }
 
-      const votedMatchIds = new Set((myVotes || []).map((v) => v.match_id))
+      const reportedMatchIds = new Set((myReports || []).map((r) => r.match_id))
 
       const candidate = finishedMatches.find(
-        (m) => playedMatchIds.has(m.id) && !votedMatchIds.has(m.id)
+        (m) => playedMatchIds.has(m.id) && !reportedMatchIds.has(m.id)
       )
 
       if (candidate) {
         const candidateGroup = groups.find((g) => g.id === candidate.group_id)
         if (candidateGroup) {
-          mvpNudge = {
+          resultNudge = {
             matchId: candidate.id,
             groupSlug: candidateGroup.slug,
             groupName: candidateGroup.name,
@@ -193,20 +194,20 @@ export default async function GroupsPage() {
 
   return (
     <div className="space-y-6">
-      {/* MVP voting nudge */}
-      {mvpNudge && (
-        <Link href={`/groups/${mvpNudge.groupSlug}/matches/${mvpNudge.matchId}`}>
+      {/* Result report nudge */}
+      {resultNudge && (
+        <Link href={`/groups/${resultNudge.groupSlug}/matches/${resultNudge.matchId}#reportar`}>
           <Card className="border-yellow-500/30 bg-yellow-500/5 transition-colors hover:bg-yellow-500/10">
             <CardContent className="flex items-center gap-3 py-4">
-              <Trophy className="h-5 w-5 shrink-0 text-yellow-500" />
+              <ClipboardList className="h-5 w-5 shrink-0 text-yellow-500" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
-                  {t('groups.mvpNudgeTitle', {
-                    group: mvpNudge.groupName,
-                    date: formatMatchDateNumeric(mvpNudge.dateTime, mvpNudge.timezone || DEFAULT_TIMEZONE),
+                  {t('groups.resultNudgeTitle', {
+                    group: resultNudge.groupName,
+                    date: formatMatchDateNumeric(resultNudge.dateTime, resultNudge.timezone || DEFAULT_TIMEZONE),
                   })}
                 </p>
-                <p className="text-xs text-muted-foreground">{t('groups.mvpNudgeSubtitle')}</p>
+                <p className="text-xs text-muted-foreground">{t('groups.resultNudgeSubtitle')}</p>
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </CardContent>

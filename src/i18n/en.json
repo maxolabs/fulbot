@@ -86,8 +86,8 @@
     "nextMatch": "Next match",
     "noUpcomingMatch": "No matches scheduled",
     "nextMatchSummary": "{day} {time} · {confirmed}/{max} confirmed",
-    "mvpNudgeTitle": "Vote for {group}'s MVP — {date}",
-    "mvpNudgeSubtitle": "Pick the best player of the match",
+    "resultNudgeTitle": "Report the result of {group} — {date}",
+    "resultNudgeSubtitle": "Score, goals and MVP: report what you remember",
     "roles": {
       "admin": "Admin",
       "captain": "Captain",
