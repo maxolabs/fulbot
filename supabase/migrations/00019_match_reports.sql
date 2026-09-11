@@ -391,7 +391,13 @@ DECLARE
     v_i INTEGER;
 BEGIN
     SELECT * INTO v_match FROM public.matches WHERE id = p_match_id FOR UPDATE;
-    IF v_match IS NULL OR v_match.result_status = 'locked' OR v_match.status <> 'finished' THEN
+    IF v_match IS NULL THEN
+        RETURN;
+    END IF;
+    IF NOT is_service_role() AND NOT is_group_member(v_match.group_id) THEN
+        RAISE EXCEPTION 'No sos miembro de este grupo';
+    END IF;
+    IF v_match.result_status = 'locked' OR v_match.status <> 'finished' THEN
         RETURN;
     END IF;
 
