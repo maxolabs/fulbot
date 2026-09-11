@@ -190,6 +190,13 @@ export type Database = {
           notes: string | null
           results_finalized: boolean
           mvp_player_id: string | null
+          duration_minutes: number
+          results_request_delay_minutes: number
+          finished_at: string | null
+          result_status: 'pending' | 'provisional' | 'consensus' | 'locked'
+          result_locked_by: string | null
+          result_locked_at: string | null
+          result_posted_key: string | null
           created_at: string
           updated_at: string
         }
@@ -205,6 +212,13 @@ export type Database = {
           notes?: string | null
           results_finalized?: boolean
           mvp_player_id?: string | null
+          duration_minutes?: number
+          results_request_delay_minutes?: number
+          finished_at?: string | null
+          result_status?: 'pending' | 'provisional' | 'consensus' | 'locked'
+          result_locked_by?: string | null
+          result_locked_at?: string | null
+          result_posted_key?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -220,6 +234,13 @@ export type Database = {
           notes?: string | null
           results_finalized?: boolean
           mvp_player_id?: string | null
+          duration_minutes?: number
+          results_request_delay_minutes?: number
+          finished_at?: string | null
+          result_status?: 'pending' | 'provisional' | 'consensus' | 'locked'
+          result_locked_by?: string | null
+          result_locked_at?: string | null
+          result_posted_key?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -578,6 +599,10 @@ export type Database = {
           notify_on_waitlist_promotion: boolean
           notify_on_teams_created: boolean
           whatsapp_webhook_url: string | null
+          default_duration_minutes: number
+          default_results_request_delay_minutes: number
+          results_reminder_hours: number
+          results_window_days: number
           created_at: string
           updated_at: string
         }
@@ -589,6 +614,10 @@ export type Database = {
           notify_on_waitlist_promotion?: boolean
           notify_on_teams_created?: boolean
           whatsapp_webhook_url?: string | null
+          default_duration_minutes?: number
+          default_results_request_delay_minutes?: number
+          results_reminder_hours?: number
+          results_window_days?: number
           created_at?: string
           updated_at?: string
         }
@@ -600,6 +629,10 @@ export type Database = {
           notify_on_waitlist_promotion?: boolean
           notify_on_teams_created?: boolean
           whatsapp_webhook_url?: string | null
+          default_duration_minutes?: number
+          default_results_request_delay_minutes?: number
+          results_reminder_hours?: number
+          results_window_days?: number
           created_at?: string
           updated_at?: string
         }
@@ -642,6 +675,7 @@ export type Database = {
           event_type: 'goal' | 'assist' | 'own_goal'
           linked_event_id: string | null
           minute: number | null
+          source: 'admin' | 'consensus'
           created_at: string
         }
         Insert: {
@@ -653,6 +687,7 @@ export type Database = {
           event_type: 'goal' | 'assist' | 'own_goal'
           linked_event_id?: string | null
           minute?: number | null
+          source?: 'admin' | 'consensus'
           created_at?: string
         }
         Update: {
@@ -664,6 +699,7 @@ export type Database = {
           event_type?: 'goal' | 'assist' | 'own_goal'
           linked_event_id?: string | null
           minute?: number | null
+          source?: 'admin' | 'consensus'
           created_at?: string
         }
         Relationships: []
@@ -755,6 +791,123 @@ export type Database = {
           last_error?: string | null
           created_at?: string
           sent_at?: string | null
+        }
+        Relationships: []
+      }
+      scheduled_jobs: {
+        Row: {
+          id: string
+          group_id: string
+          match_id: string | null
+          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          run_at: string
+          payload: Json
+          status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+          attempts: number
+          last_error: string | null
+          locked_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          match_id?: string | null
+          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          run_at: string
+          payload?: Json
+          status?: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+          attempts?: number
+          last_error?: string | null
+          locked_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          match_id?: string | null
+          job_type?: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          run_at?: string
+          payload?: Json
+          status?: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+          attempts?: number
+          last_error?: string | null
+          locked_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      match_reports: {
+        Row: {
+          id: string
+          match_id: string
+          reporter_player_id: string
+          dark_score: number | null
+          light_score: number | null
+          dark_goals_complete: boolean
+          light_goals_complete: boolean
+          mvp_candidate_id: string | null
+          submitted_after_lock: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          match_id: string
+          reporter_player_id: string
+          dark_score?: number | null
+          light_score?: number | null
+          dark_goals_complete?: boolean
+          light_goals_complete?: boolean
+          mvp_candidate_id?: string | null
+          submitted_after_lock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          match_id?: string
+          reporter_player_id?: string
+          dark_score?: number | null
+          light_score?: number | null
+          dark_goals_complete?: boolean
+          light_goals_complete?: boolean
+          mvp_candidate_id?: string | null
+          submitted_after_lock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      match_report_stats: {
+        Row: {
+          id: string
+          report_id: string
+          team_id: string
+          player_id: string | null
+          guest_player_id: string | null
+          goals: number
+          assists: number
+        }
+        Insert: {
+          id?: string
+          report_id: string
+          team_id: string
+          player_id?: string | null
+          guest_player_id?: string | null
+          goals?: number
+          assists?: number
+        }
+        Update: {
+          id?: string
+          report_id?: string
+          team_id?: string
+          player_id?: string | null
+          guest_player_id?: string | null
+          goals?: number
+          assists?: number
         }
         Relationships: []
       }
@@ -947,6 +1100,95 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      claim_due_jobs: {
+        Args: {
+          p_limit?: number
+        }
+        Returns: Database['public']['Tables']['scheduled_jobs']['Row'][]
+      }
+      run_scheduled_job: {
+        Args: {
+          p_job_id: string
+        }
+        Returns: Json
+      }
+      schedule_match_jobs: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      auto_finish_match: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: boolean
+      }
+      recompute_player_stats: {
+        Args: {
+          p_player_id: string
+        }
+        Returns: undefined
+      }
+      match_report_window_open: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: boolean
+      }
+      result_weight: {
+        Args: {
+          p_group_id: string
+          p_player_id: string
+        }
+        Returns: number
+      }
+      recompute_match_consensus: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      build_results_posted_payload: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: Json
+      }
+      submit_match_report: {
+        Args: {
+          p_match_id: string
+          p_dark_score: number | null
+          p_light_score: number | null
+          p_dark_goals_complete: boolean
+          p_light_goals_complete: boolean
+          p_mvp_candidate_id: string | null
+          p_stats: Json
+        }
+        Returns: string
+      }
+      delete_my_match_report: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      admin_set_match_result: {
+        Args: {
+          p_match_id: string
+          p_dark_score: number
+          p_light_score: number
+          p_events: Json
+          p_mvp_player_id: string | null
+        }
+        Returns: undefined
+      }
+      admin_unlock_match_result: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       user_language: 'es' | 'en'
@@ -982,6 +1224,27 @@ export type MatchEvent = Database['public']['Tables']['match_events']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
 export type NotificationRead = Database['public']['Tables']['notification_reads']['Row']
 export type NotificationOutboxRow = Database['public']['Tables']['notification_outbox']['Row']
+export type ScheduledJob = Database['public']['Tables']['scheduled_jobs']['Row']
+export type MatchReport = Database['public']['Tables']['match_reports']['Row']
+export type MatchReportStat = Database['public']['Tables']['match_report_stats']['Row']
+export type MatchResultStatus = Database['public']['Tables']['matches']['Row']['result_status']
+
+// Shapes of the jsonb arguments of the report/result RPCs (00019).
+export interface MatchReportStatInput {
+  team_id: string
+  player_id?: string | null
+  guest_player_id?: string | null
+  goals?: number
+  assists?: number
+}
+export interface AdminMatchEventInput {
+  team_id: string
+  player_id?: string | null
+  guest_player_id?: string | null
+  event_type: 'goal' | 'assist' | 'own_goal'
+  /** 0-based index of the goal this assist belongs to, within the same p_events array */
+  linked_index?: number | null
+}
 
 // Type for group with role
 export type GroupWithRole = Group & {
