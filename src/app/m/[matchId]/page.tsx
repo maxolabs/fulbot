@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PublicMatchActions } from './public-match-actions'
+import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
@@ -105,6 +106,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
   let isMember = false
   let memberSignup: { id: string; status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
   let inviteCode: string | null = null
+  let groupId: string | null = null
+  let profileId: string | null = null
 
   if (user) {
     const { data: profile } = await supabase
@@ -114,6 +117,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
       .single() as { data: { id: string } | null }
 
     if (profile) {
+      profileId = profile.id
       const { data: groupRow } = await supabase
         .from('groups')
         .select('id, invite_code')
@@ -122,6 +126,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
 
       if (groupRow) {
         inviteCode = groupRow.invite_code
+        groupId = groupRow.id
 
         const { data: membership } = await supabase
           .from('group_memberships')
@@ -236,6 +241,16 @@ export default async function PublicMatchPage({ params }: PageProps) {
             <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">
               {match.notes}
             </p>
+          )}
+
+          {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests unaffected */}
+          {!isPast && isMember && !memberSignup && match.status === 'signup_open' && groupId && profileId && (
+            <SignupPolicyNotice
+              matchId={matchId}
+              groupId={groupId}
+              playerId={profileId}
+              timeZone={timeZone}
+            />
           )}
 
           <PublicMatchActions

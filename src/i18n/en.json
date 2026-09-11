@@ -247,5 +247,25 @@
     "notifResultsReminderDesc": "If you still haven't reported a match's result",
     "saved": "Settings saved successfully",
     "saveError": "Error saving settings"
+  },
+  "signupPolicy": {
+    "priorityWindowUntil": "Priority signup until {date} at {time}",
+    "priorityWindowBody": "Until then spots go to members with a commitment score of {threshold} or more. You join the waitlist and get promoted automatically if there is room.",
+    "reservedUntil": "Reserved spots until {date} at {time}",
+    "reservedBody": "The last {spots} spots are for members with a commitment score of {threshold} or more. You join the waitlist and get promoted automatically if there is room.",
+    "cooldownTitle": "This time you go to the waitlist",
+    "cooldownBody": "You missed the last match without notice. You join the waitlist and get promoted automatically if a spot opens up.",
+    "waitlistReason": {
+      "priority_window": "You're on the waitlist because of the priority window. Once it ends you get promoted automatically if there is room.",
+      "reserved": "You're on the waitlist because the last spots are reserved. You get promoted automatically if there is room.",
+      "cooldown": "You're on the waitlist because you missed the last match. You get promoted automatically if a spot opens up.",
+      "full": "You're on the waitlist because the match is full. We'll let you know if a spot opens up."
+    },
+    "tag": {
+      "priority_window": "Priority window",
+      "reserved": "Reserved spot",
+      "cooldown": "Previous no-show",
+      "full": "Full"
+    }
   }
 }

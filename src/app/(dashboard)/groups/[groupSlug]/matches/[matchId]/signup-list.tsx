@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Star, X, UserX, RotateCcw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { Database } from '@/types/database'
+import type { Database, WaitlistReason } from '@/types/database'
+import { useT } from '@/i18n/provider'
 
 interface Signup {
   id: string
@@ -17,6 +18,7 @@ interface Signup {
   position_preference: string | null
   notes: string | null
   waitlist_position: number | null
+  waitlist_reason?: WaitlistReason | null
   player_id: string | null
   guest_player_id: string | null
   player_profiles: {
@@ -70,6 +72,15 @@ const BADGE_ICONS: Record<string, string> = {
   mvp: '🏆',
 }
 
+// Why a waitlisted member is there (docs/member-scoring.md §10.4). Shown to
+// admins/captains only; the member gets the long form in SignupActions.
+const REASON_TAG_CLASS: Record<WaitlistReason, string> = {
+  priority_window: 'border-yellow-500/40 text-yellow-700 dark:text-yellow-500',
+  reserved: 'border-yellow-500/40 text-yellow-700 dark:text-yellow-500',
+  cooldown: 'border-destructive/40 text-destructive',
+  full: '',
+}
+
 export function SignupList({
   signups,
   currentPlayerId,
@@ -82,6 +93,7 @@ export function SignupList({
 }: SignupListProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
@@ -172,7 +184,7 @@ export function SignupList({
             <Avatar fallback={displayName} size="sm" />
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={`text-sm font-medium truncate ${isCurrentUser ? 'text-primary' : ''}`}>
                   {displayName}
                   {player?.nickname && (
@@ -187,6 +199,14 @@ export function SignupList({
                 )}
                 {isNoShow && (
                   <Badge variant="outline" className="text-xs">No vino</Badge>
+                )}
+                {isAdminOrCaptain && signup.status === 'waitlist' && signup.waitlist_reason && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs shrink-0 whitespace-nowrap ${REASON_TAG_CLASS[signup.waitlist_reason] ?? ''}`}
+                  >
+                    {t(`signupPolicy.tag.${signup.waitlist_reason}`)}
+                  </Badge>
                 )}
                 {badges.length > 0 && (
                   <span className="flex items-center gap-0.5 text-sm" title={badges.join(', ')}>

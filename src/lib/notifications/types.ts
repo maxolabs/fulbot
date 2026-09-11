@@ -14,6 +14,8 @@ export type NotificationType =
   | 'results_reminder'
   | 'results_needs_review'
   | 'results_changed'
+  | 'member_score_dropped'
+  | 'member_score_recovered'
 
 export const NOTIFICATION_TYPES: NotificationType[] = [
   'match_created',
@@ -26,6 +28,8 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'results_reminder',
   'results_needs_review',
   'results_changed',
+  'member_score_dropped',
+  'member_score_recovered',
 ]
 
 export interface MatchCreatedPayload {
@@ -133,6 +137,35 @@ export interface ResultsChangedPayload {
   mvp_name?: string | null
 }
 
+// Member scoring nudges (docs/member-scoring.md §5.5, §10.1). Written by
+// recompute_member_score() with a direct INSERT and recipient_player_id set
+// (in-app only, never the WhatsApp outbox) when the score crosses
+// priority.threshold. `breakdown` is the group_memberships.member_breakdown
+// snapshot; only the fields the template reads are declared, all optional so
+// the text degrades gracefully if the SQL shape ever drifts.
+export interface MemberScoreBreakdown {
+  window_matches?: number
+  played?: number
+  is_new?: boolean
+  asistencia?: { no_shows?: number }
+  aviso?: { late?: number }
+  puntualidad?: { late_arrivals?: number }
+  reglas?: { wrong_jersey?: number; unpaid?: number }
+  participacion?: { eligible?: number; participated?: number }
+  adjustment_points?: number
+}
+
+export interface MemberScorePayload {
+  group_id: string
+  group_name: string
+  // NULL when the member became a newcomer again (fewer than
+  // min_matches_for_score played matches in the window).
+  score: number | null
+  previous_score: number | null
+  threshold: number
+  breakdown: MemberScoreBreakdown
+}
+
 export interface NotificationPayloadMap {
   match_created: MatchCreatedPayload
   waitlist_promoted: WaitlistPromotedPayload
@@ -144,6 +177,8 @@ export interface NotificationPayloadMap {
   results_reminder: ResultsReminderPayload
   results_needs_review: ResultsNeedsReviewPayload
   results_changed: ResultsChangedPayload
+  member_score_dropped: MemberScorePayload
+  member_score_recovered: MemberScorePayload
 }
 
 // Discriminated union so templates.ts (and anything else switching on `type`)
@@ -159,6 +194,8 @@ export type NotificationEvent =
   | { type: 'results_reminder'; payload: ResultsReminderPayload }
   | { type: 'results_needs_review'; payload: ResultsNeedsReviewPayload }
   | { type: 'results_changed'; payload: ResultsChangedPayload }
+  | { type: 'member_score_dropped'; payload: MemberScorePayload }
+  | { type: 'member_score_recovered'; payload: MemberScorePayload }
 
 export interface NotificationRow {
   id: string
