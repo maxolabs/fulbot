@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { MatchAnnouncement } from './match-announcement'
 import { SignupList } from './signup-list'
 import { SignupActions } from './signup-actions'
+import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { MatchAdminActions } from './match-admin-actions'
 import { AddGuestForm } from './add-guest-form'
 import { PostMatchVoting } from './post-match-voting'
@@ -24,8 +25,9 @@ import { RealtimeWrapper } from './realtime-wrapper'
 import { MatchResults } from './match-results'
 import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
-import type { MatchResultStatus } from '@/types/database'
+import type { MatchResultStatus, WaitlistReason } from '@/types/database'
 import { MatchReportsTable } from './match-reports-table'
+import { ConductCheck } from './conduct-check'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
@@ -136,6 +138,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
     position_preference: string | null
     notes: string | null
     waitlist_position: number | null
+    waitlist_reason: WaitlistReason | null
     player_id: string | null
     guest_player_id: string | null
     player_profiles: {
@@ -162,6 +165,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       position_preference,
       notes,
       waitlist_position,
+      waitlist_reason,
       player_id,
       guest_player_id,
       player_profiles (
@@ -365,8 +369,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   let reports: ReportRow[] = []
   let resultsWindowDays = 7
+  // Member scoring on for this group: the report form shows "+1 compromiso"
+  // after a usable report (docs/member-scoring.md §5.5).
+  let scoringEnabled = false
 
   if (match.status === 'finished') {
+    const { data: scoringSettings } = await supabase
+      .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: { enabled?: boolean } | null }
+    scoringEnabled = !!scoringSettings?.enabled
+
     const { data: settingsRow } = await supabase
       .from('notification_settings')
       .select('results_window_days')
@@ -584,6 +595,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content - Signup List */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Member scoring policy notice (docs/member-scoring.md §6): renders nothing unless it applies */}
+          {!isPast && match.status === 'signup_open' && !currentUserSignup && (
+            <SignupPolicyNotice
+              matchId={match.id}
+              groupId={group.id}
+              playerId={playerProfile.id}
+              timeZone={timeZone}
+            />
+          )}
+
           {/* Signup Actions for Current User */}
           {!isPast && match.status !== 'cancelled' && match.status !== 'finished' && (
             <SignupActions
@@ -592,6 +613,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 id: currentUserSignup.id,
                 status: currentUserSignup.status,
                 waitlistPosition: currentUserSignup.waitlist_position,
+                waitlistReason: currentUserSignup.waitlist_reason,
               } : null}
               matchStatus={match.status}
               isFull={confirmedSignups.length >= match.max_players}
@@ -650,6 +672,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
               agreement={agreement}
               windowOpen={reportWindowOpen}
               resultStatus={match.result_status}
+              scoringEnabled={scoringEnabled}
             />
           )}
 
@@ -697,6 +720,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
               ]}
               confirmedCount={matchPlayers.length}
+            />
+          )}
+
+          {/* Conduct check (docs/member-scoring.md §4.2) - admins, and captains when allowed; hidden when scoring is off */}
+          {match.status === 'finished' && isAdminOrCaptain && (
+            <ConductCheck
+              matchId={match.id}
+              groupId={group.id}
+              role={membership.role as 'admin' | 'captain' | 'member'}
             />
           )}
 

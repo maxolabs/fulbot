@@ -52,7 +52,6 @@ export type Database = {
           main_position: string
           footedness: 'left' | 'right' | 'both'
           goalkeeper_willingness: number
-          reliability_score: number
           fitness_status: 'ok' | 'limited' | 'injured'
           matches_played: number
           goals: number
@@ -71,7 +70,6 @@ export type Database = {
           main_position?: string
           footedness?: 'left' | 'right' | 'both'
           goalkeeper_willingness?: number
-          reliability_score?: number
           fitness_status?: 'ok' | 'limited' | 'injured'
           matches_played?: number
           goals?: number
@@ -90,7 +88,6 @@ export type Database = {
           main_position?: string
           footedness?: 'left' | 'right' | 'both'
           goalkeeper_willingness?: number
-          reliability_score?: number
           fitness_status?: 'ok' | 'limited' | 'injured'
           matches_played?: number
           goals?: number
@@ -158,6 +155,11 @@ export type Database = {
           role: 'admin' | 'captain' | 'member'
           is_active: boolean
           joined_at: string
+          // Member score (00021): 1.00..5.00, null = not enough history ("Nuevo").
+          member_score: number | null
+          member_breakdown: MemberBreakdown | null
+          member_score_at: string | null
+          signup_cooldown: boolean
         }
         Insert: {
           id?: string
@@ -166,6 +168,10 @@ export type Database = {
           role?: 'admin' | 'captain' | 'member'
           is_active?: boolean
           joined_at?: string
+          member_score?: number | null
+          member_breakdown?: MemberBreakdown | null
+          member_score_at?: string | null
+          signup_cooldown?: boolean
         }
         Update: {
           id?: string
@@ -174,6 +180,10 @@ export type Database = {
           role?: 'admin' | 'captain' | 'member'
           is_active?: boolean
           joined_at?: string
+          member_score?: number | null
+          member_breakdown?: MemberBreakdown | null
+          member_score_at?: string | null
+          signup_cooldown?: boolean
         }
         Relationships: []
       }
@@ -197,6 +207,7 @@ export type Database = {
           result_locked_by: string | null
           result_locked_at: string | null
           result_posted_key: string | null
+          signup_opened_at: string | null
           created_at: string
           updated_at: string
         }
@@ -219,6 +230,7 @@ export type Database = {
           result_locked_by?: string | null
           result_locked_at?: string | null
           result_posted_key?: string | null
+          signup_opened_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -241,6 +253,7 @@ export type Database = {
           result_locked_by?: string | null
           result_locked_at?: string | null
           result_posted_key?: string | null
+          signup_opened_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -342,6 +355,7 @@ export type Database = {
           position_preference: string | null
           notes: string | null
           waitlist_position: number | null
+          waitlist_reason: WaitlistReason | null
         }
         Insert: {
           id?: string
@@ -354,6 +368,7 @@ export type Database = {
           position_preference?: string | null
           notes?: string | null
           waitlist_position?: number | null
+          waitlist_reason?: WaitlistReason | null
         }
         Update: {
           id?: string
@@ -366,6 +381,7 @@ export type Database = {
           position_preference?: string | null
           notes?: string | null
           waitlist_position?: number | null
+          waitlist_reason?: WaitlistReason | null
         }
         Relationships: []
       }
@@ -799,7 +815,7 @@ export type Database = {
           id: string
           group_id: string
           match_id: string | null
-          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close' | 'priority_window_close'
           run_at: string
           payload: Json
           status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
@@ -813,7 +829,7 @@ export type Database = {
           id?: string
           group_id: string
           match_id?: string | null
-          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          job_type: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close' | 'priority_window_close'
           run_at: string
           payload?: Json
           status?: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
@@ -827,7 +843,7 @@ export type Database = {
           id?: string
           group_id?: string
           match_id?: string | null
-          job_type?: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close'
+          job_type?: 'auto_finish' | 'results_request' | 'results_reminder' | 'results_window_close' | 'priority_window_close'
           run_at?: string
           payload?: Json
           status?: 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
@@ -924,6 +940,50 @@ export type Database = {
           guest_player_id?: string | null
           goals?: number
           assists?: number
+        }
+        Relationships: []
+      }
+      // Member score ledger (00021). Read-only for clients: members see their own
+      // rows, admins/captains the whole group; every write goes through an RPC.
+      member_events: {
+        Row: {
+          id: string
+          group_id: string
+          player_id: string
+          match_id: string | null
+          subject_id: string | null
+          type: Database['public']['Enums']['member_event_type']
+          points: number
+          source: Database['public']['Enums']['member_event_source']
+          reported_by: string | null
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          player_id: string
+          match_id?: string | null
+          subject_id?: string | null
+          type: Database['public']['Enums']['member_event_type']
+          points: number
+          source: Database['public']['Enums']['member_event_source']
+          reported_by?: string | null
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          player_id?: string
+          match_id?: string | null
+          subject_id?: string | null
+          type?: Database['public']['Enums']['member_event_type']
+          points?: number
+          source?: Database['public']['Enums']['member_event_source']
+          reported_by?: string | null
+          note?: string | null
+          created_at?: string
         }
         Relationships: []
       }
@@ -1205,6 +1265,74 @@ export type Database = {
         }
         Returns: undefined
       }
+      // Member scoring (00021)
+      member_scoring_settings: {
+        Args: {
+          p_group_id: string
+        }
+        Returns: MemberScoringSettings
+      }
+      can_report_member_conduct: {
+        Args: {
+          p_group_id: string
+        }
+        Returns: boolean
+      }
+      set_conduct_flag: {
+        Args: {
+          p_match_id: string
+          p_player_id: string
+          p_type: 'arrived_late' | 'wrong_jersey' | 'unpaid'
+          p_on: boolean
+        }
+        Returns: undefined
+      }
+      admin_adjust_member_score: {
+        Args: {
+          p_group_id: string
+          p_player_id: string
+          p_points: number
+          p_note: string
+        }
+        Returns: string
+      }
+      admin_delete_member_event: {
+        Args: {
+          p_event_id: string
+        }
+        Returns: undefined
+      }
+      admin_recompute_member_scores: {
+        Args: {
+          p_group_id: string
+        }
+        Returns: undefined
+      }
+      recompute_member_score: {
+        Args: {
+          p_group_id: string
+          p_player_id: string
+        }
+        Returns: undefined
+      }
+      recompute_group_member_scores: {
+        Args: {
+          p_group_id: string
+        }
+        Returns: undefined
+      }
+      emit_attendance_events: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: undefined
+      }
+      run_priority_window_close_job: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       user_language: 'es' | 'en'
@@ -1216,8 +1344,78 @@ export type Database = {
       team_name: 'dark' | 'light'
       assignment_source: 'ai' | 'manual'
       rule_type: 'avoid_pair' | 'force_pair' | 'min_defenders' | 'min_goalkeepers' | 'balance_rating'
+      member_event_type:
+        | 'attended'
+        | 'no_show'
+        | 'late_cancel'
+        | 'early_cancel'
+        | 'arrived_late'
+        | 'wrong_jersey'
+        | 'unpaid'
+        | 'paid'
+        | 'reported_result'
+        | 'rated_teammates'
+        | 'voted_mvp'
+        | 'rated_new_member'
+        | 'peer_kudos'
+        | 'admin_adjustment'
+      member_event_source: 'system' | 'admin' | 'peer'
     }
   }
+}
+
+// Member scoring (00021, docs/member-scoring.md §2, §10.1).
+export type WaitlistReason = 'full' | 'priority_window' | 'reserved' | 'cooldown'
+
+export interface MemberBreakdown {
+  window_matches: number
+  played: number
+  is_new: boolean
+  asistencia: { ratio: number; played: number; no_shows: number }
+  aviso: { ratio: number; played: number; early: number; late: number }
+  puntualidad: { ratio: number; late_arrivals: number }
+  reglas: { ratio: number; wrong_jersey: number; unpaid: number }
+  participacion: {
+    ratio: number
+    eligible: number
+    participated: number
+    reported: number
+    rated: number
+    voted_mvp: number
+    newcomers_eligible: number
+    newcomers_rated: number
+  }
+  /** Admin adjustments in stars (points / 20) */
+  adjustments: number
+  adjustment_points: number
+  raw_points: number
+}
+
+export type MemberScoringPriorityMode = 'off' | 'window' | 'waitlist' | 'reserved'
+
+/** Shape returned by member_scoring_settings(): groups.settings.member_scoring merged over defaults. */
+export interface MemberScoringSettings {
+  enabled: boolean
+  window_matches: number
+  late_cancel_hours: number
+  min_matches_for_score: number
+  weights: Record<string, number>
+  dimensions: {
+    asistencia: number
+    aviso: number
+    puntualidad: number
+    reglas: number
+    participacion: number
+  }
+  visibility: 'self' | 'group'
+  priority: {
+    mode: MemberScoringPriorityMode
+    threshold: number
+    window_hours: number
+    reserved_spots: number
+  }
+  no_show_cooldown: boolean
+  captains_can_report: boolean
 }
 
 // Convenience type exports
@@ -1244,6 +1442,9 @@ export type ScheduledJob = Database['public']['Tables']['scheduled_jobs']['Row']
 export type SchedulerState = Database['public']['Tables']['scheduler_state']['Row']
 export type MatchReport = Database['public']['Tables']['match_reports']['Row']
 export type MatchReportStat = Database['public']['Tables']['match_report_stats']['Row']
+export type MemberEvent = Database['public']['Tables']['member_events']['Row']
+export type MemberEventType = Database['public']['Enums']['member_event_type']
+export type MemberEventSource = Database['public']['Enums']['member_event_source']
 export type MatchResultStatus = Database['public']['Tables']['matches']['Row']['result_status']
 
 // Shapes of the jsonb arguments of the report/result RPCs (00020).

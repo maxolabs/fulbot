@@ -5,11 +5,14 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
+import { MemberScoringSettingsCard } from './member-scoring-settings'
 import type { Json } from '@/types/database'
 import { MembersManager } from './members-manager'
 import { NotificationSettings } from './notification-settings'
 import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
@@ -22,6 +25,14 @@ export default async function GroupSettingsPage({ params }: PageProps) {
   // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+
+  const t = getT(userData?.preferred_language ?? 'es')
 
   // Get user's player profile
   const { data: playerProfile } = await supabase
@@ -184,6 +195,17 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardHeader>
         <CardContent>
           <GroupSettingsForm group={group} />
+        </CardContent>
+      </Card>
+
+      {/* Member scoring (docs/member-scoring.md §6, §10.2) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('memberScoring.settings.title')}</CardTitle>
+          <CardDescription>{t('memberScoring.settings.description')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MemberScoringSettingsCard groupId={group.id} />
         </CardContent>
       </Card>
 

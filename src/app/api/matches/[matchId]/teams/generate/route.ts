@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   generateTeams,
   guestPlayerDefaults,
+  MEMBER_SCORE_NEUTRAL,
   PlayerInput,
   RuleInput,
   MatchHistoryEntry,
@@ -85,7 +86,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         footedness: 'left' | 'right' | 'both'
         goalkeeper_willingness: number
         fitness_status: 'ok' | 'limited' | 'injured'
-        reliability_score: number
         matches_played: number
         goals: number
         assists: number
@@ -113,7 +113,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           footedness,
           goalkeeper_willingness,
           fitness_status,
-          reliability_score,
           matches_played,
           goals,
           assists
@@ -156,6 +155,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       : { data: [] as RatingSummary[] }
     const summaries = summariesById(summaryRows)
 
+    // Member score ("Compromiso") of each registered player in the match's group
+    // (docs/member-scoring.md §5.3). NULL (newcomer) and guests fall back to neutral.
+    const { data: membershipRows } = ratedIds.length > 0
+      ? await supabase
+          .from('group_memberships')
+          .select('player_id, member_score')
+          .eq('group_id', match.group_id)
+          .in('player_id', ratedIds) as { data: { player_id: string; member_score: number | null }[] | null }
+      : { data: [] as { player_id: string; member_score: number | null }[] }
+    const memberScoreById = new Map(
+      (membershipRows || []).map((m) => [m.player_id, m.member_score === null ? null : Number(m.member_score)])
+    )
+
     // Convert to PlayerInput format (registered players + guests)
     const players: PlayerInput[] = signups
       .filter((s) => s.player_profiles !== null || s.guest_players !== null)
@@ -175,7 +187,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             footedness: pp.footedness,
             goalkeeperWillingness: pp.goalkeeper_willingness,
             fitnessStatus: pp.fitness_status,
-            reliabilityScore: pp.reliability_score,
+            memberScore: memberScoreById.get(pp.id) ?? MEMBER_SCORE_NEUTRAL,
             matchesPlayed: pp.matches_played,
             goals: pp.goals,
             assists: pp.assists,
@@ -280,6 +292,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id: p.id,
           name: p.displayName,
           rating: p.overallRating,
+          memberScore: p.memberScore,
           isGuest: p.isGuest ?? false,
         })),
         rules: ruleInputs,

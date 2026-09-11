@@ -1,7 +1,7 @@
 // T5 notifications: Spanish (Rioplatense, "vos") text per notification type.
 // Used both for the WhatsApp outbox body and the /notifications page list.
 
-import type { NotificationEvent } from './types'
+import type { MemberScoreBreakdown, NotificationEvent } from './types'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
 // Both formatters take an explicit timeZone and assemble the string
@@ -30,6 +30,45 @@ function pluralGoles(n: number): string {
 
 function joinNames(names: string[]): string {
   return names.join(', ')
+}
+
+// "a, b y c"
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+}
+
+function pluralize(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+// One decimal, like MemberScoreStars on the player page.
+function formatScore(score: number | null | undefined): string {
+  return typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : '—'
+}
+
+// Human summary of what is dragging the score down, from the breakdown snapshot
+// (docs/member-scoring.md §5.5: "Contás 2 bajas tarde en los últimos 10 partidos").
+function describeScoreIssues(b: MemberScoreBreakdown | null | undefined): string[] {
+  if (!b) return []
+  const issues: string[] = []
+  const noShows = b.asistencia?.no_shows ?? 0
+  if (noShows > 0) issues.push(pluralize(noShows, 'falta sin avisar', 'faltas sin avisar'))
+  const lateCancels = b.aviso?.late ?? 0
+  if (lateCancels > 0) issues.push(pluralize(lateCancels, 'baja tarde', 'bajas tarde'))
+  const lateArrivals = b.puntualidad?.late_arrivals ?? 0
+  if (lateArrivals > 0) issues.push(pluralize(lateArrivals, 'llegada tarde', 'llegadas tarde'))
+  const wrongJersey = b.reglas?.wrong_jersey ?? 0
+  if (wrongJersey > 0) issues.push(pluralize(wrongJersey, 'partido sin la camiseta', 'partidos sin la camiseta'))
+  const unpaid = b.reglas?.unpaid ?? 0
+  if (unpaid > 0) issues.push(pluralize(unpaid, 'partido sin pagar', 'partidos sin pagar'))
+  const missedParticipation = (b.participacion?.eligible ?? 0) - (b.participacion?.participated ?? 0)
+  if (missedParticipation > 0) {
+    issues.push(pluralize(missedParticipation, 'partido sin reportar ni puntuar', 'partidos sin reportar ni puntuar'))
+  }
+  const adjustment = b.adjustment_points ?? 0
+  if (adjustment < 0) issues.push(`un ajuste del admin de ${adjustment} puntos`)
+  return issues
 }
 
 export interface RenderOptions {
@@ -123,6 +162,31 @@ export function renderNotificationText(
       return (
         `El resultado del ${date} (${event.payload.group_name}) cambió de ${event.payload.previous_score} ` +
         `a ${event.payload.current_score} después de ser publicado.${mvp} Revisalo y cerralo si corresponde.`
+      )
+    }
+    case 'member_score_dropped': {
+      const p = event.payload
+      const window = p.breakdown?.window_matches ?? 10
+      const issues = describeScoreIssues(p.breakdown)
+      const why = issues.length > 0 ? ` Contás ${joinList(issues)} en los últimos ${window} partidos.` : ''
+      return (
+        `Tu compromiso en ${p.group_name} bajó a ${formatScore(p.score)} ` +
+        `(el mínimo para tener prioridad al anotarte es ${formatScore(p.threshold)}).${why} ` +
+        `Lo recuperás yendo a los próximos partidos y avisando con tiempo si no podés: ` +
+        `solo cuentan los últimos ${window} partidos, así que nada es para siempre.`
+      )
+    }
+    case 'member_score_recovered': {
+      const p = event.payload
+      if (p.score === null) {
+        return (
+          `Tu compromiso en ${p.group_name} vuelve a contar como nuevo y recuperaste la prioridad ` +
+          `para anotarte. Seguí así: cada partido a tiempo suma.`
+        )
+      }
+      return (
+        `¡Tu compromiso en ${p.group_name} subió a ${formatScore(p.score)} y recuperaste la prioridad ` +
+        `para anotarte! Seguí así: cada partido a tiempo suma.`
       )
     }
     default: {

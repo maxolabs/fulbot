@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Minus, Check, ClipboardList, Trophy, Pencil, Trash2, Lock, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Plus, Minus, Check, ClipboardList, Trophy, Pencil, Trash2, Lock, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
+import { useT } from '@/i18n/provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
@@ -65,6 +66,8 @@ interface ReportFormProps {
   agreement: { same: number; total: number } | null
   windowOpen: boolean
   resultStatus: MatchResultStatus
+  /** Group has member scoring on: a usable report earns "+1 compromiso" (docs/member-scoring.md §5.5). */
+  scoringEnabled?: boolean
 }
 
 type Counts = Record<string, { goals: number; assists: number }>
@@ -104,9 +107,14 @@ export function ReportForm({
   agreement,
   windowOpen,
   resultStatus,
+  scoringEnabled = false,
 }: ReportFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
+  // True right after this visit's submit, so the "+1 compromiso" feedback closes
+  // the loop on the spot and doesn't nag on later visits to the same report.
+  const [justSaved, setJustSaved] = useState(false)
 
   const darkTeam = teams.find(t => t.name === 'dark')
   const lightTeam = teams.find(t => t.name === 'light')
@@ -216,6 +224,7 @@ export function ReportForm({
       if (rpcError) throw rpcError
       setEditing(false)
       setStep(0)
+      setJustSaved(true)
       router.refresh()
     } catch (err) {
       setError(errorMessage(err, 'No se pudo guardar el reporte'))
@@ -276,6 +285,17 @@ export function ReportForm({
           )}
         </CardHeader>
         <CardContent className="space-y-3">
+          {scoringEnabled && justSaved && !existingReport.submitted_after_lock && (
+            <p
+              className="flex items-center justify-center gap-1.5 text-sm font-medium text-primary"
+              title={t('memberScore.plusOneHint')}
+              data-testid="report-plus-one"
+            >
+              <Sparkles className="h-4 w-4" />
+              {t('memberScore.plusOne')}
+            </p>
+          )}
+
           <div className="flex items-center justify-center gap-4 text-center">
             <div>
               <span className="text-xs text-muted-foreground">Oscuro</span>
