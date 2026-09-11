@@ -84,6 +84,20 @@ DROP TRIGGER IF EXISTS update_scheduled_jobs_updated_at ON public.scheduled_jobs
 CREATE TRIGGER update_scheduled_jobs_updated_at BEFORE UPDATE ON public.scheduled_jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- Single-row heartbeat of the scheduler: claim_due_jobs stamps last_tick_at
+-- on every call, even when nothing is due. The app's opportunistic tick
+-- (src/lib/notifications/opportunistic-tick.ts) reads it through the admin
+-- client as a cross-instance guard: if another instance ticked within the
+-- last minute there is nothing to do. Service role only; no client policies.
+CREATE TABLE IF NOT EXISTS public.scheduler_state (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    last_tick_at TIMESTAMPTZ NULL
+);
+INSERT INTO public.scheduler_state (id, last_tick_at) VALUES (1, NULL) ON CONFLICT (id) DO NOTHING;
+ALTER TABLE public.scheduler_state ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.scheduler_state FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.scheduler_state TO service_role;
+
 -- ============================================
 -- 3. HELPERS
 -- ============================================
@@ -206,6 +220,10 @@ BEGIN
         RAISE EXCEPTION 'Esta operación requiere el rol de servicio';
     END IF;
 
+    -- Heartbeat for the opportunistic tick's cross-instance guard.
+    INSERT INTO public.scheduler_state (id, last_tick_at) VALUES (1, now())
+    ON CONFLICT (id) DO UPDATE SET last_tick_at = EXCLUDED.last_tick_at;
+
     RETURN QUERY
     UPDATE public.scheduled_jobs j
     SET status = 'running', locked_at = now(), attempts = attempts + 1
@@ -257,11 +275,18 @@ BEGIN
     END IF;
     SELECT * INTO v_group FROM public.groups WHERE id = v_match.group_id;
 
+    -- Group-wide row; player_ids lets the app show it only to the confirmed
+    -- registered players of the match (audit #7).
     PERFORM emit_notification(v_match.group_id, p_match_id, 'results_request', jsonb_build_object(
         'match_id', p_match_id,
         'group_name', v_group.name,
         'date_time', v_match.date_time,
-        'report_url', COALESCE(p_payload->>'app_url', '') || '/groups/' || v_group.slug || '/matches/' || p_match_id::text || '#reportar'
+        'report_url', COALESCE(p_payload->>'app_url', '') || '/groups/' || v_group.slug || '/matches/' || p_match_id::text || '#reportar',
+        'player_ids', (
+            SELECT COALESCE(jsonb_agg(ms.player_id ORDER BY ms.player_id), '[]'::jsonb)
+            FROM public.match_signups ms
+            WHERE ms.match_id = p_match_id AND ms.status = 'confirmed' AND ms.player_id IS NOT NULL
+        )
     ));
     RETURN TRUE;
 END;
@@ -464,7 +489,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- award_badges_for_match: same conditions as 00011, but only for matches whose
 -- result is consensus/locked, and revoking hat_trick/playmaker/safe_hands rows
--- whose condition no longer holds (ironman and mvp are left alone).
+-- whose condition no longer holds (ironman is left alone). The 'mvp' badge is
+-- also owned here: it exists only for the current mvp_player_id of a match whose
+-- result is consensus/locked (audit #12: a single vote on a provisional match
+-- must not leak the MVP through the badge list).
 CREATE OR REPLACE FUNCTION match_badge_eligibility(p_match_id UUID)
 RETURNS TABLE(player_id UUID, badge_type TEXT) AS $$
     SELECT me.player_id, 'hat_trick'::text
@@ -515,6 +543,20 @@ BEGIN
     INSERT INTO public.player_badges (player_id, badge_type, match_id)
     SELECT e.player_id, e.badge_type, p_match_id FROM match_badge_eligibility(p_match_id) e
     ON CONFLICT (player_id, badge_type, match_id) DO NOTHING;
+
+    -- mvp: only for the current holder, only once the result counts.
+    DELETE FROM public.player_badges pb
+    WHERE pb.match_id = p_match_id AND pb.badge_type = 'mvp'
+    AND (v_match.status <> 'finished'
+         OR v_match.result_status NOT IN ('consensus', 'locked')
+         OR pb.player_id IS DISTINCT FROM v_match.mvp_player_id);
+
+    IF v_match.status = 'finished' AND v_match.result_status IN ('consensus', 'locked')
+       AND v_match.mvp_player_id IS NOT NULL THEN
+        INSERT INTO public.player_badges (player_id, badge_type, match_id)
+        VALUES (v_match.mvp_player_id, 'mvp', p_match_id)
+        ON CONFLICT (player_id, badge_type, match_id) DO NOTHING;
+    END IF;
 
     -- ironman: unchanged from 00011.
     IF v_match.status = 'finished' THEN

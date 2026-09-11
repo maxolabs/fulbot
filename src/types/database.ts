@@ -839,6 +839,22 @@ export type Database = {
         }
         Relationships: []
       }
+      // Single-row scheduler heartbeat (00018); service role only.
+      scheduler_state: {
+        Row: {
+          id: number
+          last_tick_at: string | null
+        }
+        Insert: {
+          id?: number
+          last_tick_at?: string | null
+        }
+        Update: {
+          id?: number
+          last_tick_at?: string | null
+        }
+        Relationships: []
+      }
       match_reports: {
         Row: {
           id: string
@@ -1225,6 +1241,7 @@ export type Notification = Database['public']['Tables']['notifications']['Row']
 export type NotificationRead = Database['public']['Tables']['notification_reads']['Row']
 export type NotificationOutboxRow = Database['public']['Tables']['notification_outbox']['Row']
 export type ScheduledJob = Database['public']['Tables']['scheduled_jobs']['Row']
+export type SchedulerState = Database['public']['Tables']['scheduler_state']['Row']
 export type MatchReport = Database['public']['Tables']['match_reports']['Row']
 export type MatchReportStat = Database['public']['Tables']['match_report_stats']['Row']
 export type MatchResultStatus = Database['public']['Tables']['matches']['Row']['result_status']

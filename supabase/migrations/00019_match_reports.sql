@@ -224,17 +224,8 @@ BEGIN
         RETURN;
     END IF;
 
-    IF v_old_mvp IS NOT NULL THEN
-        DELETE FROM public.player_badges
-        WHERE player_id = v_old_mvp AND badge_type = 'mvp' AND match_id = p_match_id;
-    END IF;
-
-    IF p_new_mvp IS NOT NULL THEN
-        INSERT INTO public.player_badges (player_id, badge_type, match_id)
-        VALUES (p_new_mvp, 'mvp', p_match_id)
-        ON CONFLICT (player_id, badge_type, match_id) DO NOTHING;
-    END IF;
-
+    -- The 'mvp' badge is maintained by award_badges_for_match (00018), which
+    -- runs from finalize_match_results once the result is consensus/locked.
     UPDATE public.matches SET mvp_player_id = p_new_mvp WHERE id = p_match_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -336,13 +327,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Emits results_posted only when the "dark-light|mvp" key differs from the last
--- one posted for this match.
-CREATE OR REPLACE FUNCTION post_match_result_if_changed(p_match_id UUID)
+-- Posting policy (docs §5.4, §7, audit #4). The "dark-light|mvp" key of the
+-- current result is compared with result_posted_key (what the group / the
+-- admins last saw):
+--   * key unchanged                      -> nothing.
+--   * never posted (key NULL)            -> results_posted to the group.
+--   * p_group_post (admin lock)          -> results_posted to the group.
+--   * otherwise (consensus drifted after
+--     it was posted, unlock recompute)   -> in-app 'results_changed' to each
+--     group admin, no outbox, deduped on the latest notice's `current`.
+-- The key is updated whenever a post or a change notice is issued.
+DROP FUNCTION IF EXISTS post_match_result_if_changed(UUID);
+CREATE OR REPLACE FUNCTION post_match_result_if_changed(p_match_id UUID, p_group_post BOOLEAN DEFAULT FALSE)
 RETURNS BOOLEAN AS $$
 DECLARE
     v_match public.matches;
+    v_group public.groups;
     v_key TEXT;
+    v_score TEXT;
+    v_previous TEXT;
+    v_last_current TEXT;
+    v_mvp_name TEXT;
     v_dark INTEGER;
     v_light INTEGER;
 BEGIN
@@ -355,12 +360,55 @@ BEGIN
     INTO v_dark, v_light
     FROM public.teams WHERE match_id = p_match_id;
 
-    v_key := COALESCE(v_dark, 0) || '-' || COALESCE(v_light, 0) || '|' || COALESCE(v_match.mvp_player_id::text, '');
+    v_score := COALESCE(v_dark, 0) || '-' || COALESCE(v_light, 0);
+    v_key := v_score || '|' || COALESCE(v_match.mvp_player_id::text, '');
     IF v_key IS NOT DISTINCT FROM v_match.result_posted_key THEN
         RETURN FALSE;
     END IF;
 
-    PERFORM emit_notification(v_match.group_id, p_match_id, 'results_posted', build_results_posted_payload(p_match_id));
+    IF v_match.result_posted_key IS NULL OR p_group_post THEN
+        PERFORM emit_notification(v_match.group_id, p_match_id, 'results_posted', build_results_posted_payload(p_match_id));
+        UPDATE public.matches SET result_posted_key = v_key WHERE id = p_match_id;
+        RETURN TRUE;
+    END IF;
+
+    -- Drift after posting: tell the admins in-app, never the group. Dedupe
+    -- against the latest change notice issued since the last group post (a
+    -- notice older than the last post is stale: the admins have seen a
+    -- different result in between).
+    SELECT payload->>'current' INTO v_last_current
+    FROM public.notifications n
+    WHERE n.match_id = p_match_id AND n.type = 'results_changed'
+    AND n.created_at >= COALESCE((
+        SELECT MAX(created_at) FROM public.notifications
+        WHERE match_id = p_match_id AND type = 'results_posted'
+    ), '-infinity'::timestamptz)
+    ORDER BY n.created_at DESC
+    LIMIT 1;
+
+    IF v_last_current IS NOT DISTINCT FROM v_key THEN
+        UPDATE public.matches SET result_posted_key = v_key WHERE id = p_match_id;
+        RETURN FALSE;
+    END IF;
+
+    SELECT * INTO v_group FROM public.groups WHERE id = v_match.group_id;
+    v_previous := split_part(v_match.result_posted_key, '|', 1);
+    SELECT display_name INTO v_mvp_name FROM public.player_profiles WHERE id = v_match.mvp_player_id;
+
+    INSERT INTO public.notifications (group_id, match_id, recipient_player_id, type, payload)
+    SELECT v_match.group_id, p_match_id, gm.player_id, 'results_changed', jsonb_build_object(
+        'match_id', p_match_id,
+        'group_name', v_group.name,
+        'date_time', v_match.date_time,
+        'previous', v_previous,
+        'current', v_key,
+        'previous_score', v_previous,
+        'current_score', v_score,
+        'mvp_name', v_mvp_name
+    )
+    FROM public.group_memberships gm
+    WHERE gm.group_id = v_match.group_id AND gm.role = 'admin' AND gm.is_active;
+
     UPDATE public.matches SET result_posted_key = v_key WHERE id = p_match_id;
     RETURN TRUE;
 END;
@@ -540,7 +588,7 @@ BEGIN
 
     IF v_status = 'consensus' THEN
         PERFORM finalize_match_results(p_match_id);
-        PERFORM post_match_result_if_changed(p_match_id);
+        PERFORM post_match_result_if_changed(p_match_id, FALSE);
     ELSIF v_match.result_status = 'consensus' THEN
         -- Fell back to provisional: keep stats consistent with the new status.
         PERFORM finalize_match_results(p_match_id);
@@ -800,6 +848,25 @@ BEGIN
         END LOOP;
     END IF;
 
+    -- Unattributed goals (audit #9): the score is authoritative; whatever the
+    -- goal list does not cover becomes goal events without a player so the
+    -- payload and the consensus card can say "N goles sin autor".
+    SELECT COUNT(*) INTO v_linked FROM public.match_events
+    WHERE match_id = p_match_id AND team_id = v_dark_id AND event_type = 'goal';
+    IF v_linked > p_dark_score THEN
+        RAISE EXCEPTION 'Los goles cargados de Oscuro (%) superan el resultado (%)', v_linked, p_dark_score;
+    END IF;
+    INSERT INTO public.match_events (match_id, team_id, event_type, source)
+    SELECT p_match_id, v_dark_id, 'goal', 'admin' FROM generate_series(1, p_dark_score - v_linked);
+
+    SELECT COUNT(*) INTO v_linked FROM public.match_events
+    WHERE match_id = p_match_id AND team_id = v_light_id AND event_type = 'goal';
+    IF v_linked > p_light_score THEN
+        RAISE EXCEPTION 'Los goles cargados de Claro (%) superan el resultado (%)', v_linked, p_light_score;
+    END IF;
+    INSERT INTO public.match_events (match_id, team_id, event_type, source)
+    SELECT p_match_id, v_light_id, 'goal', 'admin' FROM generate_series(1, p_light_score - v_linked);
+
     UPDATE public.teams SET score = p_dark_score WHERE id = v_dark_id;
     UPDATE public.teams SET score = p_light_score WHERE id = v_light_id;
 
@@ -820,7 +887,7 @@ BEGIN
     AND job_type IN ('results_request', 'results_reminder');
 
     PERFORM finalize_match_results(p_match_id);
-    PERFORM post_match_result_if_changed(p_match_id);
+    PERFORM post_match_result_if_changed(p_match_id, TRUE);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -849,6 +916,9 @@ BEGIN
     WHERE match_id = p_match_id AND submitted_after_lock = TRUE;
 
     PERFORM recompute_match_consensus(p_match_id);
+    -- The lock's stats/badges (incl. the mvp badge) must follow the new status
+    -- even when the recompute lands on provisional/pending.
+    PERFORM finalize_match_results(p_match_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -868,8 +938,8 @@ REVOKE ALL ON FUNCTION recompute_match_mvp(UUID) FROM PUBLIC, anon, authenticate
 GRANT EXECUTE ON FUNCTION recompute_match_mvp(UUID) TO service_role;
 REVOKE ALL ON FUNCTION build_results_posted_payload(UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION build_results_posted_payload(UUID) TO authenticated, service_role;
-REVOKE ALL ON FUNCTION post_match_result_if_changed(UUID) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION post_match_result_if_changed(UUID) TO service_role;
+REVOKE ALL ON FUNCTION post_match_result_if_changed(UUID, BOOLEAN) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION post_match_result_if_changed(UUID, BOOLEAN) TO service_role;
 REVOKE ALL ON FUNCTION recompute_match_consensus(UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION recompute_match_consensus(UUID) TO authenticated, service_role;
 REVOKE ALL ON FUNCTION submit_match_report(UUID, INTEGER, INTEGER, BOOLEAN, BOOLEAN, UUID, JSONB) FROM PUBLIC, anon;
