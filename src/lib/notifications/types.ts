@@ -13,6 +13,7 @@ export type NotificationType =
   | 'results_request'
   | 'results_reminder'
   | 'results_needs_review'
+  | 'results_changed'
 
 export const NOTIFICATION_TYPES: NotificationType[] = [
   'match_created',
@@ -24,6 +25,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'results_request',
   'results_reminder',
   'results_needs_review',
+  'results_changed',
 ]
 
 export interface MatchCreatedPayload {
@@ -81,6 +83,10 @@ export interface ResultsRequestPayload {
   group_name: string
   date_time: string // ISO timestamp
   report_url: string
+  // Confirmed registered players of the match. The row is group-wide (one
+  // WhatsApp message); the /notifications page shows it only to these ids.
+  // Absent on rows emitted before the field existed -> shown to everyone.
+  player_ids?: string[]
 }
 
 // One group-wide row per match (never one per player): the list of players
@@ -111,6 +117,18 @@ export interface RateNewMemberPayload {
   player_name: string
 }
 
+// In-app only, one row per group admin (recipient_player_id set): the
+// consensus changed after the result was already posted to the group
+// (docs/match-results-consensus.md §5.4, §7). previous/current are "dark-light".
+export interface ResultsChangedPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  previous: string
+  current: string
+  mvp_name?: string | null
+}
+
 export interface NotificationPayloadMap {
   match_created: MatchCreatedPayload
   waitlist_promoted: WaitlistPromotedPayload
@@ -121,6 +139,7 @@ export interface NotificationPayloadMap {
   results_request: ResultsRequestPayload
   results_reminder: ResultsReminderPayload
   results_needs_review: ResultsNeedsReviewPayload
+  results_changed: ResultsChangedPayload
 }
 
 // Discriminated union so templates.ts (and anything else switching on `type`)
@@ -135,6 +154,7 @@ export type NotificationEvent =
   | { type: 'results_request'; payload: ResultsRequestPayload }
   | { type: 'results_reminder'; payload: ResultsReminderPayload }
   | { type: 'results_needs_review'; payload: ResultsNeedsReviewPayload }
+  | { type: 'results_changed'; payload: ResultsChangedPayload }
 
 export interface NotificationRow {
   id: string

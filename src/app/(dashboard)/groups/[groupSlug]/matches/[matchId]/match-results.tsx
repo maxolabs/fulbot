@@ -57,8 +57,18 @@ const STATUS_LABEL: Record<MatchResultStatus, string> = {
   locked: 'Resultado cerrado',
 }
 
+// supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
+// instance), so the SQL layer's Spanish messages have to be read off `.message`.
+function errorMessage(err: unknown, fallback: string): string {
+  const message = (err as { message?: unknown } | null)?.message
+  return typeof message === 'string' && message.trim() ? message : fallback
+}
+
+// Only attributed goals become rows; unattributed consensus goals (player and
+// guest both null, see §4) stay implicit in the score, so the editor can lock
+// a "2 goles sin autor" result as-is instead of demanding a scorer for each.
 function goalsFromEvents(events: MatchResultsProps['existingEvents']): GoalEntry[] {
-  const goalEvents = events.filter(e => e.event_type === 'goal')
+  const goalEvents = events.filter(e => e.event_type === 'goal' && (e.player_id || e.guest_player_id))
   const assistEvents = events.filter(e => e.event_type === 'assist')
   return goalEvents.map(goal => {
     const assist = assistEvents.find(a => a.linked_event_id === goal.id)
@@ -217,7 +227,7 @@ export function MatchResults({
       router.refresh()
     } catch (err) {
       console.error('Error saving results:', err)
-      setError(err instanceof Error && err.message ? err.message : 'Error al guardar el resultado')
+      setError(errorMessage(err, 'Error al guardar el resultado'))
     } finally {
       setSaving(false)
     }
@@ -237,7 +247,7 @@ export function MatchResults({
       router.refresh()
     } catch (err) {
       console.error('Error unlocking result:', err)
-      setError(err instanceof Error && err.message ? err.message : 'Error al reabrir el resultado')
+      setError(errorMessage(err, 'Error al reabrir el resultado'))
     } finally {
       setSaving(false)
     }

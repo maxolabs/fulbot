@@ -85,6 +85,13 @@ function countsFromReport(report: OwnReport | null): Counts {
   return counts
 }
 
+// supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
+// instance): read the SQL layer's Spanish message off `.message`.
+function errorMessage(err: unknown, fallback: string): string {
+  const message = (err as { message?: unknown } | null)?.message
+  return typeof message === 'string' && message.trim() ? message : fallback
+}
+
 function teamLabel(name: 'dark' | 'light') {
   return name === 'dark' ? 'Oscuro' : 'Claro'
 }
@@ -123,7 +130,10 @@ export function ReportForm({
 
   if (!darkTeam || !lightTeam) return null
 
-  const canEdit = windowOpen && resultStatus !== 'locked'
+  // A lock does not close the form: while the window is open a late report is
+  // still stored (flagged submitted_after_lock by the RPC) for the admin to see.
+  const canEdit = windowOpen
+  const isLocked = resultStatus === 'locked'
 
   const startEditing = () => {
     setScoreKnown(existingReport ? existingReport.dark_score !== null && existingReport.light_score !== null : true)
@@ -208,7 +218,7 @@ export function ReportForm({
       setStep(0)
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar el reporte')
+      setError(errorMessage(err, 'No se pudo guardar el reporte'))
     } finally {
       setSaving(false)
     }
@@ -231,7 +241,7 @@ export function ReportForm({
       setStep(0)
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo borrar el reporte')
+      setError(errorMessage(err, 'No se pudo borrar el reporte'))
     } finally {
       setSaving(false)
     }
@@ -311,6 +321,13 @@ export function ReportForm({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
+          {canEdit && isLocked && !existingReport.submitted_after_lock && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Lock className="h-3 w-3" />
+              El resultado ya está cerrado por el admin; si lo editás, queda registrado igual.
+            </p>
+          )}
+
           {canEdit ? (
             <div className="flex gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={startEditing} disabled={saving}>
@@ -325,7 +342,7 @@ export function ReportForm({
           ) : (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              {resultStatus === 'locked' ? 'El resultado está cerrado' : 'La ventana para reportar cerró'}
+              La ventana para reportar cerró
             </p>
           )}
         </CardContent>
@@ -339,7 +356,7 @@ export function ReportForm({
       <Card id="reportar">
         <CardContent className="py-4 text-sm text-muted-foreground flex items-center gap-2">
           <Lock className="h-4 w-4" />
-          {resultStatus === 'locked' ? 'El resultado ya está cerrado.' : 'La ventana para reportar este partido cerró.'}
+          La ventana para reportar este partido cerró.
         </CardContent>
       </Card>
     )
@@ -356,7 +373,7 @@ export function ReportForm({
         <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.max(0, value - 1))} aria-label={`Menos ${label}`}>
           <Minus className="h-4 w-4" />
         </Button>
-        <span className="text-4xl font-bold w-12 text-center tabular-nums">{value}</span>
+        <span className="text-3xl sm:text-4xl font-bold w-10 sm:w-12 text-center tabular-nums">{value}</span>
         <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.min(99, value + 1))} aria-label={`Más ${label}`}>
           <Plus className="h-4 w-4" />
         </Button>
@@ -423,7 +440,7 @@ export function ReportForm({
             const value = counts[statKey(team.id, player.key)] || { goals: 0, assists: 0 }
             const foreign = !team.players.some(p => p.key === player.key)
             return (
-              <div key={player.key} className="flex items-center gap-2 px-3 py-2">
+              <div key={player.key} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2">
                 <span className="flex-1 min-w-0 truncate text-sm">
                   {player.display_name}
                   {foreign && <span className="text-xs text-muted-foreground ml-1">(otro equipo)</span>}
@@ -471,7 +488,13 @@ export function ReportForm({
         <p className="text-sm text-muted-foreground mt-1">
           Cargá lo que te acuerdes, el resto lo completan los demás.
         </p>
-        <ol className="flex items-center gap-2 mt-3 text-xs">
+        {isLocked && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+            <Lock className="h-3 w-3" />
+            El resultado ya está cerrado por el admin; tu reporte queda registrado igual.
+          </p>
+        )}
+        <ol className="flex flex-wrap items-center gap-2 mt-3 text-xs">
           {STEPS.map((label, i) => (
             <li key={label} className="flex items-center gap-2">
               <button
@@ -493,9 +516,9 @@ export function ReportForm({
         {step === 0 && (
           <div className="space-y-4">
             {scoreKnown ? (
-              <div className="flex items-center justify-center gap-8">
+              <div className="flex items-center justify-center gap-3 sm:gap-8">
                 {renderStepper('Oscuro', darkScore, setDarkScore, darkTeam.color_hex)}
-                <span className="text-2xl text-muted-foreground font-light mt-5">—</span>
+                <span className="text-2xl text-muted-foreground font-light mt-5 hidden sm:inline">—</span>
                 {renderStepper('Claro', lightScore, setLightScore, lightTeam.color_hex)}
               </div>
             ) : (

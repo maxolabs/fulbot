@@ -29,18 +29,30 @@ async function tickIfStale(): Promise<void> {
   inFlight = true
   try {
     const supabase = createAdminClient()
-    // Cheap cross-instance guard: if another driver (ticker, cron, another
-    // instance) claimed a job in the last minute, skip this pass.
-    const { data: latest } = await supabase
-      .from('scheduled_jobs')
-      .select('locked_at')
-      .not('locked_at', 'is', null)
-      .order('locked_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const lastLocked = latest?.locked_at ? new Date(latest.locked_at).getTime() : 0
-    if (Date.now() - lastLocked < MIN_INTERVAL_MS) {
+    // Cheap cross-instance guard: claim_due_jobs stamps scheduler_state.last_tick_at
+    // on every call (even with nothing due), so if any driver (ticker, cron,
+    // another instance) ticked in the last minute, skip this pass. If the row or
+    // table can't be read, fall through and tick anyway.
+    let lastTick = 0
+    try {
+      const { data: state } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (cols: string) => {
+            eq: (col: string, v: number) => {
+              maybeSingle: () => Promise<{ data: { last_tick_at: string | null } | null }>
+            }
+          }
+        }
+      })
+        .from('scheduler_state')
+        .select('last_tick_at')
+        .eq('id', 1)
+        .maybeSingle()
+      lastTick = state?.last_tick_at ? new Date(state.last_tick_at).getTime() : 0
+    } catch {
+      lastTick = 0
+    }
+    if (Date.now() - lastTick < MIN_INTERVAL_MS) {
       lastTickAt = Date.now()
       return
     }

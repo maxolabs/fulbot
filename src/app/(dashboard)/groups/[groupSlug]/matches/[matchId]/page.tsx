@@ -201,22 +201,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
       .filter((id): id is string => !!id)
   ))
 
-  const badgesByPlayer: Record<string, string[]> = {}
+  // The map itself is built further down, once the blind rule (showConsensus)
+  // is known: badges earned in THIS match (e.g. mvp) would leak the result.
+  let badgeRows: { player_id: string; badge_type: string; earned_at: string; match_id: string | null }[] = []
   if (listedPlayerIds.length > 0) {
-    const { data: badgeRows } = await supabase
+    const { data } = await supabase
       .from('player_badges')
-      .select('player_id, badge_type, earned_at')
+      .select('player_id, badge_type, earned_at, match_id')
       .in('player_id', listedPlayerIds)
       .order('earned_at', { ascending: false }) as {
-        data: { player_id: string; badge_type: string; earned_at: string }[] | null
+        data: { player_id: string; badge_type: string; earned_at: string; match_id: string | null }[] | null
       }
-
-    for (const row of badgeRows || []) {
-      if (!badgesByPlayer[row.player_id]) badgesByPlayer[row.player_id] = []
-      if (badgesByPlayer[row.player_id].length < 3) {
-        badgesByPlayer[row.player_id].push(row.badge_type)
-      }
-    }
+    badgeRows = data || []
   }
 
   // Scores are visible to admins and captains only (RLS on player_rating_summary
@@ -413,7 +409,23 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   // Blind rule: a player who can still report sees nothing about the consensus
   // until their own report exists, so the first report never anchors the rest.
-  const showConsensus = match.status === 'finished' && (ownReport !== null || !viewerCanReport)
+  // A locked result is final and visible to everyone (a late report can't be
+  // anchored into changing it), as is anything after the window closed.
+  const resultLocked = match.result_status === 'locked'
+  const showConsensus =
+    match.status === 'finished' && (ownReport !== null || !viewerCanReport || resultLocked)
+  // Admin/captain tools follow the same rule: an admin who played reports
+  // first like everyone else; one who did not play sees them right away.
+  const showAdminTools = isAdminOrCaptain && showConsensus
+
+  const badgesByPlayer: Record<string, string[]> = {}
+  for (const row of badgeRows) {
+    if (!showConsensus && row.match_id === matchId) continue
+    if (!badgesByPlayer[row.player_id]) badgesByPlayer[row.player_id] = []
+    if (badgesByPlayer[row.player_id].length < 3) {
+      badgesByPlayer[row.player_id].push(row.badge_type)
+    }
+  }
 
   const scoredReports = reports.filter(r => r.dark_score !== null && r.light_score !== null)
   const agreement =
@@ -448,6 +460,17 @@ export default async function MatchDetailPage({ params }: PageProps) {
     event_type: e.event_type,
     player_name: e.player_profiles?.display_name || e.guest_players?.display_name || null,
   }))
+
+  // Whether teams exist (only fetched above for finished matches): the admin
+  // actions card explains that a match without teams can't be finished (§5.1).
+  let hasTeams = matchTeams.length > 0
+  if (!hasTeams && isAdminOrCaptain && match.status !== 'finished') {
+    const { count } = await supabase
+      .from('teams')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', matchId)
+    hasTeams = (count ?? 0) > 0
+  }
 
   // Result consensus/lock columns (00018). `select('*')` already returns them; the
   // narrow cast above predates them, so read them through a local cast here.
@@ -618,7 +641,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           )}
 
           {/* Player report form (blind until the viewer has reported) */}
-          {viewerCanReport && reportTeams.length > 0 && (
+          {match.status === 'finished' && viewerPlayed && reportTeams.length > 0 && (
             <ReportForm
               matchId={match.id}
               teams={reportTeams}
@@ -643,7 +666,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           )}
 
           {/* Match Results Editor - shown to admins when match is finished */}
-          {match.status === 'finished' && isAdminOrCaptain && teamsForResults.length > 0 && (
+          {match.status === 'finished' && showAdminTools && teamsForResults.length > 0 && (
             <MatchResults
               matchId={match.id}
               teams={teamsForResults}
@@ -664,7 +687,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           )}
 
           {/* Player reports (who said what) - admins/captains only */}
-          {match.status === 'finished' && isAdminOrCaptain && teamsForResults.length > 0 && (
+          {match.status === 'finished' && showAdminTools && teamsForResults.length > 0 && (
             <MatchReportsTable
               matchId={match.id}
               resultStatus={resultMeta.result_status ?? 'pending'}
@@ -692,6 +715,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         <div className="space-y-6">
           {isAdminOrCaptain && (
             <MatchAdminActions
+              hasTeams={hasTeams}
               matchId={match.id}
               groupSlug={groupSlug}
               currentStatus={match.status}

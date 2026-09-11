@@ -13,6 +13,7 @@ import {
   AlarmClock,
   AlertCircle,
   Star,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   results_request: ClipboardList,
   results_reminder: AlarmClock,
   results_needs_review: AlertCircle,
+  results_changed: RefreshCw,
 }
 
 // Types whose natural landing spot is the report form on the match page
@@ -48,11 +50,22 @@ const REPORT_ANCHOR_TYPES = new Set<NotificationRow['type']>(['results_request',
 // results_reminder is one group-wide row per match carrying the ids of the
 // players who still haven't reported; everyone else already did their part
 // and shouldn't see it. Without a player id (no profile yet) hide it too.
+//
+// results_request is group-wide too; since the payload carries player_ids (the
+// confirmed players) only they see it. Rows without the field predate it and
+// stay visible to everyone.
 function isVisibleTo(item: NotificationItem, currentPlayerId: string | null): boolean {
-  if (item.type !== 'results_reminder') return true
-  const pending = (item.payload as { pending_player_ids?: unknown }).pending_player_ids
-  if (!Array.isArray(pending)) return false
-  return currentPlayerId !== null && pending.includes(currentPlayerId)
+  if (item.type === 'results_reminder') {
+    const pending = (item.payload as { pending_player_ids?: unknown }).pending_player_ids
+    if (!Array.isArray(pending)) return false
+    return currentPlayerId !== null && pending.includes(currentPlayerId)
+  }
+  if (item.type === 'results_request') {
+    const players = (item.payload as { player_ids?: unknown }).player_ids
+    if (!Array.isArray(players)) return true
+    return currentPlayerId !== null && players.includes(currentPlayerId)
+  }
+  return true
 }
 
 // Date/month via Intl's default formatting is fine here (no AM/PM
@@ -71,7 +84,8 @@ function safeRenderText(item: NotificationItem): string {
   try {
     return renderNotificationText(
       { type: item.type, payload: item.payload } as unknown as NotificationEvent,
-      item.groupTimezone
+      item.groupTimezone,
+      { channel: 'inapp' }
     )
   } catch {
     return ''

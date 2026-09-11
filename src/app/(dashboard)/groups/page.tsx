@@ -138,22 +138,37 @@ export default async function GroupsPage() {
 
   if (groups.length > 0) {
     const groupIds = groups.map((g) => g.id)
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const sevenDaysAgoIso = sevenDaysAgo.toISOString()
 
-    const { data: finishedMatches } = await supabase
+    // The reporting window is a per-group setting (results_window_days, 00018).
+    const { data: windowRows } = await supabase
+      .from('notification_settings')
+      .select('group_id, results_window_days')
+      .in('group_id', groupIds) as { data: { group_id: string; results_window_days: number | null }[] | null }
+    const windowDaysByGroup = new Map<string, number>()
+    for (const row of windowRows || []) windowDaysByGroup.set(row.group_id, row.results_window_days ?? 7)
+    const windowDaysFor = (groupId: string) => windowDaysByGroup.get(groupId) ?? 7
+    const maxWindowDays = Math.max(7, ...groupIds.map(windowDaysFor))
+
+    const now = new Date()
+    const earliest = new Date(now)
+    earliest.setDate(earliest.getDate() - maxWindowDays)
+
+    const { data: finishedRows } = await supabase
       .from('matches')
       .select('id, group_id, date_time, result_status')
       .in('group_id', groupIds)
       .eq('status', 'finished')
       .neq('result_status', 'locked')
-      .gte('date_time', sevenDaysAgoIso)
+      .gte('date_time', earliest.toISOString())
       .order('date_time', { ascending: false }) as {
         data: { id: string; group_id: string; date_time: string; result_status: string }[] | null
       }
 
-    if (finishedMatches && finishedMatches.length > 0) {
+    const finishedMatches = (finishedRows || []).filter(
+      (m) => now.getTime() - new Date(m.date_time).getTime() < windowDaysFor(m.group_id) * 24 * 60 * 60 * 1000
+    )
+
+    if (finishedMatches.length > 0) {
       const matchIds = finishedMatches.map((m) => m.id)
 
       const { data: mySignups } = await supabase

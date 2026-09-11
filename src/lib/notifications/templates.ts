@@ -32,10 +32,18 @@ function joinNames(names: string[]): string {
   return names.join(', ')
 }
 
+export interface RenderOptions {
+  // 'whatsapp' (default) includes the report link in the text; 'inapp' leaves
+  // it out because the notification card itself links to the match page.
+  channel?: 'whatsapp' | 'inapp'
+}
+
 export function renderNotificationText(
   event: NotificationEvent,
-  timeZone: string = DEFAULT_TIMEZONE
+  timeZone: string = DEFAULT_TIMEZONE,
+  options: RenderOptions = {}
 ): string {
+  const withLink = options.channel !== 'inapp'
   switch (event.type) {
     case 'match_created': {
       const { date, time } = formatDateTime(event.payload.date_time, timeZone)
@@ -84,18 +92,20 @@ export function renderNotificationText(
     }
     case 'results_request': {
       const { date } = formatDateTime(event.payload.date_time, timeZone)
+      const link = withLink ? `: ${resolveReportUrl(event.payload.report_url)}` : '.'
       return (
         `¿Cómo salió el partido del ${date} (${event.payload.group_name})? ` +
-        `Cargá el resultado, los goles y el MVP: ${resolveReportUrl(event.payload.report_url)}`
+        `Cargá el resultado, los goles y el MVP${link}`
       )
     }
     case 'results_reminder': {
       const { date } = formatDateTime(event.payload.date_time, timeZone)
       const names = event.payload.pending_player_names ?? []
       const who = names.length > 0 ? ` Faltan: ${joinNames(names)}.` : ''
+      const link = withLink ? `: ${resolveReportUrl(event.payload.report_url)}` : '.'
       return (
         `Todavía falta cerrar el resultado del ${date} (${event.payload.group_name}).${who} ` +
-        `Cargá lo que te acuerdes: ${resolveReportUrl(event.payload.report_url)}`
+        `Cargá lo que te acuerdes${link}`
       )
     }
     case 'results_needs_review': {
@@ -107,6 +117,14 @@ export function renderNotificationText(
     }
     case 'rate_new_member':
       return `¡${event.payload.player_name} se sumó al grupo! Si ya jugaste con esa persona, dejá tu calificación para que los equipos salgan parejos.`
+    case 'results_changed': {
+      const { date } = formatDateTime(event.payload.date_time, timeZone)
+      const mvp = event.payload.mvp_name ? ` MVP: ${event.payload.mvp_name}.` : ''
+      return (
+        `El resultado del ${date} (${event.payload.group_name}) cambió de ${event.payload.previous} ` +
+        `a ${event.payload.current} después de ser publicado.${mvp} Revisalo y cerralo si corresponde.`
+      )
+    }
     default: {
       const _exhaustive: never = event
       return _exhaustive
