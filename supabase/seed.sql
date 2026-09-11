@@ -6,6 +6,13 @@
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
 -- Every account's password is: password123
 \set ON_ERROR_STOP on
+\pset format unaligned
+\pset tuples_only on
+-- Dates are relative to today: the "next Monday" anchors the open match, the five
+-- finished matches are the Mondays before it.
+SELECT (current_date + (CASE WHEN (8 - extract(dow FROM current_date)::int) % 7 = 0 THEN 7 ELSE (8 - extract(dow FROM current_date)::int) % 7 END))::text AS next_monday \gset
+\pset tuples_only off
+\pset format aligned
 
 BEGIN;
 
@@ -162,7 +169,8 @@ DO $$
 DECLARE
     v_group UUID := '11111111-1111-4111-8111-111111111111';
     v_tz TEXT := 'America/Argentina/Buenos_Aires';
-    v_dates DATE[] := ARRAY['2026-08-03','2026-08-10','2026-08-17','2026-08-24','2026-08-31'];
+    v_next_monday DATE := current_date + (CASE WHEN (8 - extract(dow FROM current_date)::int) % 7 = 0 THEN 7 ELSE (8 - extract(dow FROM current_date)::int) % 7 END);
+    v_dates DATE[];
     v_k INT;
     v_match UUID;
     v_dark UUID;
@@ -179,6 +187,7 @@ DECLARE
     v_voter UUID;
     v_cand UUID;
 BEGIN
+    v_dates := ARRAY[v_next_monday - 35, v_next_monday - 28, v_next_monday - 21, v_next_monday - 14, v_next_monday - 7];
     FOR v_k IN 1..array_length(v_dates, 1) LOOP
         v_when := (v_dates[v_k]::text || ' 21:00')::timestamp AT TIME ZONE v_tz;
 
@@ -297,11 +306,11 @@ END $$;
 -- ---------------------------------------------------------------- upcoming matches
 BEGIN;
 
--- Next Monday: full, 14 confirmed (12 members + two guests) and two on the waitlist,
+-- Next Monday (relative to today): full, 14 confirmed (12 members + two guests) and two on the waitlist,
 -- ready for team generation and waitlist promotion.
 INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, recurring_pattern_id, notes)
 VALUES ('66666666-6666-4666-8666-666666666661', '11111111-1111-4111-8111-111111111111',
-        ('2026-09-07 21:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
+        ((:'next_monday' || ' 21:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'Club Ferro, cancha 3', 'full', 14, '33333333-3333-4333-8333-333333333333',
         'Traer pechera. Se paga en la cancha.');
 
@@ -331,7 +340,7 @@ VALUES ('66666666-6666-4666-8666-666666666661', 'avoid_pair',
 -- Wednesday friendly: full, with a waitlist of three, to test promotion on cancel/removal.
 INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, notes)
 VALUES ('66666666-6666-4666-8666-666666666662', '11111111-1111-4111-8111-111111111111',
-        ('2026-09-09 20:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
+        (((:'next_monday'::date + 2)::text || ' 20:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'Club Ferro, cancha 1', 'full', 10, 'Amistoso extra, 5 vs 5');
 INSERT INTO public.match_signups (match_id, player_id, status, signup_time, waitlist_position)
 SELECT '66666666-6666-4666-8666-666666666662', pp.id,
@@ -347,13 +356,13 @@ FROM (
 -- Draft two Mondays ahead.
 INSERT INTO public.matches (group_id, date_time, location, status, max_players, notes)
 VALUES ('11111111-1111-4111-8111-111111111111',
-        ('2026-09-14 21:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
+        (((:'next_monday'::date + 7)::text || ' 21:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'Club Ferro, cancha 3', 'draft', 14, 'Todavía no confirmamos la cancha');
 
 -- Jueves group: an open match this week.
 INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, recurring_pattern_id)
 VALUES ('66666666-6666-4666-8666-666666666663', '22222222-2222-4222-8222-222222222222',
-        ('2026-09-10 20:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
+        (((:'next_monday'::date + 3)::text || ' 20:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'Complejo La Bombonerita', 'signup_open', 10, '44444444-4444-4444-8444-444444444444');
 INSERT INTO public.match_signups (match_id, player_id, status, signup_time)
 SELECT '66666666-6666-4666-8666-666666666663', pp.id, 'confirmed', now() - interval '5 hours'
@@ -365,7 +374,7 @@ WHERE gm.group_id = '22222222-2222-4222-8222-222222222222' AND pp.nickname IN ('
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 SELECT emit_notification('11111111-1111-4111-8111-111111111111', '66666666-6666-4666-8666-666666666661', 'match_created',
     jsonb_build_object('match_id', '66666666-6666-4666-8666-666666666661', 'group_name', 'Fútbol lunes',
-        'date_time', ('2026-09-07 21:00'::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
+        'date_time', ((:'next_monday' || ' 21:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'location', 'Club Ferro, cancha 3', 'max_players', 14,
         'signup_url', 'http://localhost:3000/m/66666666-6666-4666-8666-666666666661'));
 SELECT emit_notification('11111111-1111-4111-8111-111111111111',
