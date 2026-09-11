@@ -16,7 +16,6 @@ export interface PlayerInput {
   footedness: 'left' | 'right' | 'both'
   goalkeeperWillingness: number // 0-3
   fitnessStatus: 'ok' | 'limited' | 'injured'
-  reliabilityScore: number // 0-1 scale
   matchesPlayed: number
   goals: number
   assists: number
@@ -24,7 +23,6 @@ export interface PlayerInput {
 }
 
 // Sensible defaults for a guest player we don't have much history on.
-// reliabilityScore is on the same 0-1 scale as player_profiles.reliability_score.
 export function guestPlayerDefaults(guest: {
   id: string
   displayName: string
@@ -47,7 +45,6 @@ export function guestPlayerDefaults(guest: {
     footedness: 'right',
     goalkeeperWillingness: 1,
     fitnessStatus: 'ok',
-    reliabilityScore: 0.8,
     matchesPlayed: 0,
     goals: 0,
     assists: 0,
@@ -157,7 +154,7 @@ function buildPrompt(
     return `- ${p.displayName}${p.nickname ? ` (${p.nickname})` : ''} [ID: ${p.id}]
   Rating: ${p.overallRating.toFixed(1)}/5 | Skills (1-5): ${skills} | Traits: ${traits}
   Positions: ${positions} | ${foot}
-  GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus} | Reliability: ${(p.reliabilityScore * 100).toFixed(0)}%
+  GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus}
   Stats: ${p.matchesPlayed} matches, ${p.goals} goals, ${p.assists} assists
   ${p.isGuest ? '(Guest player - less known, use average defaults)' : ''}`
   }).join('\n')

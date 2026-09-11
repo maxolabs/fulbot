@@ -85,7 +85,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         footedness: 'left' | 'right' | 'both'
         goalkeeper_willingness: number
         fitness_status: 'ok' | 'limited' | 'injured'
-        reliability_score: number
         matches_played: number
         goals: number
         assists: number
@@ -113,7 +112,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           footedness,
           goalkeeper_willingness,
           fitness_status,
-          reliability_score,
           matches_played,
           goals,
           assists
@@ -175,7 +173,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
             footedness: pp.footedness,
             goalkeeperWillingness: pp.goalkeeper_willingness,
             fitnessStatus: pp.fitness_status,
-            reliabilityScore: pp.reliability_score,
             matchesPlayed: pp.matches_played,
             goals: pp.goals,
             assists: pp.assists,

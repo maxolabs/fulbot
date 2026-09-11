@@ -79,7 +79,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
       nickname: string | null
       main_position: string
       preferred_positions: string[]
-      reliability_score: number
       matches_played: number
       goals: number
       assists: number
@@ -101,7 +100,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         nickname,
         main_position,
         preferred_positions,
-        reliability_score,
         matches_played,
         goals,
         assists,
@@ -124,7 +122,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         nickname: string | null
         main_position: string
         preferred_positions: string[]
-        reliability_score: number
         matches_played: number
         goals: number
         assists: number

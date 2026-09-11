@@ -8,7 +8,6 @@ import {
   Target,
   Footprints,
   Shield,
-  TrendingUp,
   Award,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
@@ -85,7 +84,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     main_position: string
     footedness: string
     goalkeeper_willingness: number
-    reliability_score: number
     fitness_status: string
     matches_played: number
     goals: number
@@ -302,13 +300,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
               Vallas invictas
             </span>
             <span className="font-medium">{player.clean_sheets}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Confiabilidad
-            </span>
-            <span className="font-medium">{(player.reliability_score * 100).toFixed(0)}%</span>
           </div>
           {avgRating !== null && (
             <div className="flex justify-between text-sm">

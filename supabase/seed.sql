@@ -1,7 +1,7 @@
 -- fulbot demo seed (local development only).
 -- Rebuilds a realistic dataset: 20 users, two groups, five finished Monday matches
 -- with results/votes/badges, an open match, a full match with a waitlist, a draft,
--- rules, guests and notifications. Run with psql as postgres against a local stack
+-- rules, guests, notifications and member-score events (scoring enabled for Lunes). Run with psql as postgres against a local stack
 -- AFTER all migrations are applied:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/seed.sql
 -- Every account's password is: password123
@@ -18,6 +18,7 @@ BEGIN;
 
 -- ---------------------------------------------------------------- clean slate
 DELETE FROM public.scheduled_jobs;
+DELETE FROM public.member_events;
 DELETE FROM public.match_report_stats;
 DELETE FROM public.match_reports;
 DELETE FROM public.notification_reads;
@@ -122,6 +123,14 @@ VALUES
 
 INSERT INTO public.notification_settings (group_id) VALUES
     ('11111111-1111-4111-8111-111111111111'), ('22222222-2222-4222-8222-222222222222');
+
+-- Member scoring (00021): on for Lunes with the priority window, so the open matches
+-- below get a priority_window_close job and the signup box has something to explain.
+UPDATE public.groups
+SET settings = settings || jsonb_build_object('member_scoring', jsonb_build_object(
+        'enabled', true,
+        'priority', jsonb_build_object('mode', 'window', 'threshold', 3.0, 'window_hours', 24)))
+WHERE id = '11111111-1111-4111-8111-111111111111';
 
 -- Lunes: everyone except Facu, Pablo and Luis. Maxo admin, Juan captain.
 INSERT INTO public.group_memberships (group_id, player_id, role, joined_at)
@@ -268,7 +277,9 @@ BEGIN
         ) pp
         WHERE rn <= 14;
 
-        -- Two late cancellations and one no-show across the history, for reliability.
+        -- One late cancellation and one no-show across the history, for the member score
+        -- (the no-show becomes a no_show event through recompute_player_stats below; the
+        -- cancel is inserted straight into match_signups, so its event is seeded after the loop).
         IF v_k = 2 THEN
             INSERT INTO public.match_signups (match_id, player_id, status, signup_time, cancel_time)
             SELECT v_match, id, 'cancelled', v_when - interval '2 days', v_when - interval '3 hours'
@@ -276,8 +287,11 @@ BEGIN
             ON CONFLICT ON CONSTRAINT unique_player_signup DO UPDATE SET status = 'cancelled', cancel_time = EXCLUDED.cancel_time;
         END IF;
         IF v_k = 4 THEN
-            UPDATE public.match_signups SET status = 'did_not_show'
-            WHERE match_id = v_match AND player_id = (SELECT id FROM public.player_profiles WHERE nickname = 'Nacho');
+            -- Upsert so the no-show exists whether or not the shuffle picked Nacho.
+            INSERT INTO public.match_signups (match_id, player_id, status, signup_time)
+            SELECT v_match, id, 'did_not_show', v_when - interval '2 days'
+            FROM public.player_profiles WHERE nickname = 'Nacho'
+            ON CONFLICT ON CONSTRAINT unique_player_signup DO UPDATE SET status = 'did_not_show';
         END IF;
 
         INSERT INTO public.teams (match_id, name, color_hex) VALUES (v_match, 'dark', '#1a1a1a') RETURNING id INTO v_dark;
@@ -370,16 +384,60 @@ BEGIN
     PERFORM recompute_player_stats(pp.id) FROM public.player_profiles pp;
 END $$;
 
+-- ---------------------------------------------------------------- member events (00021)
+-- Attendance and participation (rated_teammates, voted_mvp) were emitted above by
+-- recompute_player_stats and the match_ratings / match_mvp_votes triggers. Add the
+-- inputs that only an RPC or an admin would have produced: Tincho's late cancel on the
+-- 2nd match, two late arrivals and one wrong jersey flagged by Maxo (admin).
+DO $$
+DECLARE
+    v_group UUID := '11111111-1111-4111-8111-111111111111';
+    v_maxo UUID := (SELECT pp.id FROM public.player_profiles pp JOIN public.users u ON u.id = pp.user_id WHERE u.email = 'maxo@test.local');
+    v_matches UUID[];
+    v_player UUID;
+BEGIN
+    SELECT array_agg(id ORDER BY date_time) INTO v_matches
+    FROM public.matches WHERE group_id = v_group AND status = 'finished';
+
+    -- Late cancel (3 hours before kickoff, inside the 6-hour notice window).
+    SELECT id INTO v_player FROM public.player_profiles WHERE nickname = 'Tincho';
+    PERFORM insert_member_event(v_group, v_player, v_matches[2], NULL, 'late_cancel', 'system');
+    PERFORM recompute_member_score(v_group, v_player);
+
+    -- Conduct flags on confirmed players: two late arrivals, one wrong jersey.
+    SELECT ms.player_id INTO v_player FROM public.match_signups ms JOIN public.player_profiles pp ON pp.id = ms.player_id
+    WHERE ms.match_id = v_matches[3] AND ms.status = 'confirmed' AND pp.nickname NOT IN ('Maxo', 'Nacho', 'Tincho')
+    ORDER BY pp.nickname LIMIT 1;
+    PERFORM insert_member_event(v_group, v_player, v_matches[3], NULL, 'arrived_late', 'admin', v_maxo);
+    PERFORM recompute_member_score(v_group, v_player);
+
+    SELECT ms.player_id INTO v_player FROM public.match_signups ms JOIN public.player_profiles pp ON pp.id = ms.player_id
+    WHERE ms.match_id = v_matches[5] AND ms.status = 'confirmed' AND pp.nickname NOT IN ('Maxo', 'Nacho', 'Tincho')
+    ORDER BY pp.nickname DESC LIMIT 1;
+    PERFORM insert_member_event(v_group, v_player, v_matches[5], NULL, 'arrived_late', 'admin', v_maxo);
+    PERFORM recompute_member_score(v_group, v_player);
+
+    SELECT ms.player_id INTO v_player FROM public.match_signups ms JOIN public.player_profiles pp ON pp.id = ms.player_id
+    WHERE ms.match_id = v_matches[4] AND ms.status = 'confirmed' AND pp.nickname NOT IN ('Maxo', 'Nacho', 'Tincho')
+    ORDER BY pp.nickname OFFSET 3 LIMIT 1;
+    PERFORM insert_member_event(v_group, v_player, v_matches[4], NULL, 'wrong_jersey', 'admin', v_maxo);
+    PERFORM recompute_member_score(v_group, v_player);
+
+    PERFORM recompute_group_member_scores(g.id) FROM public.groups g;
+END $$;
+
 -- ---------------------------------------------------------------- upcoming matches
 BEGIN;
 
 -- Next Monday (relative to today): full, 14 confirmed (12 members + two guests) and two on the waitlist,
 -- ready for team generation and waitlist promotion.
-INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, recurring_pattern_id, notes)
+-- signup_opened_at is 20 hours ago: the Lunes priority window (24 h) is still open, so a
+-- below-threshold member signing up lands on the waitlist with reason priority_window.
+INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, recurring_pattern_id, notes, signup_opened_at)
 VALUES ('66666666-6666-4666-8666-666666666661', '11111111-1111-4111-8111-111111111111',
         ((:'next_monday' || ' 21:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
         'Club Ferro, cancha 3', 'full', 14, '33333333-3333-4333-8333-333333333333',
-        'Traer pechera. Se paga en la cancha.');
+        'Traer pechera. Se paga en la cancha.', now() - interval '20 hours');
 
 INSERT INTO public.match_signups (match_id, player_id, status, signup_time, waitlist_position)
 SELECT '66666666-6666-4666-8666-666666666661', pp.id,
@@ -405,10 +463,10 @@ VALUES ('66666666-6666-4666-8666-666666666661', 'avoid_pair',
         (SELECT id FROM public.users WHERE email='maxo@test.local'));
 
 -- Wednesday friendly: full, with a waitlist of three, to test promotion on cancel/removal.
-INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, notes)
+INSERT INTO public.matches (id, group_id, date_time, location, status, max_players, notes, signup_opened_at)
 VALUES ('66666666-6666-4666-8666-666666666662', '11111111-1111-4111-8111-111111111111',
         (((:'next_monday'::date + 2)::text || ' 20:00')::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'),
-        'Club Ferro, cancha 1', 'full', 10, 'Amistoso extra, 5 vs 5');
+        'Club Ferro, cancha 1', 'full', 10, 'Amistoso extra, 5 vs 5', now() - interval '30 hours');
 INSERT INTO public.match_signups (match_id, player_id, status, signup_time, waitlist_position)
 SELECT '66666666-6666-4666-8666-666666666662', pp.id,
        CASE WHEN rn <= 10 THEN 'confirmed' ELSE 'waitlist' END::signup_status,
@@ -490,6 +548,9 @@ SELECT 'matches: ' || string_agg(status || '=' || c, ', ') FROM (SELECT status, 
 SELECT 'top scorers: ' || string_agg(nickname || ' ' || goals || 'g/' || assists || 'a', ', ' ORDER BY goals DESC) FROM (SELECT nickname, goals, assists FROM public.player_profiles ORDER BY goals DESC LIMIT 5) t;
 SELECT 'mvps: ' || string_agg(nickname || ' x' || mvp_count, ', ') FROM public.player_profiles WHERE mvp_count > 0;
 SELECT 'badges: ' || string_agg(badge_type || '=' || c, ', ') FROM (SELECT badge_type, count(*) c FROM public.player_badges GROUP BY badge_type) b;
-SELECT 'reliability < 1: ' || string_agg(nickname || ' ' || reliability_score, ', ') FROM public.player_profiles WHERE reliability_score < 1;
+SELECT 'member events: ' || string_agg(type || '=' || c, ', ') FROM (SELECT type, count(*) c FROM public.member_events GROUP BY type ORDER BY type) e;
+SELECT 'member scores (lunes): ' || string_agg(pp.nickname || ' ' || COALESCE(gm.member_score::text, 'nuevo'), ', ' ORDER BY gm.member_score DESC NULLS LAST, pp.nickname)
+FROM public.group_memberships gm JOIN public.player_profiles pp ON pp.id = gm.player_id
+WHERE gm.group_id = '11111111-1111-4111-8111-111111111111';
 SELECT 'notifications: ' || count(*) FROM public.notifications;
 SELECT 'jobs: ' || string_agg(job_type || '/' || status || '=' || c, ', ') FROM (SELECT job_type, status, count(*) c FROM public.scheduled_jobs GROUP BY 1, 2 ORDER BY 1, 2) j;

@@ -61,7 +61,6 @@ export default async function ProfilePage() {
       main_position: string
       footedness: 'left' | 'right' | 'both'
       goalkeeper_willingness: number
-      reliability_score: number
       fitness_status: 'ok' | 'limited' | 'injured'
       matches_played: number
       goals: number
@@ -136,28 +135,6 @@ export default async function ProfilePage() {
                   <span className="font-semibold">{profile.clean_sheets}</span>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Confiabilidad</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full"
-                    style={{ width: `${profile.reliability_score * 100}%` }}
-                  />
-                </div>
-                <span className="text-sm font-medium">
-                  {Math.round(profile.reliability_score * 100)}%
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Basado en asistencia y cancelaciones
-              </p>
             </CardContent>
           </Card>
         </div>
