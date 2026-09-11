@@ -1,9 +1,13 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
-import { Trophy, Target, Calendar, TrendingUp } from 'lucide-react'
+import { MemberScoreStars } from '@/components/member-score'
+import { Trophy, Target, Calendar, TrendingUp, ChevronRight } from 'lucide-react'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
+import type { MemberScoringSettings } from '@/types/database'
 import { ProfileForm } from './profile-form'
 
 const POSITION_LABELS: Record<string, string> = {
@@ -71,6 +75,43 @@ export default async function ProfilePage() {
 
   if (!profile) return notFound()
 
+  const { data: userLang } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const language: Language = userLang?.preferred_language ?? 'es'
+  const t = getT(language)
+
+  // Member score per group (docs/member-scoring.md §5.4): the viewer always sees
+  // their own score, so no visibility check here; only whether scoring is on.
+  type GroupScoreRow = {
+    member_score: number | null
+    groups: { id: string; name: string; slug: string } | null
+  }
+  const { data: scoreRows } = await supabase
+    .from('group_memberships')
+    .select('member_score, groups (id, name, slug)')
+    .eq('player_id', profile.id)
+    .eq('is_active', true) as { data: GroupScoreRow[] | null }
+
+  const groupScores = await Promise.all(
+    (scoreRows || [])
+      .filter((row): row is GroupScoreRow & { groups: NonNullable<GroupScoreRow['groups']> } => row.groups !== null)
+      .map(async (row) => {
+        const { data: settings } = await supabase
+          .rpc('member_scoring_settings', { p_group_id: row.groups.id }) as { data: MemberScoringSettings | null }
+        return {
+          id: row.groups.id,
+          name: row.groups.name,
+          slug: row.groups.slug,
+          enabled: !!settings?.enabled,
+          score: row.member_score === null ? null : Number(row.member_score),
+        }
+      })
+  )
+  groupScores.sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name))
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -134,6 +175,38 @@ export default async function ProfilePage() {
                   <span className="text-sm">Vallas invictas</span>
                   <span className="font-semibold">{profile.clean_sheets}</span>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Member score per group ("Compromiso") */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{t('memberScore.title')}</CardTitle>
+              <CardDescription>{t('memberScore.profileDescription')}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              {groupScores.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('memberScore.profileEmpty')}</p>
+              ) : (
+                groupScores.map((g) => (
+                  <Link
+                    key={g.id}
+                    href={`/groups/${g.slug}/players/${profile.id}`}
+                    className="flex items-center justify-between gap-3 -mx-2 px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    title={t('memberScore.viewDetail')}
+                  >
+                    <span className="text-sm flex-1 min-w-0 truncate">{g.name}</span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      {g.enabled ? (
+                        <MemberScoreStars score={g.score} language={language} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{t('memberScore.profileDisabled')}</span>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </span>
+                  </Link>
+                ))
               )}
             </CardContent>
           </Card>

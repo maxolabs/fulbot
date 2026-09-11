@@ -7,10 +7,15 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { SkillSummaryLine } from '@/components/player-skills'
+import { MemberScoreStars } from '@/components/member-score'
 import { summariesById, type RatingSummary } from '@/lib/ratings'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
+import type { MemberScoringSettings } from '@/types/database'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
+  searchParams: Promise<{ sort?: string }>
 }
 
 const POSITION_LABELS: Record<string, string> = {
@@ -29,8 +34,9 @@ const POSITION_LABELS: Record<string, string> = {
   CF: 'Centro Delantero',
 }
 
-export default async function GroupPlayersPage({ params }: PageProps) {
+export default async function GroupPlayersPage({ params, searchParams }: PageProps) {
   const { groupSlug } = await params
+  const { sort } = await searchParams
   const supabase = await createClient()
 
   // Get current user
@@ -69,10 +75,29 @@ export default async function GroupPlayersPage({ params }: PageProps) {
   const isAdmin = membership.role === 'admin'
   const isAdminOrCaptain = isAdmin || membership.role === 'captain'
 
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const language: Language = userData?.preferred_language ?? 'es'
+  const t = getT(language)
+
+  // Member score column (docs/member-scoring.md §5.4): everyone's score when the
+  // group chose 'group' visibility or the viewer is admin/captain; otherwise a
+  // plain member only sees their own row. Nothing at all while scoring is off.
+  const { data: scoringSettings } = await supabase
+    .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: MemberScoringSettings | null }
+  const scoringEnabled = !!scoringSettings?.enabled
+  const canSeeAllScores = scoringEnabled && (scoringSettings?.visibility === 'group' || isAdminOrCaptain)
+  const canSeeScoreOf = (playerId: string) => scoringEnabled && (canSeeAllScores || playerId === currentPlayer.id)
+  const sortByScore = canSeeAllScores && sort === 'score'
+
   // Get all members with full player profiles
   type MembershipWithProfile = {
     id: string
     role: string
+    member_score: number | null
     player_profiles: {
       id: string
       display_name: string
@@ -94,6 +119,7 @@ export default async function GroupPlayersPage({ params }: PageProps) {
     .select(`
       id,
       role,
+      member_score,
       player_profiles (
         id,
         display_name,
@@ -116,6 +142,7 @@ export default async function GroupPlayersPage({ params }: PageProps) {
     .filter(m => m.player_profiles !== null)
     .map(m => ({
       role: m.role as 'admin' | 'captain' | 'member',
+      memberScore: m.member_score === null ? null : Number(m.member_score),
       ...(m.player_profiles as {
         id: string
         display_name: string
@@ -132,6 +159,12 @@ export default async function GroupPlayersPage({ params }: PageProps) {
       })
     }))
     .sort((a, b) => {
+      // ?sort=score: member score (desc), newcomers (NULL) last, then the default order
+      if (sortByScore && a.memberScore !== b.memberScore) {
+        if (a.memberScore === null) return 1
+        if (b.memberScore === null) return -1
+        return b.memberScore - a.memberScore
+      }
       // Sort by: matches played (desc), then by name
       if (b.matches_played !== a.matches_played) {
         return b.matches_played - a.matches_played
@@ -165,6 +198,24 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Jugadores</h1>
           <p className="text-muted-foreground">{players.length} miembros en {group.name}</p>
+          {canSeeAllScores && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+              <span>{t('memberScore.sortBy')}:</span>
+              {sortByScore ? (
+                <>
+                  <Link href={`/groups/${groupSlug}/players`} className="hover:underline">{t('memberScore.sortByMatches')}</Link>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-medium text-foreground">{t('memberScore.sortByScore')}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-foreground">{t('memberScore.sortByMatches')}</span>
+                  <span aria-hidden="true">·</span>
+                  <Link href={`/groups/${groupSlug}/players?sort=score`} className="hover:underline">{t('memberScore.sortByScore')}</Link>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Link href={`/groups/${groupSlug}/rate`}>
@@ -239,6 +290,12 @@ export default async function GroupPlayersPage({ params }: PageProps) {
               {/* Scores (admins/captains) + physical notes */}
               <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
                 {isAdminOrCaptain && <SkillSummaryLine summary={summaries.get(player.id)} />}
+                {canSeeScoreOf(player.id) && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-xs text-muted-foreground">{t('memberScore.title')}</span>
+                    <MemberScoreStars score={player.memberScore} language={language} />
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>
                     {player.footedness === 'left'

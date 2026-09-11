@@ -16,11 +16,16 @@ export interface PlayerInput {
   footedness: 'left' | 'right' | 'both'
   goalkeeperWillingness: number // 0-3
   fitnessStatus: 'ok' | 'limited' | 'injured'
+  // Member score ("Compromiso", docs/member-scoring.md §5.3) for the match's
+  // group, 1-5. Newcomers (NULL score) and guests come in as MEMBER_SCORE_NEUTRAL.
+  memberScore: number
   matchesPlayed: number
   goals: number
   assists: number
   isGuest?: boolean
 }
+
+export const MEMBER_SCORE_NEUTRAL = 3.5
 
 // Sensible defaults for a guest player we don't have much history on.
 export function guestPlayerDefaults(guest: {
@@ -45,6 +50,7 @@ export function guestPlayerDefaults(guest: {
     footedness: 'right',
     goalkeeperWillingness: 1,
     fitnessStatus: 'ok',
+    memberScore: MEMBER_SCORE_NEUTRAL,
     matchesPlayed: 0,
     goals: 0,
     assists: 0,
@@ -154,7 +160,7 @@ function buildPrompt(
     return `- ${p.displayName}${p.nickname ? ` (${p.nickname})` : ''} [ID: ${p.id}]
   Rating: ${p.overallRating.toFixed(1)}/5 | Skills (1-5): ${skills} | Traits: ${traits}
   Positions: ${positions} | ${foot}
-  GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus}
+  GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus} | Compromiso (member commitment): ${p.memberScore.toFixed(1)}/5
   Stats: ${p.matchesPlayed} matches, ${p.goals} goals, ${p.assists} assists
   ${p.isGuest ? '(Guest player - less known, use average defaults)' : ''}`
   }).join('\n')
