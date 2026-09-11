@@ -272,3 +272,160 @@ something once a ticker exists.
 4. Delay is a per-match field set by the admin in the match form, defaulting from the group.
 5. Score, scorers, assists and MVP are all optional in the report; consensus complements
    partial reports (§4).
+
+## 11. Implementation contract (agents build against this; names are final)
+
+Local stack for verification: Supabase at `http://127.0.0.1:56521`, Postgres
+`postgresql://postgres:postgres@127.0.0.1:56522/postgres`, seed loaded
+(`supabase/seed.sql`; every account's password is `password123`; `maxo@test.local`
+is admin of `futbol-lunes`, `juan@test.local` its captain, `nico@test.local` admin
+of `futbol-jueves`). App env for the stack is in the scratchpad `stack/app.env`.
+
+### 11.1 Migrations (track S0)
+
+`supabase/migrations/00018_scheduler.sql`
+
+```sql
+-- matches
+matches.duration_minutes smallint not null default 60
+matches.results_request_delay_minutes smallint not null default 60
+matches.finished_at timestamptz null               -- set by trigger when status -> finished
+matches.result_status text not null default 'pending'
+  check (result_status in ('pending','provisional','consensus','locked'))
+matches.result_locked_by uuid null references player_profiles(id)
+matches.result_locked_at timestamptz null
+matches.result_posted_key text null                -- "dark-light|mvp_id" last posted to the group
+
+-- notification_settings (group defaults)
+default_duration_minutes int not null default 60
+default_results_request_delay_minutes int not null default 60
+results_reminder_hours int not null default 24     -- 0 = no reminder
+results_window_days int not null default 7
+
+-- job queue (RLS enabled, no client policies; service role + SECURITY DEFINER only)
+scheduled_jobs (
+  id uuid pk default gen_random_uuid(),
+  group_id uuid not null references groups(id) on delete cascade,
+  match_id uuid null references matches(id) on delete cascade,
+  job_type text not null check (job_type in
+    ('auto_finish','results_request','results_reminder','results_window_close')),
+  run_at timestamptz not null,
+  payload jsonb not null default '{}',
+  status text not null default 'pending'
+    check (status in ('pending','running','done','failed','cancelled')),
+  attempts int not null default 0,
+  last_error text null,
+  locked_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+)
+-- one pending job per (match, type)
+create unique index scheduled_jobs_pending_uniq on scheduled_jobs(match_id, job_type) where status = 'pending';
+create index scheduled_jobs_due on scheduled_jobs(run_at) where status in ('pending','running');
+```
+
+Functions (all `SECURITY DEFINER`, `REVOKE ALL ... FROM PUBLIC, anon`; grant as noted):
+
+| Function | Grant | Behaviour |
+|---|---|---|
+| `schedule_match_jobs(p_match_id uuid) returns void` | authenticated, service_role (internal; called by trigger) | Cancels this match's pending jobs, then: status in (`signup_open`,`signup_closed`,`full`,`teams_created`) -> `auto_finish` at `date_time + duration_minutes`; status `finished` -> `results_request` at `finished_at + results_request_delay_minutes` (skipped if `result_status = 'locked'`), `results_reminder` at request + `results_reminder_hours` (only if hours > 0), `results_window_close` at `date_time + results_window_days`; `cancelled` -> nothing. |
+| trigger `matches_schedule_jobs` AFTER INSERT OR UPDATE OF status, date_time, duration_minutes, results_request_delay_minutes ON matches | | Sets `finished_at = now()` when status becomes `finished` (BEFORE trigger), then calls `schedule_match_jobs`. |
+| `claim_due_jobs(p_limit int default 20) returns setof scheduled_jobs` | service_role only | `UPDATE ... SET status='running', locked_at=now(), attempts=attempts+1 WHERE id IN (SELECT id FROM scheduled_jobs WHERE (status='pending' AND run_at <= now()) OR (status='running' AND locked_at < now() - interval '10 minutes') ORDER BY run_at FOR UPDATE SKIP LOCKED LIMIT p_limit) RETURNING *`. |
+| `run_scheduled_job(p_job_id uuid) returns jsonb` | service_role only | Executes the handler for the row (below) and marks it `done`; on exception marks `failed` if `attempts >= 5`, else back to `pending` with `run_at = now() + attempts * interval '2 minutes'` and `last_error`. Returns `{job_type, match_id, ok, error}`. Never raises. |
+| `auto_finish_match(p_match_id uuid) returns boolean` | service_role only | If status = `teams_created` and `now() >= date_time + duration_minutes` -> status `finished`. Other statuses: returns false (job done, nothing to do). |
+| `finalize_match_results(p_match_id uuid)` | (existing grants) | **Rewritten as an idempotent recompute.** Does not touch `teams.score`. Calls `recompute_player_stats(pid)` for every player with a confirmed/did_not_show signup, a `match_events` row or `mvp_player_id` in this match, then `award_badges_for_match`, sets `results_finalized = true`. |
+| `recompute_player_stats(p_player_id uuid) returns void` | authenticated, service_role | Rebuilds `matches_played` (confirmed signups in `finished` matches), `goals`/`assists` (`match_events` in finished matches with `result_status in ('consensus','locked')`), `clean_sheets` (GK assignment in such matches where the other team scored 0), `mvp_count` (finished matches with `result_status in ('consensus','locked')` and `mvp_player_id = p`), reliability via existing `update_player_reliability`, rating via existing `update_player_rating`. |
+| `award_badges_for_match` | (existing) | Also **revokes** `hat_trick`/`playmaker`/`safe_hands` rows for this match whose condition no longer holds. Only awards when `result_status in ('consensus','locked')`. |
+
+Job handlers inside `run_scheduled_job`:
+
+- `auto_finish` -> `auto_finish_match`.
+- `results_request` -> if `result_status <> 'locked'`: `emit_notification(group, match, 'results_request', payload)` with payload `{match_id, group_name, date_time, report_url}` (`report_url = app_url || '/groups/' || slug || '/matches/' || id || '#reportar'`; `app_url` comes from the job payload written by the trigger from `current_setting('app.settings.app_url', true)`, falling back to `''` so the app layer can prefix it).
+- `results_reminder` -> if `result_status in ('pending','provisional')`: one group-wide `results_reminder` with payload `{match_id, group_name, date_time, report_url, pending_player_ids uuid[], pending_player_names text[]}` (confirmed players without a report). Skipped when nobody is pending.
+- `results_window_close` -> if `result_status = 'provisional'` and there is at least one report: set `consensus` (best effort) and `finalize_match_results`; if `pending`: emit `results_needs_review` **in-app only** (insert into `notifications` directly, one row per admin with `recipient_player_id`, no outbox) with payload `{match_id, group_name, date_time, reports_count}`.
+
+Backfill in 00018: `finished_at = date_time + duration` for existing finished matches; `result_status = 'locked'` where `results_finalized = true`; `schedule_match_jobs` for every non-cancelled match.
+
+`supabase/migrations/00019_match_reports.sql`
+
+```sql
+match_events.source text not null default 'admin' check (source in ('admin','consensus'))
+
+match_reports (
+  id uuid pk default gen_random_uuid(),
+  match_id uuid not null references matches(id) on delete cascade,
+  reporter_player_id uuid not null references player_profiles(id) on delete cascade,
+  dark_score smallint null check (dark_score between 0 and 99),
+  light_score smallint null check (light_score between 0 and 99),
+  dark_goals_complete boolean not null default false,
+  light_goals_complete boolean not null default false,
+  mvp_candidate_id uuid null references player_profiles(id) on delete set null,
+  submitted_after_lock boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (match_id, reporter_player_id)
+)
+match_report_stats (
+  id uuid pk default gen_random_uuid(),
+  report_id uuid not null references match_reports(id) on delete cascade,
+  team_id uuid not null references teams(id) on delete cascade,
+  player_id uuid null references player_profiles(id) on delete cascade,
+  guest_player_id uuid null references guest_players(id) on delete cascade,
+  goals smallint not null default 0 check (goals between 0 and 99),
+  assists smallint not null default 0 check (assists between 0 and 99),
+  check (goals > 0 or assists > 0),
+  check ((player_id is null) <> (guest_player_id is null))
+)
+create unique index match_report_stats_uniq on match_report_stats(report_id, team_id, coalesce(player_id, guest_player_id));
+```
+
+RLS: `match_reports` and `match_report_stats` SELECT for `is_group_member(match.group_id)`; no client INSERT/UPDATE/DELETE (writes go through RPCs). `match_mvp_votes`: add DELETE policy for own vote inside the window; INSERT window uses `results_window_days`. `match_ratings`: add UPDATE/DELETE for own rows inside the window.
+
+| Function | Grant | Behaviour |
+|---|---|---|
+| `result_weight(p_group_id uuid, p_player_id uuid) returns numeric` | authenticated, service_role | `groups.settings->'result_weights'->>role`, defaults admin 1.5, captain 1.25, member 1.0. |
+| `submit_match_report(p_match_id uuid, p_dark_score int, p_light_score int, p_dark_goals_complete boolean, p_light_goals_complete boolean, p_mvp_candidate_id uuid, p_stats jsonb) returns uuid` | authenticated | `p_stats` = `[{team_id, player_id|guest_player_id, goals, assists}]`. Checks: caller has a `confirmed` signup, match `finished`, `date_time > now() - results_window_days`, not a self MVP vote, report not empty (some score, or stats, or MVP), stats reference this match's teams. Upserts the report and replaces its stats; syncs `match_mvp_votes` (delete own, insert if candidate). If `result_status = 'locked'` -> store with `submitted_after_lock = true` and return without recomputing. Else calls `recompute_match_consensus`. Returns report id. Raises Spanish messages (`'No jugaste este partido'`, `'La ventana para reportar cerró'`, `'No podés votarte a vos mismo'`, `'El reporte está vacío'`). |
+| `delete_my_match_report(p_match_id uuid) returns void` | authenticated | Deletes own report + MVP vote, recomputes unless locked. |
+| `recompute_match_consensus(p_match_id uuid) returns void` | authenticated, service_role | §4 exactly. Ignores reports with `submitted_after_lock`, and reporters whose signup is no longer `confirmed`. Score pair by weighted plurality (ties: raw count, then highest single weight, then earliest). Scorers/assists: per (team, player-or-guest) weighted mode over the evidence set (reports mentioning them + reports with that team's `*_goals_complete`, counted as 0); tie -> higher count; support = weight agreeing. Reconcile per team against the consensus score: over -> drop least support; under -> unattributed goal events (`player_id` and `guest_player_id` null). Assists capped at team goals. Deletes `match_events where match_id = p and source = 'consensus'`, inserts the new ones with `source = 'consensus'`, sets `teams.score`, calls `recompute_match_mvp`, sets `result_status` (`pending` if no usable report; `consensus` when distinct reporters >= `least(3, ceil(confirmed_players / 3.0))` and winning pair weight >= 50% of total weight of reports with a score; else `provisional`). On `consensus`: `finalize_match_results`, and if `result_posted_key` differs from `dark-light|mvp` -> `emit_notification(..., 'results_posted', payload)` and store the key. No-op when locked. |
+| `recompute_match_mvp(p_match_id)` | (existing) | Weighted: `sum(result_weight)` per candidate; ties: raw votes, then earliest vote. **No longer touches `mvp_count`** (stats recompute owns it). Still maintains `mvp_player_id` and the `mvp` badge. Not applied while `result_status = 'locked'` (admin's `mvp_player_id` wins). |
+| `admin_set_match_result(p_match_id uuid, p_dark_score int, p_light_score int, p_events jsonb, p_mvp_player_id uuid) returns void` | authenticated (checks `is_group_admin_or_captain`) | Atomic replacement of the old client-side save. `p_events` = `[{team_id, player_id|guest_player_id|null, event_type 'goal'|'assist'|'own_goal', linked_index int|null}]`. Deletes all events of the match (both sources), inserts `p_events` with `source='admin'`, sets `teams.score` from `p_dark_score`/`p_light_score` (not from event count), sets `mvp_player_id`, `result_status='locked'`, `result_locked_by/at`, cancels pending `results_request`/`results_reminder` jobs, `finalize_match_results`, posts `results_posted` if the key changed. |
+| `admin_unlock_match_result(p_match_id uuid) returns void` | authenticated (admin/captain) | Clears lock fields, deletes admin-source events, clears `submitted_after_lock` on reports, `recompute_match_consensus`. |
+
+`results_posted` payload becomes `{match_id, dark_score, light_score, scorers: [{name, team, goals}], assisters: [{name, team, assists}], unattributed: {dark, light}, mvp_name, mvp_player_id, status: 'consensus'|'locked'}`.
+
+Backfill in 00019: nothing (existing finished matches are already `locked` from 00018).
+
+`src/types/database.ts`: add the new tables, columns and `Functions` entries. `npm run type-check` must pass.
+
+Seed: add to `supabase/seed.sql` one `futbol-lunes` match in status `teams_created` with two teams and 14 confirmed signups, `date_time = now() - interval '3 hours'`, so `auto_finish` is due immediately on the first tick.
+
+### 11.2 App: scheduler and notifications (track S1)
+
+- `POST /api/cron/tick` (also GET), guarded by `CRON_SECRET`: loop `claim_due_jobs` -> `run_scheduled_job` until no rows, then `drainOutbox()`. Returns `{claimed, done, failed, outbox}`.
+- `/api/cron/daily` calls the tick step first, keeping its existing steps.
+- `scripts/ticker.ts` + `npm run ticker`: loop every `TICKER_INTERVAL_MS` (default 60000) POSTing `${NEXT_PUBLIC_APP_URL}/api/cron/tick` with the secret; logs one line per tick; exits non-zero only on config errors. `Dockerfile.ticker` (node:20-alpine, `tsx scripts/ticker.ts`). README section "Ticker".
+- Opportunistic tick: in the dashboard layout server component, if `last tick > 60 s ago` (module-level timestamp, plus a cheap `select max(locked_at)` guard) fire the tick without awaiting (`@vercel/functions` `waitUntil` when available, else `void fetch(...)`). Must never delay a page render or throw.
+- `src/lib/notifications/types.ts` + `templates.ts`: add `results_request`, `results_reminder`, `results_needs_review`, and the extended `results_posted` payload. Spanish copy, one WhatsApp message each; `results_posted` renders "Oscuro 4 – Claro 1", scorers with counts, "2 goles sin autor" when applicable, "MVP: X".
+- `report_url` in payloads: prefix with `NEXT_PUBLIC_APP_URL` at render time when the stored value is relative.
+- Notification list: render the three new types; show `results_reminder` only to users in `pending_player_ids`; link to the match page `#reportar`.
+- Group settings `notification-settings.tsx`: fields for the four new `notification_settings` columns (duración por defecto, minutos hasta pedir el resultado, horas hasta el recordatorio con 0 = sin recordatorio, días de ventana).
+
+### 11.3 App: player report UX (track S2)
+
+- New `report-form.tsx` (client) on the match page under anchor `#reportar`, shown when status is `finished`, the viewer has a confirmed signup, and the window is open. Steps per §6: score (skippable), goals/assists chips per team with "estos fueron todos", MVP chips (self excluded). Submits via `submit_match_report`. Blind: the form never shows consensus data before the viewer's own report exists. After submitting: own report summary, "Editar" (reopens form pre-filled with own report), "Coincidís con N de M en el resultado", and the current consensus block.
+- New `result-consensus.tsx`: the result block for every member: score with status pill (`Provisional` / `Consenso` / `Cerrado`; hidden when `pending` and the viewer can't report), reporters count "3 de 14 reportaron", scorers/assisters, "2 goles sin autor", MVP. Replaces `match-score-display.tsx` usage.
+- `post-match-voting.tsx`: remove the MVP part (now in the report form); keep teammate ratings as an optional step below the report, with edit allowed inside the window.
+- Dashboard nudge on `/groups`: "Cargá el resultado" for the most recent finished match the user played and hasn't reported.
+
+### 11.4 App: admin tools and forms (track S3)
+
+- `match-results.tsx` editor: save through `admin_set_match_result` (single RPC, no client-side deletes, no client-side `emit_notification`), prefilled from the current consensus when unlocked, button copy "Guardar y cerrar resultado". Score fields are editable independently of the goal list (unattributed goals allowed). When locked: "Reabrir" -> `admin_unlock_match_result`.
+- New `match-reports-table.tsx` (admin/captain only): who reported what (score, scorers, assists, MVP), agreement with the consensus highlighted, reports `submitted_after_lock` flagged, timestamp. Data from `match_reports` + `match_report_stats` via the client (RLS allows select).
+- Match create/edit forms: `duration_minutes` and `results_request_delay_minutes` fields ("Duración", "Pedir el resultado X min después del final"), defaults from `notification_settings`. `admin_set_match_status` to `finished` keeps working as an early exit.
+- Group `settings-form.tsx`: weights editor writing `groups.settings.result_weights` (three numeric inputs, defaults shown).
+- Match page `page.tsx`: minimal wiring of S2/S3 components; keep edits localised (S2 and S3 both touch this file, so each adds its block in one place and does not reshuffle existing code).
+
+### 11.5 Verification per track
+
+- SQL: psql against the local stack; each RPC exercised as `maxo@test.local` (admin), `juan@test.local` (captain) and a member via `set role authenticated` + `request.jwt.claims`; scenarios for §4 (2-1 vs three 4-1; partial scorers complementing; over-attribution trimming; window; lock).
+- App: `npm run type-check`, `npm run lint`, `npm run build`; then `next dev -p 300x` against the stack and Playwright screenshots at 1366x768 of every touched screen, saved under the scratchpad and listed in the final report.
