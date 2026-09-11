@@ -433,7 +433,8 @@ BEGIN
                        s.player_id, s.guest_player_id, s.goals, s.assists
                 FROM public.match_report_stats s
                 JOIN usable_match_reports(p_match_id) u ON u.report_id = s.report_id
-                WHERE s.team_id = v_team.id
+                WHERE s.team_id = v_team.id AND s.goals > 0
+                -- assists-only rows are not evidence about goals ("no sé", not 0)
             ),
             pkeys AS (
                 SELECT DISTINCT pkey, player_id, guest_player_id FROM mentions
