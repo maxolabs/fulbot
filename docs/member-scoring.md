@@ -150,8 +150,9 @@ number is what policies use.
 less than a no-show, and an early cancel costs nothing. That gradient is the
 point: the behavior we want is "avisá temprano", not "nunca te bajes".
 
-`admin_adjustment` events are added as raw points after the mapping, clamped to
-[1,5], and always shown separately in the breakdown with their note.
+`admin_adjustment` events are added after the mapping as `points / 20` stars
+(so the ±20 cap per adjustment is ±1 star), clamped to [1,5], and always shown
+separately in the breakdown with their note.
 
 ### 3.1 Participación: the post-match civic duty
 
@@ -545,11 +546,12 @@ Schema exactly as §2, with these additions and precisions:
     recomputes.
   - `admin_recompute_member_scores(p_group_id UUID)`, admin only.
 - `signup_for_match` (00007, redefine) reads `member_scoring_settings`:
-  - if `signup_cooldown` is true: force `waitlist`, clear the flag, and set
-    `match_signups.notes` untouched; return the signup with a new OUT-style
-    column? No: keep the return type `public.match_signups` and add a column
+  - keep the return type `public.match_signups`; add a column
     `match_signups.waitlist_reason TEXT` with values `full | priority_window |
-    reserved | cooldown | NULL`, set on insert and cleared on promotion.
+    reserved | cooldown | NULL`, set whenever a signup lands on the waitlist
+    and cleared on promotion.
+  - if `signup_cooldown` is true: force `waitlist` with reason `cooldown` and
+    clear the flag.
   - `window` mode: while `now() < signup_opened_at + window_hours` and the
     caller's `member_score` is not NULL and `< threshold`, force `waitlist`
     with reason `priority_window`.
@@ -652,7 +654,7 @@ Schema exactly as §2, with these additions and precisions:
 - Notifications: add `member_score_dropped` and `member_score_recovered` to
   `src/lib/notifications/types.ts`, `templates.ts` and
   `notification-list.tsx` (in-app only; deep link to the player's own page).
-  Add `priority_window_close` nothing to render (it reuses `waitlist_promoted`).
+  `priority_window_close` needs nothing new to render: it reuses `waitlist_promoted`.
 - Match form (`matches/new`, `edit`): nothing new; `signup_opened_at` is set
   by the trigger.
 - Verify with screenshots: match page as a below-threshold member during a
