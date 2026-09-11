@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Minus, Save, Trash2, Goal } from 'lucide-react'
+import { Plus, Minus, Save, Trash2, Goal, Lock, Unlock, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
-import type { Json } from '@/types/database'
-import type { ResultsPostedPayload } from '@/lib/notifications/types'
+import type { AdminMatchEventInput, Json, MatchResultStatus } from '@/types/database'
 
 interface TeamPlayer {
   id: string
@@ -27,17 +26,13 @@ interface TeamData {
 }
 
 interface GoalEntry {
-  id?: string
   team_id: string
   scorer_id: string
-  scorer_is_guest: boolean
   assister_id: string | null
-  assister_is_guest: boolean
 }
 
 interface MatchResultsProps {
   matchId: string
-  groupId: string
   teams: TeamData[]
   existingEvents: {
     id: string
@@ -47,254 +42,273 @@ interface MatchResultsProps {
     event_type: string
     linked_event_id: string | null
   }[]
-  resultsFinalized: boolean
+  resultStatus: MatchResultStatus
+  lockedBy: string | null
+  lockedAt: string | null
+  mvpPlayerId: string | null
+  /** Registered confirmed players of the match (MVP candidates). */
+  mvpCandidates: { id: string; display_name: string }[]
 }
 
-export function MatchResults({ matchId, groupId, teams, existingEvents, resultsFinalized }: MatchResultsProps) {
+const STATUS_LABEL: Record<MatchResultStatus, string> = {
+  pending: 'Sin resultado todavía',
+  provisional: 'Consenso provisional',
+  consensus: 'Consenso alcanzado',
+  locked: 'Resultado cerrado',
+}
+
+function goalsFromEvents(events: MatchResultsProps['existingEvents']): GoalEntry[] {
+  const goalEvents = events.filter(e => e.event_type === 'goal')
+  const assistEvents = events.filter(e => e.event_type === 'assist')
+  return goalEvents.map(goal => {
+    const assist = assistEvents.find(a => a.linked_event_id === goal.id)
+    return {
+      team_id: goal.team_id,
+      scorer_id: goal.player_id || goal.guest_player_id || '',
+      assister_id: assist ? (assist.player_id || assist.guest_player_id || null) : null,
+    }
+  })
+}
+
+export function MatchResults({
+  matchId,
+  teams,
+  existingEvents,
+  resultStatus,
+  lockedBy,
+  lockedAt,
+  mvpPlayerId,
+  mvpCandidates,
+}: MatchResultsProps) {
   const router = useRouter()
   const supabase = createClient()
-  const [goals, setGoals] = useState<GoalEntry[]>([])
-  const [saving, setSaving] = useState(false)
-  const [finalized, setFinalized] = useState(false)
-
-  // Check if results were already finalized (events exist)
-  const hasExistingEvents = existingEvents.length > 0
-
-  // Initialize goals from existing events
-  useEffect(() => {
-    if (hasExistingEvents) {
-      const goalEvents = existingEvents.filter(e => e.event_type === 'goal')
-      const assistEvents = existingEvents.filter(e => e.event_type === 'assist')
-
-      const initialGoals: GoalEntry[] = goalEvents.map(goal => {
-        const assist = assistEvents.find(a => a.linked_event_id === goal.id)
-        return {
-          id: goal.id,
-          team_id: goal.team_id,
-          scorer_id: goal.player_id || goal.guest_player_id || '',
-          scorer_is_guest: !!goal.guest_player_id,
-          assister_id: assist ? (assist.player_id || assist.guest_player_id || null) : null,
-          assister_is_guest: assist ? !!assist.guest_player_id : false,
-        }
-      })
-      setGoals(initialGoals)
-    }
-  }, [hasExistingEvents, existingEvents])
 
   const darkTeam = teams.find(t => t.name === 'dark')
   const lightTeam = teams.find(t => t.name === 'light')
 
+  const [darkScore, setDarkScore] = useState(darkTeam?.score ?? 0)
+  const [lightScore, setLightScore] = useState(lightTeam?.score ?? 0)
+  const [goals, setGoals] = useState<GoalEntry[]>(() => goalsFromEvents(existingEvents))
+  const [mvpId, setMvpId] = useState<string>(mvpPlayerId ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedMessage, setSavedMessage] = useState<string | null>(null)
+  // When locked the editor is collapsed behind "Corregir" so a re-save is deliberate.
+  const [editingLocked, setEditingLocked] = useState(false)
+  const [lockedByName, setLockedByName] = useState<string | null>(null)
+
+  const isLocked = resultStatus === 'locked'
+
+  // Keep the form in sync when the server data changes (consensus recompute, unlock).
+  useEffect(() => {
+    setDarkScore(darkTeam?.score ?? 0)
+    setLightScore(lightTeam?.score ?? 0)
+    setGoals(goalsFromEvents(existingEvents))
+    setMvpId(mvpPlayerId ?? '')
+    setEditingLocked(false)
+  }, [existingEvents, darkTeam?.score, lightTeam?.score, mvpPlayerId, resultStatus])
+
+  useEffect(() => {
+    if (!isLocked || !lockedBy) {
+      setLockedByName(null)
+      return
+    }
+    let cancelled = false
+    supabase
+      .from('player_profiles')
+      .select('display_name')
+      .eq('id', lockedBy)
+      .single()
+      .then(({ data }) => {
+        if (!cancelled) {
+          setLockedByName((data as { display_name: string } | null)?.display_name ?? null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocked, lockedBy])
+
   if (!darkTeam || !lightTeam) return null
 
   const allPlayers = [...darkTeam.players, ...lightTeam.players]
-
   const getTeamGoals = (teamId: string) => goals.filter(g => g.team_id === teamId)
+  const scoreFor = (team: TeamData) => (team.name === 'dark' ? darkScore : lightScore)
+  const setScoreFor = (team: TeamData, value: number) => {
+    const clamped = Math.max(0, Math.min(99, Number.isFinite(value) ? value : 0))
+    if (team.name === 'dark') setDarkScore(clamped)
+    else setLightScore(clamped)
+  }
+  const unattributedFor = (team: TeamData) => scoreFor(team) - getTeamGoals(team.id).length
+  const overAttributed = teams.some(t => unattributedFor(t) < 0)
 
   const addGoal = (teamId: string) => {
-    setGoals(prev => [
-      ...prev,
-      {
-        team_id: teamId,
-        scorer_id: '',
-        scorer_is_guest: false,
-        assister_id: null,
-        assister_is_guest: false,
-      },
-    ])
+    setGoals(prev => [...prev, { team_id: teamId, scorer_id: '', assister_id: null }])
+    // A newly listed goal is a goal: bump the score if the list would exceed it.
+    const team = teams.find(t => t.id === teamId)
+    if (team && unattributedFor(team) <= 0) setScoreFor(team, scoreFor(team) + 1)
   }
 
   const removeGoal = (index: number) => {
     setGoals(prev => prev.filter((_, i) => i !== index))
   }
 
-  const updateGoalScorer = (index: number, value: string) => {
-    setGoals(prev => {
-      const updated = [...prev]
-      const player = allPlayers.find(p => p.id === value)
-      updated[index] = {
-        ...updated[index],
-        scorer_id: value,
-        scorer_is_guest: player?.is_guest ?? false,
-      }
-      return updated
-    })
+  const updateGoal = (index: number, patch: Partial<GoalEntry>) => {
+    setGoals(prev => prev.map((g, i) => (i === index ? { ...g, ...patch } : g)))
   }
 
-  const updateGoalAssister = (index: number, value: string) => {
-    setGoals(prev => {
-      const updated = [...prev]
-      if (!value) {
-        updated[index] = { ...updated[index], assister_id: null, assister_is_guest: false }
-      } else {
-        const player = allPlayers.find(p => p.id === value)
-        updated[index] = {
-          ...updated[index],
-          assister_id: value,
-          assister_is_guest: player?.is_guest ?? false,
-        }
-      }
-      return updated
-    })
+  const toEventRef = (id: string): Pick<AdminMatchEventInput, 'player_id' | 'guest_player_id'> => {
+    const player = allPlayers.find(p => p.id === id)
+    return player?.is_guest
+      ? { player_id: null, guest_player_id: player.guest_player_id }
+      : { player_id: player?.player_id ?? null, guest_player_id: null }
   }
 
   const handleSave = async () => {
-    // Validate all goals have scorers
-    const invalidGoals = goals.filter(g => !g.scorer_id)
-    if (invalidGoals.length > 0) {
-      alert('Cada gol necesita un goleador')
+    if (goals.some(g => !g.scorer_id)) {
+      setError('Cada gol de la lista necesita un goleador. Si no sabés quién lo hizo, borrá la fila: el resultado ya lo cuenta.')
+      return
+    }
+    if (overAttributed) {
+      setError('Hay más goles cargados que los del resultado. Subí el resultado o borrá goles.')
       return
     }
 
     setSaving(true)
+    setError(null)
+    setSavedMessage(null)
 
     try {
-      // Delete existing events for this match
-       
-      await (supabase as any)
-        .from('match_events')
-        .delete()
-        .eq('match_id', matchId)
-
-      // Insert goal events
-      for (const goal of goals) {
-        const scorerPlayer = allPlayers.find(p => p.id === goal.scorer_id)
-
-         
-        const { data: goalEvent, error: goalError } = await (supabase as any)
-          .from('match_events')
-          .insert({
-            match_id: matchId,
-            team_id: goal.team_id,
-            player_id: scorerPlayer?.is_guest ? null : scorerPlayer?.player_id,
-            guest_player_id: scorerPlayer?.is_guest ? scorerPlayer?.guest_player_id : null,
-            event_type: 'goal',
-          })
-          .select('id')
-          .single()
-
-        if (goalError) throw goalError
-
-        // Insert assist if present
+      const events: AdminMatchEventInput[] = []
+      goals.forEach(goal => {
+        const goalIndex = events.length
+        events.push({ team_id: goal.team_id, event_type: 'goal', ...toEventRef(goal.scorer_id) })
         if (goal.assister_id) {
-          const assisterPlayer = allPlayers.find(p => p.id === goal.assister_id)
-
-           
-          const { error: assistError } = await (supabase as any)
-            .from('match_events')
-            .insert({
-              match_id: matchId,
-              team_id: goal.team_id,
-              player_id: assisterPlayer?.is_guest ? null : assisterPlayer?.player_id,
-              guest_player_id: assisterPlayer?.is_guest ? assisterPlayer?.guest_player_id : null,
-              event_type: 'assist',
-              linked_event_id: goalEvent.id,
-            })
-
-          if (assistError) throw assistError
+          events.push({
+            team_id: goal.team_id,
+            event_type: 'assist',
+            linked_index: goalIndex,
+            ...toEventRef(goal.assister_id),
+          })
         }
-      }
-
-      // Update team scores
-      for (const team of teams) {
-        const teamGoalCount = goals.filter(g => g.team_id === team.id).length
-
-         
-        const { error: scoreError } = await (supabase as any)
-          .from('teams')
-          .update({ score: teamGoalCount })
-          .eq('id', team.id)
-
-        if (scoreError) throw scoreError
-      }
-
-      // Finalize through the authorization-checked wrapper (admin/captain only)
-      const { error: rpcError } = await supabase.rpc('admin_finalize_match_results', {
-        p_match_id: matchId,
       })
 
+      const { error: rpcError } = await supabase.rpc('admin_set_match_result', {
+        p_match_id: matchId,
+        p_dark_score: darkScore,
+        p_light_score: lightScore,
+        p_events: events as unknown as Json,
+        p_mvp_player_id: mvpId || null,
+      })
       if (rpcError) throw rpcError
 
-      // Emit results_posted (T5, §2.6). Non-fatal: results were already saved.
-      const darkScore = darkTeam ? getTeamGoals(darkTeam.id).length : 0
-      const lightScore = lightTeam ? getTeamGoals(lightTeam.id).length : 0
-      const resultsPostedPayload: ResultsPostedPayload = {
-        match_id: matchId,
-        dark_score: darkScore,
-        light_score: lightScore,
-      }
-      const { error: notifyError } = await supabase.rpc('emit_notification', {
-        p_group_id: groupId,
-        p_match_id: matchId,
-        p_type: 'results_posted',
-        p_payload: resultsPostedPayload as unknown as Json,
-      })
-      if (notifyError) {
-        console.error('Error emitting results_posted notification:', notifyError)
-      }
-
-      setFinalized(true)
+      setSavedMessage('Resultado guardado y cerrado. Los reportes de los jugadores ya no lo modifican.')
+      setEditingLocked(false)
       router.refresh()
     } catch (err) {
       console.error('Error saving results:', err)
-      alert('Error al guardar los resultados')
+      setError(err instanceof Error && err.message ? err.message : 'Error al guardar el resultado')
     } finally {
       setSaving(false)
     }
   }
 
-  if (finalized) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <Goal className="h-8 w-8 mx-auto mb-3 text-green-500" />
-          <p className="font-medium">Resultados guardados</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {resultsFinalized
-              ? 'Los goles fueron actualizados.'
-              : 'Las estadísticas de los jugadores fueron actualizadas.'}
-          </p>
-        </CardContent>
-      </Card>
-    )
+  const handleUnlock = async () => {
+    if (!confirm('Al reabrir, el resultado vuelve a calcularse con los reportes de los jugadores y lo que cargaste a mano se descarta. ¿Continuar?')) {
+      return
+    }
+    setSaving(true)
+    setError(null)
+    setSavedMessage(null)
+    try {
+      const { error: rpcError } = await supabase.rpc('admin_unlock_match_result', { p_match_id: matchId })
+      if (rpcError) throw rpcError
+      setSavedMessage('Resultado reabierto: vuelve a seguir el consenso de los reportes.')
+      router.refresh()
+    } catch (err) {
+      console.error('Error unlocking result:', err)
+      setError(err instanceof Error && err.message ? err.message : 'Error al reabrir el resultado')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const renderTeamSection = (team: TeamData) => {
     const teamGoals = getTeamGoals(team.id)
     const teamLabel = team.name === 'dark' ? 'Oscuro' : 'Claro'
+    const unattributed = unattributedFor(team)
 
     return (
       <div key={team.id} className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div
-              className="w-4 h-4 rounded-full border"
-              style={{ backgroundColor: team.color_hex }}
-            />
+            <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: team.color_hex }} />
             <span className="font-medium">{teamLabel}</span>
-            <span className="text-2xl font-bold">{teamGoals.length}</span>
+            <div className="flex items-center gap-1 ml-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Restar gol a ${teamLabel}`}
+                onClick={() => setScoreFor(team, scoreFor(team) - 1)}
+                disabled={saving || scoreFor(team) <= 0}
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={scoreFor(team)}
+                onChange={e => setScoreFor(team, Number(e.target.value))}
+                aria-label={`Goles de ${teamLabel}`}
+                className="w-14 text-center text-2xl font-bold rounded-md border border-input bg-background py-1"
+                disabled={saving}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Sumar gol a ${teamLabel}`}
+                onClick={() => setScoreFor(team, scoreFor(team) + 1)}
+                disabled={saving}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => addGoal(team.id)}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => addGoal(team.id)} disabled={saving}>
             <Plus className="h-4 w-4 mr-1" />
-            Gol
+            Goleador
           </Button>
         </div>
 
-        {teamGoals.map((goal) => {
+        {unattributed > 0 && (
+          <p className="text-xs text-muted-foreground pl-6">
+            {unattributed === 1 ? '1 gol sin autor' : `${unattributed} goles sin autor`}
+          </p>
+        )}
+        {unattributed < 0 && (
+          <p className="text-xs text-destructive pl-6">
+            Hay {-unattributed} {-unattributed === 1 ? 'gol cargado de más' : 'goles cargados de más'} respecto al resultado
+          </p>
+        )}
+
+        {teamGoals.map(goal => {
           const globalIndex = goals.indexOf(goal)
           return (
             <div key={globalIndex} className="flex items-start gap-2 pl-6">
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 grid gap-2 sm:grid-cols-2">
                 <select
                   value={goal.scorer_id}
-                  onChange={(e) => updateGoalScorer(globalIndex, e.target.value)}
+                  onChange={e => updateGoal(globalIndex, { scorer_id: e.target.value })}
+                  aria-label="Goleador"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  disabled={saving}
                 >
                   <option value="">Seleccionar goleador...</option>
-                  {team.players.map((p) => (
+                  {team.players.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.display_name}
                     </option>
@@ -302,13 +316,15 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
                 </select>
                 <select
                   value={goal.assister_id || ''}
-                  onChange={(e) => updateGoalAssister(globalIndex, e.target.value)}
+                  onChange={e => updateGoal(globalIndex, { assister_id: e.target.value || null })}
+                  aria-label="Asistencia"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  disabled={saving}
                 >
                   <option value="">Asistencia (opcional)</option>
                   {team.players
-                    .filter((p) => p.id !== goal.scorer_id)
-                    .map((p) => (
+                    .filter(p => p.id !== goal.scorer_id)
+                    .map(p => (
                       <option key={p.id} value={p.id}>
                         {p.display_name}
                       </option>
@@ -316,10 +332,13 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
                 </select>
               </div>
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
+                aria-label="Quitar gol"
                 onClick={() => removeGoal(globalIndex)}
                 className="text-destructive hover:text-destructive mt-1"
+                disabled={saving}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -330,57 +349,88 @@ export function MatchResults({ matchId, groupId, teams, existingEvents, resultsF
     )
   }
 
+  const lockedAtLabel = lockedAt
+    ? new Date(lockedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+    : null
+
+  const showEditor = !isLocked || editingLocked
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <Goal className="h-5 w-5" />
-          Cargar resultado
+          {isLocked ? <Lock className="h-5 w-5" /> : <Goal className="h-5 w-5" />}
+          {isLocked ? 'Resultado cerrado' : 'Cargar resultado'}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Score overview */}
-        <div className="flex items-center justify-center gap-6 text-center">
-          <div>
-            <div
-              className="w-6 h-6 rounded-full border mx-auto mb-1"
-              style={{ backgroundColor: darkTeam.color_hex }}
-            />
-            <span className="text-sm text-muted-foreground">Oscuro</span>
-            <p className="text-3xl font-bold">{getTeamGoals(darkTeam.id).length}</p>
-          </div>
-          <span className="text-2xl text-muted-foreground font-light">—</span>
-          <div>
-            <div
-              className="w-6 h-6 rounded-full border mx-auto mb-1"
-              style={{ backgroundColor: lightTeam.color_hex }}
-            />
-            <span className="text-sm text-muted-foreground">Claro</span>
-            <p className="text-3xl font-bold">{getTeamGoals(lightTeam.id).length}</p>
-          </div>
-        </div>
+        {error && (
+          <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
+        )}
+        {savedMessage && (
+          <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">{savedMessage}</div>
+        )}
 
-        <div className="border-t pt-4 space-y-6">
-          {renderTeamSection(darkTeam)}
-          {renderTeamSection(lightTeam)}
-        </div>
+        {isLocked && (
+          <div className="rounded-md border px-4 py-3 text-sm space-y-3">
+            <p>
+              Cerrado{lockedByName ? ` por ${lockedByName}` : ''}{lockedAtLabel ? ` el ${lockedAtLabel}` : ''}.
+              Los reportes que lleguen ahora se guardan pero no cambian el resultado.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {!editingLocked && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditingLocked(true)} disabled={saving}>
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Corregir resultado
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={handleUnlock} disabled={saving}>
+                {saving ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
+                Reabrir (volver al consenso)
+              </Button>
+            </div>
+          </div>
+        )}
 
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full"
-        >
-          {saving ? (
-            <Spinner size="sm" className="mr-2" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
-          {resultsFinalized ? 'Actualizar goles' : 'Guardar resultados'}
-        </Button>
-        {resultsFinalized && (
-          <p className="text-xs text-muted-foreground text-center">
-            Las estadísticas ya fueron contabilizadas. Podés corregir los goles sin duplicar stats.
+        {!isLocked && (
+          <p className="text-sm text-muted-foreground">
+            {STATUS_LABEL[resultStatus]}. Lo que ves abajo es lo que dicen los reportes hasta ahora; al guardar,
+            tu versión pasa a ser la definitiva y se cierra.
           </p>
+        )}
+
+        {showEditor && (
+          <>
+            <div className="border-t pt-4 space-y-6">
+              {renderTeamSection(darkTeam)}
+              {renderTeamSection(lightTeam)}
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="mvp-select" className="text-sm font-medium">
+                MVP
+              </label>
+              <select
+                id="mvp-select"
+                value={mvpId}
+                onChange={e => setMvpId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={saving}
+              >
+                <option value="">Mantener el más votado</option>
+                {mvpCandidates.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Button onClick={handleSave} disabled={saving} className="w-full">
+              {saving ? <Spinner size="sm" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
+              Guardar y cerrar resultado
+            </Button>
+          </>
         )}
       </CardContent>
     </Card>

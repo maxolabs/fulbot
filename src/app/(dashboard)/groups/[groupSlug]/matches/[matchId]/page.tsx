@@ -25,6 +25,7 @@ import { MatchResults } from './match-results'
 import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
 import type { MatchResultStatus } from '@/types/database'
+import { MatchReportsTable } from './match-reports-table'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
@@ -448,6 +449,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
     player_name: e.player_profiles?.display_name || e.guest_players?.display_name || null,
   }))
 
+  // Result consensus/lock columns (00018). `select('*')` already returns them; the
+  // narrow cast above predates them, so read them through a local cast here.
+  const resultMeta = match as unknown as {
+    result_status?: MatchResultStatus
+    result_locked_by?: string | null
+    result_locked_at?: string | null
+  }
+
   // Prepare teams data for MatchResults component
   const teamsForResults = matchTeams.map(t => ({
     id: t.id,
@@ -637,7 +646,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {match.status === 'finished' && isAdminOrCaptain && teamsForResults.length > 0 && (
             <MatchResults
               matchId={match.id}
-              groupId={group.id}
               teams={teamsForResults}
               existingEvents={matchEvents.map(e => ({
                 id: e.id,
@@ -647,7 +655,25 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 event_type: e.event_type,
                 linked_event_id: e.linked_event_id,
               }))}
-              resultsFinalized={match.results_finalized}
+              resultStatus={resultMeta.result_status ?? 'pending'}
+              lockedBy={resultMeta.result_locked_by ?? null}
+              lockedAt={resultMeta.result_locked_at ?? null}
+              mvpPlayerId={match.mvp_player_id}
+              mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+            />
+          )}
+
+          {/* Player reports (who said what) - admins/captains only */}
+          {match.status === 'finished' && isAdminOrCaptain && teamsForResults.length > 0 && (
+            <MatchReportsTable
+              matchId={match.id}
+              resultStatus={resultMeta.result_status ?? 'pending'}
+              teams={teamsForResults.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
+              people={[
+                ...matchPlayers.map(p => ({ id: p.id, display_name: p.display_name })),
+                ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
+              ]}
+              confirmedCount={matchPlayers.length}
             />
           )}
 

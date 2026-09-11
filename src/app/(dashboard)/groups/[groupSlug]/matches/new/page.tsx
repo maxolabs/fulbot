@@ -56,6 +56,15 @@ export default async function CreateMatchPage({ params }: PageProps) {
     redirect(`/groups/${groupSlug}`)
   }
 
+  // Group defaults for the scheduler fields (00018); fall back when the row is missing.
+  const { data: notifDefaults } = await supabase
+    .from('notification_settings')
+    .select('default_duration_minutes, default_results_request_delay_minutes')
+    .eq('group_id', group.id)
+    .maybeSingle() as { data: { default_duration_minutes: number | null; default_results_request_delay_minutes: number | null } | null }
+  const durationMinutes = notifDefaults?.default_duration_minutes ?? 60
+  const resultsRequestDelayMinutes = notifDefaults?.default_results_request_delay_minutes ?? 60
+
   // Calculate next match date based on default_match_day
   const getNextMatchDate = () => {
     const today = new Date()
@@ -107,6 +116,8 @@ export default async function CreateMatchPage({ params }: PageProps) {
               date: getNextMatchDate(),
               time: group.default_match_time?.slice(0, 5) || '21:00',
               maxPlayers: group.default_max_players,
+              durationMinutes,
+              resultsRequestDelayMinutes,
             }}
           />
         </CardContent>

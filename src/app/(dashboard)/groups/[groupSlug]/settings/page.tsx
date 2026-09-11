@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
+import type { Json } from '@/types/database'
 import { MembersManager } from './members-manager'
 import { NotificationSettings } from './notification-settings'
 import { RecurringPatternForm } from './recurring-pattern-form'
@@ -46,6 +47,7 @@ export default async function GroupSettingsPage({ params }: PageProps) {
       default_max_players: number
       invite_code: string
       timezone: string
+      settings: Json | null
     } | null }
 
   if (!group) return notFound()
