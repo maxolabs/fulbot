@@ -365,8 +365,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   let reports: ReportRow[] = []
   let resultsWindowDays = 7
+  // Member scoring on for this group: the report form shows "+1 compromiso"
+  // after a usable report (docs/member-scoring.md §5.5).
+  let scoringEnabled = false
 
   if (match.status === 'finished') {
+    const { data: scoringSettings } = await supabase
+      .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: { enabled?: boolean } | null }
+    scoringEnabled = !!scoringSettings?.enabled
+
     const { data: settingsRow } = await supabase
       .from('notification_settings')
       .select('results_window_days')
@@ -650,6 +657,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
               agreement={agreement}
               windowOpen={reportWindowOpen}
               resultStatus={match.result_status}
+              scoringEnabled={scoringEnabled}
             />
           )}
 

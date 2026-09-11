@@ -12,11 +12,16 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { SkillSummaryCard } from '@/components/player-skills'
+import { MemberScoreBreakdown, MemberScoreStars } from '@/components/member-score'
+import { MemberEventDeleteButton, MemberScoreAdjust } from '@/components/member-score-adjust'
 import type { RatingSummary } from '@/lib/ratings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
-import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchDayMonth, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
+import type { MemberBreakdown, MemberEventSource, MemberEventType, MemberScoringSettings } from '@/types/database'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchDateShort, formatMatchDayMonth, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; playerId: string }>
@@ -112,7 +117,90 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
   if (!viewerMembership) return notFound()
 
-  const isAdminOrCaptain = viewerMembership.role === 'admin' || viewerMembership.role === 'captain'
+  const isAdmin = viewerMembership.role === 'admin'
+  const isAdminOrCaptain = isAdmin || viewerMembership.role === 'captain'
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const language: Language = userData?.preferred_language ?? 'es'
+  const t = getT(language)
+
+  // Member score ("Compromiso", docs/member-scoring.md §5.4): visible when the
+  // group opted into 'group' visibility, or the viewer is admin/captain, or the
+  // viewer is looking at their own page. Hidden entirely while scoring is off.
+  const { data: scoringSettings } = await supabase
+    .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: MemberScoringSettings | null }
+  const canSeeScore = !!scoringSettings?.enabled
+    && (scoringSettings.visibility === 'group' || isAdminOrCaptain || currentPlayer.id === playerId)
+
+  type MemberScoreRow = { member_score: number | null; member_breakdown: MemberBreakdown | null }
+  type MemberEventRow = {
+    id: string
+    match_id: string | null
+    type: MemberEventType
+    points: number
+    source: MemberEventSource
+    reported_by: string | null
+    note: string | null
+    created_at: string
+  }
+  type WindowMatch = { id: string; date_time: string; location: string | null }
+
+  let memberScore: MemberScoreRow | null = null
+  let memberEvents: MemberEventRow[] = []
+  const windowMatchById = new Map<string, WindowMatch>()
+  const reporterNameById = new Map<string, string>()
+
+  if (canSeeScore) {
+    const { data: scoreRow } = await supabase
+      .from('group_memberships')
+      .select('member_score, member_breakdown')
+      .eq('group_id', group.id)
+      .eq('player_id', playerId)
+      .eq('is_active', true)
+      .maybeSingle() as { data: MemberScoreRow | null }
+    memberScore = scoreRow
+
+    // The window is the group's last N finished matches (§3); match-less events
+    // (adjustments, newcomer ratings) count from the oldest window match on.
+    const windowSize = scoringSettings?.window_matches ?? 10
+    const { data: windowMatches } = await supabase
+      .from('matches')
+      .select('id, date_time, location')
+      .eq('group_id', group.id)
+      .eq('status', 'finished')
+      .order('date_time', { ascending: false })
+      .limit(windowSize) as { data: WindowMatch[] | null }
+    for (const m of windowMatches || []) windowMatchById.set(m.id, m)
+    const oldest = windowMatches && windowMatches.length > 0
+      ? windowMatches[windowMatches.length - 1].date_time
+      : null
+
+    const { data: eventRows } = await supabase
+      .from('member_events')
+      .select('id, match_id, type, points, source, reported_by, note, created_at')
+      .eq('group_id', group.id)
+      .eq('player_id', playerId)
+      .order('created_at', { ascending: false }) as { data: MemberEventRow[] | null }
+
+    memberEvents = (eventRows || []).filter(e =>
+      e.match_id
+        ? windowMatchById.has(e.match_id)
+        : oldest === null || e.created_at >= oldest
+    )
+
+    const reporterIds = Array.from(new Set(memberEvents.map(e => e.reported_by).filter((id): id is string => !!id)))
+    if (reporterIds.length > 0) {
+      const { data: reporters } = await supabase
+        .from('player_profiles')
+        .select('id, display_name')
+        .in('id', reporterIds) as { data: { id: string; display_name: string }[] | null }
+      for (const r of reporters || []) reporterNameById.set(r.id, r.display_name)
+    }
+  }
 
   let ratingSummary: RatingSummary | null = null
   if (isAdminOrCaptain) {
@@ -255,6 +343,76 @@ export default async function PlayerProfilePage({ params }: PageProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Member score ("Compromiso") */}
+      {canSeeScore && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex-1 min-w-[200px]">
+                <CardTitle className="text-base">{t('memberScore.title')}</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {scoringSettings?.visibility === 'self' && currentPlayer.id === playerId && !isAdminOrCaptain
+                    ? t('memberScore.privateHint')
+                    : t('memberScore.subtitle')}
+                </p>
+              </div>
+              {isAdmin && <MemberScoreAdjust groupId={group.id} playerId={playerId} />}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <MemberScoreStars score={memberScore?.member_score ?? null} variant="full" language={language} />
+            <MemberScoreBreakdown breakdown={memberScore?.member_breakdown ?? null} language={language} />
+
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium">{t('memberScore.eventLog')}</p>
+              <p className="text-xs text-muted-foreground mb-2">{t('memberScore.eventLogHint')}</p>
+              {memberEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('memberScore.eventLogEmpty')}</p>
+              ) : (
+                <ul className="divide-y divide-border/50">
+                  {memberEvents
+                    .map(e => ({ ...e, when: e.match_id ? windowMatchById.get(e.match_id)?.date_time ?? e.created_at : e.created_at }))
+                    .sort((a, b) => b.when.localeCompare(a.when) || b.created_at.localeCompare(a.created_at))
+                    .map((event) => {
+                      const match = event.match_id ? windowMatchById.get(event.match_id) : undefined
+                      const reporter = event.reported_by ? reporterNameById.get(event.reported_by) : undefined
+                      return (
+                        <li key={event.id} className="flex items-start gap-3 py-2 text-sm">
+                          <div className="min-w-[44px] text-xs text-muted-foreground pt-0.5">
+                            {formatMatchDayMonth(event.when, timeZone)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">{t(`memberScore.events.${event.type}`)}</p>
+                            <p className="text-xs text-muted-foreground break-words">
+                              {match ? (
+                                <Link href={`/groups/${groupSlug}/matches/${match.id}`} className="hover:underline">
+                                  {formatMatchDateShort(match.date_time, timeZone)}
+                                  {match.location ? ` · ${match.location}` : ''}
+                                </Link>
+                              ) : (
+                                formatMatchDateNumeric(event.created_at, timeZone)
+                              )}
+                              {' · '}
+                              {reporter ? t('memberScore.reportedBy', { name: reporter }) : t('memberScore.system')}
+                            </p>
+                            {event.note && <p className="text-xs italic text-muted-foreground mt-0.5">{event.note}</p>}
+                          </div>
+                          <span
+                            className={`text-sm font-semibold tabular-nums ${event.points > 0 ? 'text-primary' : event.points < 0 ? 'text-destructive' : 'text-muted-foreground'}`}
+                          >
+                            {event.points > 0 ? '+' : ''}{event.points}
+                          </span>
+                          {isAdmin && <MemberEventDeleteButton eventId={event.id} />}
+                        </li>
+                      )
+                    })}
+                </ul>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
