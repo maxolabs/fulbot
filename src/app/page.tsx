@@ -69,7 +69,7 @@ export default async function Home() {
         <div className="space-y-3">
           <Link
             href="/register"
-            className="flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground transition-all hover:brightness-110 glow-sm hover:glow-md"
+            className="flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground transition-all hover:brightness-110"
           >
             {t('auth.createAccount')}
           </Link>

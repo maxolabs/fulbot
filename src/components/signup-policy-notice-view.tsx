@@ -60,11 +60,11 @@ export function SignupPolicyNoticeView({
   return (
     <div
       role="status"
-      className="flex items-start gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3"
+      className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3"
     >
-      <Icon className="h-5 w-5 mt-0.5 shrink-0 text-yellow-600" />
+      <Icon className="h-5 w-5 mt-0.5 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
       <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium text-yellow-700 dark:text-yellow-500">{title}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
         <p className="text-sm text-muted-foreground">{body}</p>
       </div>
     </div>
