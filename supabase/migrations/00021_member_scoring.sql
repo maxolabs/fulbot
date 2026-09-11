@@ -8,7 +8,8 @@
 --     (full | priority_window | reserved | cooldown) so the UI can explain a waitlist.
 --   * member_scoring_settings(): groups.settings->'member_scoring' merged over defaults.
 --   * recompute_member_score(): five 0..1 ratios over the group's last N finished
---     matches, weighted mean mapped to 1..5, admin adjustments as points/20 stars,
+--     matches (cancels also count on later, not-cancelled matches, so they bite at
+--     once), weighted mean mapped to 1..5, admin adjustments as points/20 stars,
 --     NULL ("Nuevo") below min_matches_for_score; threshold-crossing notifications.
 --   * Emitters wired into the existing flows: finish (auto_finish_match,
 --     admin_set_match_status, recompute_player_stats), cancel (cancel_my_signup,
@@ -27,6 +28,9 @@
 -- 1. TYPES AND TABLES
 -- ============================================
 
+DO $do$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_event_type') THEN
 CREATE TYPE member_event_type AS ENUM (
     -- attendance (system)
     'attended',            -- confirmed when the match finished
@@ -47,9 +51,13 @@ CREATE TYPE member_event_type AS ENUM (
     'peer_kudos',          -- structured positive tag from a teammate (v3, unused for now)
     'admin_adjustment'     -- manual +/- with mandatory note
 );
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_event_source') THEN
 CREATE TYPE member_event_source AS ENUM ('system', 'admin', 'peer');
+    END IF;
+END $do$;
 
-CREATE TABLE public.member_events (
+CREATE TABLE IF NOT EXISTS public.member_events (
     id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     group_id      UUID NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
     player_id     UUID NOT NULL REFERENCES public.player_profiles(id) ON DELETE CASCADE,
@@ -73,13 +81,13 @@ CREATE TABLE public.member_events (
 -- the match-less / subject-less types dedupe too. admin_adjustment is excluded: an
 -- admin must be able to adjust the same member more than once (each adjustment is
 -- its own ledger entry with its own note), which the plain constraint of §2 forbids.
-CREATE UNIQUE INDEX member_events_uniq
+CREATE UNIQUE INDEX IF NOT EXISTS member_events_uniq
     ON public.member_events (group_id, player_id, match_id, subject_id, type, reported_by)
     NULLS NOT DISTINCT
     WHERE type <> 'admin_adjustment';
 
-CREATE INDEX idx_member_events_group_player ON public.member_events(group_id, player_id);
-CREATE INDEX idx_member_events_match ON public.member_events(match_id);
+CREATE INDEX IF NOT EXISTS idx_member_events_group_player ON public.member_events(group_id, player_id);
+CREATE INDEX IF NOT EXISTS idx_member_events_match ON public.member_events(match_id);
 
 ALTER TABLE public.group_memberships
     ADD COLUMN IF NOT EXISTS member_score     DECIMAL(3,2) CHECK (member_score BETWEEN 1 AND 5),  -- NULL = not enough history
@@ -179,8 +187,8 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 -- Internal. Inserts one event with the group's current weight snapshotted into
 -- points (p_points overrides, used by admin_adjustment). Idempotent through the
 -- unique index; returns TRUE only when a row was actually inserted. A new no_show
--- arms the member's signup cooldown when the group enabled it (§5.2). Callers are
--- responsible for recompute_member_score.
+-- arms the member's signup cooldown when scoring is enabled and the group turned
+-- no_show_cooldown on (§5.2). Callers are responsible for recompute_member_score.
 
 CREATE OR REPLACE FUNCTION insert_member_event(
     p_group_id UUID,
@@ -214,7 +222,9 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    IF p_type = 'no_show' AND COALESCE((v_settings->>'no_show_cooldown')::boolean, false) THEN
+    IF p_type = 'no_show'
+       AND COALESCE((v_settings->>'enabled')::boolean, false)
+       AND COALESCE((v_settings->>'no_show_cooldown')::boolean, false) THEN
         UPDATE public.group_memberships
         SET signup_cooldown = TRUE
         WHERE group_id = p_group_id AND player_id = p_player_id;
@@ -228,7 +238,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ============================================
 -- Window = the group's last window_matches finished matches by date_time. Ratios:
 --   asistencia    played / (played + no_shows)
---   aviso         early / (early + late), 1.0 without cancels
+--   aviso         (played + early) / (played + early + late), 1.0 without history.
+--                 Cancels count as soon as they happen: early_cancel / late_cancel
+--                 rows are read from the window's matches AND from every later
+--                 non-cancelled match (any non-cancelled match while the group has
+--                 no finished match), so a late cancel on an upcoming match lowers
+--                 the score at once and an admin-cancelled match neutralizes it.
+--                 Attendance, conduct and participation stay finished-only.
 --   puntualidad   (played - late arrivals) / played
 --   reglas        (played - matches with wrong_jersey or unreversed unpaid) / played
 --   participacion (participated matches + newcomers rated) /
@@ -255,6 +271,7 @@ DECLARE
     v_enabled BOOLEAN;
     v_threshold NUMERIC;
     v_match_ids UUID[];
+    v_cancel_ids UUID[];
     v_oldest TIMESTAMPTZ;
     v_window_days INTEGER;
     v_played INTEGER;
@@ -315,6 +332,12 @@ BEGIN
     ) w;
     v_match_ids := COALESCE(v_match_ids, ARRAY[]::UUID[]);
 
+    -- Cancels also count on every later, not-cancelled match (upcoming ones included).
+    SELECT COALESCE(array_agg(m.id), ARRAY[]::UUID[]) INTO v_cancel_ids
+    FROM public.matches m
+    WHERE m.group_id = p_group_id AND m.status <> 'cancelled'
+    AND (v_oldest IS NULL OR m.date_time > v_oldest);
+
     -- Attendance, cancels, conduct.
     SELECT
         COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'attended'),
@@ -341,7 +364,8 @@ BEGIN
          v_reported, v_rated, v_voted, v_raw_points
     FROM public.member_events e
     WHERE e.group_id = p_group_id AND e.player_id = p_player_id
-    AND e.match_id = ANY(v_match_ids);
+    AND (e.match_id = ANY(v_match_ids)
+         OR (e.type IN ('early_cancel', 'late_cancel') AND e.match_id = ANY(v_cancel_ids)));
 
     -- Participación over played matches (§3.1).
     SELECT
@@ -404,7 +428,8 @@ BEGIN
     v_raw_points := v_raw_points + v_adj_points;
 
     v_r_asistencia := CASE WHEN v_played + v_no_shows > 0 THEN v_played::numeric / (v_played + v_no_shows) ELSE 1 END;
-    v_r_aviso := CASE WHEN v_early + v_late > 0 THEN v_early::numeric / (v_early + v_late) ELSE 1 END;
+    v_r_aviso := CASE WHEN v_played + v_early + v_late > 0
+        THEN (v_played + v_early)::numeric / (v_played + v_early + v_late) ELSE 1 END;
     v_r_puntualidad := CASE WHEN v_played > 0 THEN GREATEST(0, v_played - v_late_arrivals)::numeric / v_played ELSE 1 END;
     v_r_reglas := CASE WHEN v_played > 0 THEN GREATEST(0, v_played - v_flagged)::numeric / v_played ELSE 1 END;
     v_r_participacion := CASE WHEN v_eligible + v_newcomers_eligible > 0
@@ -428,7 +453,7 @@ BEGIN
         'played', v_played,
         'is_new', v_is_new,
         'asistencia', jsonb_build_object('ratio', ROUND(v_r_asistencia, 4), 'played', v_played, 'no_shows', v_no_shows),
-        'aviso', jsonb_build_object('ratio', ROUND(v_r_aviso, 4), 'early', v_early, 'late', v_late),
+        'aviso', jsonb_build_object('ratio', ROUND(v_r_aviso, 4), 'played', v_played, 'early', v_early, 'late', v_late),
         'puntualidad', jsonb_build_object('ratio', ROUND(v_r_puntualidad, 4), 'late_arrivals', v_late_arrivals),
         'reglas', jsonb_build_object('ratio', ROUND(v_r_reglas, 4), 'wrong_jersey', v_wrong_jersey, 'unpaid', v_unpaid),
         'participacion', jsonb_build_object(
@@ -488,8 +513,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Attendance for a finished match: attended for every confirmed registered signup,
 -- no_show for did_not_show; attendance rows that no longer match the signup's
 -- status (a no-show reverted, a signup cancelled after the fact) are deleted, so
--- admin_set_signup_status can swap attended <-> no_show by calling this. Recomputes
--- every registered player who has a signup on the match. No-op unless finished.
+-- admin_set_signup_status can swap attended <-> no_show by calling this. A reverted
+-- no_show also disarms the member's signup cooldown (§5.2). Recomputes every
+-- registered player who has a signup on the match. No-op unless finished.
 CREATE OR REPLACE FUNCTION emit_attendance_events(p_match_id UUID)
 RETURNS void AS $$
 DECLARE
@@ -501,15 +527,23 @@ BEGIN
         RETURN;
     END IF;
 
-    DELETE FROM public.member_events e
-    WHERE e.match_id = p_match_id
-    AND e.type IN ('attended', 'no_show')
-    AND NOT EXISTS (
-        SELECT 1 FROM public.match_signups ms
-        WHERE ms.match_id = p_match_id AND ms.player_id = e.player_id
-        AND ((ms.status = 'confirmed' AND e.type = 'attended')
-          OR (ms.status = 'did_not_show' AND e.type = 'no_show'))
-    );
+    WITH deleted AS (
+        DELETE FROM public.member_events e
+        WHERE e.match_id = p_match_id
+        AND e.type IN ('attended', 'no_show')
+        AND NOT EXISTS (
+            SELECT 1 FROM public.match_signups ms
+            WHERE ms.match_id = p_match_id AND ms.player_id = e.player_id
+            AND ((ms.status = 'confirmed' AND e.type = 'attended')
+              OR (ms.status = 'did_not_show' AND e.type = 'no_show'))
+        )
+        RETURNING e.group_id, e.player_id, e.type
+    )
+    UPDATE public.group_memberships gm
+    SET signup_cooldown = FALSE
+    FROM deleted d
+    WHERE d.type = 'no_show' AND gm.group_id = d.group_id AND gm.player_id = d.player_id
+    AND gm.signup_cooldown;
 
     FOR r IN
         SELECT ms.player_id, ms.status
@@ -540,16 +574,24 @@ RETURNS void AS $$
 DECLARE
     r RECORD;
 BEGIN
-    DELETE FROM public.member_events e
-    WHERE e.player_id = p_player_id
-    AND e.type IN ('attended', 'no_show')
-    AND NOT EXISTS (
-        SELECT 1 FROM public.match_signups ms
-        JOIN public.matches m ON m.id = ms.match_id
-        WHERE ms.match_id = e.match_id AND ms.player_id = e.player_id AND m.status = 'finished'
-        AND ((ms.status = 'confirmed' AND e.type = 'attended')
-          OR (ms.status = 'did_not_show' AND e.type = 'no_show'))
-    );
+    WITH deleted AS (
+        DELETE FROM public.member_events e
+        WHERE e.player_id = p_player_id
+        AND e.type IN ('attended', 'no_show')
+        AND NOT EXISTS (
+            SELECT 1 FROM public.match_signups ms
+            JOIN public.matches m ON m.id = ms.match_id
+            WHERE ms.match_id = e.match_id AND ms.player_id = e.player_id AND m.status = 'finished'
+            AND ((ms.status = 'confirmed' AND e.type = 'attended')
+              OR (ms.status = 'did_not_show' AND e.type = 'no_show'))
+        )
+        RETURNING e.group_id, e.type
+    )
+    UPDATE public.group_memberships gm
+    SET signup_cooldown = FALSE
+    FROM deleted d
+    WHERE d.type = 'no_show' AND gm.group_id = d.group_id AND gm.player_id = p_player_id
+    AND gm.signup_cooldown;
 
     FOR r IN
         SELECT m.group_id, ms.match_id, ms.status
@@ -840,13 +882,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Also the hook the settings page calls after saving: the priority_window_close
+-- jobs of the group's open matches are re-dated for the new mode / window_hours
+-- (created when scoring was just enabled, cancelled when it was turned off), and
+-- when the window is already over (no future job to schedule) the waitlist is
+-- reconciled right away through the policy-aware promote_from_waitlist.
 CREATE OR REPLACE FUNCTION admin_recompute_member_scores(p_group_id UUID)
 RETURNS void AS $$
+DECLARE
+    r RECORD;
 BEGIN
     IF NOT is_group_admin(p_group_id) THEN
         RAISE EXCEPTION 'No tenés permiso para esta acción';
     END IF;
     PERFORM recompute_group_member_scores(p_group_id);
+
+    FOR r IN
+        SELECT id FROM public.matches
+        WHERE group_id = p_group_id AND status IN ('signup_open', 'full')
+        ORDER BY date_time
+    LOOP
+        PERFORM schedule_match_jobs(r.id);
+        IF NOT EXISTS (
+            SELECT 1 FROM public.scheduled_jobs
+            WHERE match_id = r.id AND job_type = 'priority_window_close' AND status = 'pending'
+        ) THEN
+            PERFORM run_priority_window_close_job(r.id);
+        END IF;
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -990,8 +1053,15 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- promote_from_waitlist: 00012 body (emits waitlist_promoted). New: clears
--- waitlist_reason on promotion, and in 'waitlist' priority mode picks the
--- highest-scored waitlisted member first (newcomers and guests at the threshold).
+-- waitlist_reason on promotion, in 'waitlist' priority mode picks the
+-- highest-scored waitlisted member first (newcomers and guests at the threshold),
+-- and honors the same §5.1 decisions signup_for_match makes: rows waitlisted for
+-- 'priority_window' are skipped while the window is still open, rows waitlisted
+-- for 'reserved' are skipped while the reserved period is active and only the
+-- reserved spots are left; 'full' and 'cooldown' rows are always promotable. The
+-- first eligible row in (waitlist_position, signup_time) order wins. The match
+-- status is only written when it actually changes, so the matches_schedule_jobs
+-- trigger does not re-create the window job on every call.
 CREATE OR REPLACE FUNCTION promote_from_waitlist(p_match_id UUID)
 RETURNS UUID AS $$
 DECLARE
@@ -1002,8 +1072,14 @@ DECLARE
     v_promoted_guest_id UUID;
     v_promoted_name TEXT;
     v_settings JSONB;
+    v_enabled BOOLEAN;
+    v_mode TEXT;
     v_by_score BOOLEAN;
     v_threshold NUMERIC;
+    v_window_hours NUMERIC;
+    v_reserved INTEGER;
+    v_window_open BOOLEAN;
+    v_reserved_active BOOLEAN;
 BEGIN
     SELECT * INTO v_match FROM public.matches WHERE id = p_match_id FOR UPDATE;
     IF v_match IS NULL THEN
@@ -1018,9 +1094,20 @@ BEGIN
 
     IF v_confirmed_count < v_match.max_players THEN
         v_settings := member_scoring_settings(v_match.group_id);
-        v_by_score := COALESCE((v_settings->>'enabled')::boolean, false)
-                      AND COALESCE(v_settings->'priority'->>'mode', 'off') = 'waitlist';
+        v_enabled := COALESCE((v_settings->>'enabled')::boolean, false);
+        v_mode := COALESCE(v_settings->'priority'->>'mode', 'off');
+        v_by_score := v_enabled AND v_mode = 'waitlist';
         v_threshold := COALESCE((v_settings->'priority'->>'threshold')::numeric, 3.0);
+        v_window_hours := COALESCE((v_settings->'priority'->>'window_hours')::numeric, 24);
+        v_reserved := COALESCE((v_settings->'priority'->>'reserved_spots')::integer, 4);
+
+        -- Same decisions as signup_for_match (§5.1).
+        v_window_open := v_enabled AND v_mode = 'window'
+            AND v_match.signup_opened_at IS NOT NULL
+            AND now() < v_match.signup_opened_at + (v_window_hours || ' hours')::interval;
+        v_reserved_active := v_enabled AND v_mode = 'reserved'
+            AND now() < v_match.date_time - (v_window_hours || ' hours')::interval
+            AND v_confirmed_count >= v_match.max_players - v_reserved;
 
         IF v_by_score THEN
             SELECT ms.id, ms.player_id, ms.guest_player_id
@@ -1037,6 +1124,8 @@ BEGIN
             INTO v_promoted_id, v_promoted_player_id, v_promoted_guest_id
             FROM public.match_signups
             WHERE match_id = p_match_id AND status = 'waitlist'
+            AND NOT (v_window_open AND waitlist_reason = 'priority_window')
+            AND NOT (v_reserved_active AND waitlist_reason = 'reserved')
             ORDER BY waitlist_position ASC NULLS LAST, signup_time ASC
             LIMIT 1;
         END IF;
@@ -1080,12 +1169,15 @@ BEGIN
         END IF;
     END IF;
 
-    -- Only reconcile status while the match is actively tracking signups
+    -- Only reconcile status while the match is actively tracking signups, and only
+    -- when it actually changes (the UPDATE OF status trigger reschedules jobs).
     IF v_match.status IN ('signup_open', 'full') THEN
         IF v_confirmed_count >= v_match.max_players THEN
-            UPDATE public.matches SET status = 'full' WHERE id = p_match_id;
+            UPDATE public.matches SET status = 'full'
+            WHERE id = p_match_id AND status IS DISTINCT FROM 'full';
         ELSE
-            UPDATE public.matches SET status = 'signup_open' WHERE id = p_match_id;
+            UPDATE public.matches SET status = 'signup_open'
+            WHERE id = p_match_id AND status IS DISTINCT FROM 'signup_open';
         END IF;
     END IF;
 
@@ -1225,7 +1317,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- admin_set_match_status: 00007 body plus attendance events when the new status
--- is finished (the score does not wait for results consensus).
+-- is finished (the score does not wait for results consensus), and a recompute of
+-- the members with cancel events when the match is cancelled (those events stop
+-- counting, see recompute_member_score).
 CREATE OR REPLACE FUNCTION admin_set_match_status(
     p_match_id UUID,
     p_status match_status
@@ -1292,6 +1386,12 @@ BEGIN
 
     IF v_final_status = 'finished' THEN
         PERFORM emit_attendance_events(p_match_id);
+    ELSIF v_final_status = 'cancelled' THEN
+        PERFORM recompute_member_score(v_match.group_id, x.player_id)
+        FROM (
+            SELECT DISTINCT e.player_id FROM public.member_events e
+            WHERE e.match_id = p_match_id AND e.type IN ('early_cancel', 'late_cancel')
+        ) x;
     END IF;
 
     RETURN v_match;
@@ -1509,6 +1609,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- window_hours) or reserved (date_time - window_hours). Scheduled for 'full' too:
 -- the status flips back to signup_open on a cancel and the trigger only fires on
 -- change, so a window job must already exist; the handler is a no-op while full.
+-- A window that already closed schedules nothing: promote_from_waitlist applies
+-- the policy itself, so re-running a past close job would only churn the queue.
 CREATE OR REPLACE FUNCTION schedule_match_jobs(p_match_id UUID)
 RETURNS void AS $$
 DECLARE
@@ -1549,7 +1651,7 @@ BEGIN
                     WHEN 'window' THEN v_match.signup_opened_at + (v_window_hours || ' hours')::interval
                     ELSE v_match.date_time - (v_window_hours || ' hours')::interval
                 END;
-                IF v_window_at IS NOT NULL THEN
+                IF v_window_at IS NOT NULL AND v_window_at > now() THEN
                     INSERT INTO public.scheduled_jobs (group_id, match_id, job_type, run_at)
                     VALUES (v_match.group_id, p_match_id, 'priority_window_close', v_window_at);
                 END IF;

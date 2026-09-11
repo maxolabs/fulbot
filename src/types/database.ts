@@ -1272,6 +1272,12 @@ export type Database = {
         }
         Returns: MemberScoringSettings
       }
+      can_report_member_conduct: {
+        Args: {
+          p_group_id: string
+        }
+        Returns: boolean
+      }
       set_conduct_flag: {
         Args: {
           p_match_id: string
@@ -1366,7 +1372,7 @@ export interface MemberBreakdown {
   played: number
   is_new: boolean
   asistencia: { ratio: number; played: number; no_shows: number }
-  aviso: { ratio: number; early: number; late: number }
+  aviso: { ratio: number; played: number; early: number; late: number }
   puntualidad: { ratio: number; late_arrivals: number }
   reglas: { ratio: number; wrong_jersey: number; unpaid: number }
   participacion: {

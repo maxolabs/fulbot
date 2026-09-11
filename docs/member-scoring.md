@@ -140,15 +140,24 @@ number is what policies use.
 | Dimension | Ratio over window | Events |
 |---|---|---|
 | Asistencia | played / (played + no_shows) | `attended`, `no_show` |
-| Aviso | early_cancels / (early + late cancels), 1.0 if no cancels | `early_cancel`, `late_cancel` |
+| Aviso | (played + early_cancels) / (played + early + late cancels), 1.0 with no history | `early_cancel`, `late_cancel` |
 | Puntualidad | on time / played | `arrived_late` |
 | Reglas | matches without jersey/payment flags / played | `wrong_jersey`, `unpaid`/`paid` |
 | Participación | matches with any participation event / played matches whose results window has closed (§3.1) | `reported_result`, `rated_teammates`, `voted_mvp`, `rated_new_member` |
 
-`overall = 1 + 4 * Σ(dimension_weight * ratio)`. With defaults, one no-show in a
-10-match window costs roughly 0.2 stars; three cost ~0.6. A late cancel costs
-less than a no-show, and an early cancel costs nothing. That gradient is the
-point: the behavior we want is "avisá temprano", not "nunca te bajes".
+`overall = 1 + 4 * Σ(dimension_weight * ratio)`. With defaults, one no-show
+over 4 played matches costs ~0.32 stars (asistencia 4/5) and one late cancel
+over the same 4 played costs ~0.16 (aviso 4/5); an early cancel costs nothing
+and even pads the Aviso ratio. A late cancel therefore always costs less than a
+no-show, and a single late cancel never zeroes the dimension: played matches
+are the evidence that the member normally shows up. That gradient is the point:
+the behavior we want is "avisá temprano", not "nunca te bajes".
+
+Cancels count the moment they happen, not when the match finishes: Aviso reads
+`early_cancel` / `late_cancel` events from the window's finished matches **and**
+from every later match that is not cancelled (upcoming ones included), so a late
+cancel lowers the score right away and an admin cancelling the match neutralizes
+it. Attendance, conduct and participation still come from finished matches only.
 
 `admin_adjustment` events are added after the mapping as `points / 20` stars
 (so the ±20 cap per adjustment is ±1 star), clamped to [1,5], and always shown
@@ -468,7 +477,7 @@ Schema exactly as §2, with these additions and precisions:
   ```jsonc
   { "window_matches": 10, "played": 8, "is_new": false,
     "asistencia":    { "ratio": 0.89, "played": 8, "no_shows": 1 },
-    "aviso":         { "ratio": 1.0,  "early": 2, "late": 0 },
+    "aviso":         { "ratio": 1.0,  "played": 8, "early": 2, "late": 0 },
     "puntualidad":   { "ratio": 0.88, "late_arrivals": 1 },
     "reglas":        { "ratio": 1.0,  "wrong_jersey": 0, "unpaid": 0 },
     "participacion": { "ratio": 0.6, "eligible": 5, "participated": 3,
@@ -482,7 +491,9 @@ Schema exactly as §2, with these additions and precisions:
   `schedule_match_jobs` schedules it for matches in `signup_open` when the
   group's `member_scoring.enabled` and `priority.mode IN ('window','reserved')`:
   `run_at = signup_opened_at + window_hours` for `window`,
-  `date_time - window_hours` for `reserved`. `run_scheduled_job` dispatches to
+  `date_time - window_hours` for `reserved`; a `run_at` already in the past is
+  not scheduled (`promote_from_waitlist` applies the policy itself, see below).
+  `run_scheduled_job` dispatches to
   `run_priority_window_close_job(p_match_id)`, which promotes from the waitlist
   in `(waitlist_position, signup_time)` order until the match is full (reusing
   `promote_from_waitlist`) and lets the existing `waitlist_promoted`
@@ -492,7 +503,13 @@ Schema exactly as §2, with these additions and precisions:
   reads one shape. `STABLE SECURITY DEFINER`.
 - `recompute_member_score(p_group_id UUID, p_player_id UUID) RETURNS void`
   as §3. Window = the group's last `window_matches` matches with
-  `status = 'finished'` ordered by `date_time DESC`. Participación denominator
+  `status = 'finished'` ordered by `date_time DESC`. Cancel events are the one
+  exception to the window: `early_cancel` / `late_cancel` rows count when their
+  match is in the window **or** is a later match with `status <> 'cancelled'`
+  (`date_time` after the oldest window match; every non-cancelled match while
+  the group has no finished match yet), so Aviso moves as soon as a member
+  cancels an upcoming match. Aviso = `(played + early) / (played + early + late)`,
+  1.0 when the denominator is 0. Participación denominator
   as §3.1 (window closed: `date_time + results_window_days < now()`, with
   `results_window_days` from `notification_settings`, default 7). Newcomer
   opportunities: `rate_new_member` notifications of the group created within
@@ -544,7 +561,12 @@ Schema exactly as §2, with these additions and precisions:
     admin only, note required, `p_points` in [-20, 20].
   - `admin_delete_member_event(p_event_id UUID)`, admin only, for disputes;
     recomputes.
-  - `admin_recompute_member_scores(p_group_id UUID)`, admin only.
+  - `admin_recompute_member_scores(p_group_id UUID)`, admin only. Also
+    re-runs `schedule_match_jobs` for the group's `signup_open` / `full`
+    matches (so enabling scoring, switching mode or changing `window_hours`
+    after a match opened creates or re-dates its `priority_window_close` job)
+    and, when no future job could be scheduled, reconciles the waitlist through
+    `run_priority_window_close_job` right away.
 - `signup_for_match` (00007, redefine) reads `member_scoring_settings`:
   - keep the return type `public.match_signups`; add a column
     `match_signups.waitlist_reason TEXT` with values `full | priority_window |
@@ -561,6 +583,18 @@ Schema exactly as §2, with these additions and precisions:
   - `waitlist` mode: `promote_from_waitlist` orders by
     `COALESCE(member_score, threshold) DESC, waitlist_position, signup_time`
     when this mode is active for the group; unchanged otherwise.
+  - `promote_from_waitlist` is policy-aware, with the same decisions as
+    `signup_for_match`: rows with `waitlist_reason = 'priority_window'` are
+    skipped while the window is open (`window` mode, `now() < signup_opened_at
+    + window_hours`), rows with `'reserved'` are skipped while the reserved
+    period is active unless `confirmed_count < max_players - reserved_spots`;
+    `'full'` and `'cooldown'` rows are always promotable. The first eligible row
+    in `(waitlist_position, signup_time)` order is promoted, so a cancel during
+    the window never bypasses it; the window job promotes everyone in order once
+    it fires. `matches.status` is only written when it changes.
+  - `no_show` arms `signup_cooldown` only when scoring is `enabled` and
+    `no_show_cooldown` is on; reverting the no-show (`emit_attendance_events`,
+    reached from `admin_set_signup_status`) clears the flag again.
 - `award_badges_for_match`: add `ejemplar` badge for members with
   `member_score >= 4.5` and `played >= 10` in the current breakdown, revoked
   when the condition no longer holds (same pattern as hat_trick).
