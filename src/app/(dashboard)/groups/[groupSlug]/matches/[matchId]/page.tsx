@@ -238,6 +238,20 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .filter(m => m.player_profiles !== null)
     .map(m => m.player_profiles as { id: string; display_name: string; nickname: string | null; main_position: string })
 
+  // Players selectable in team rules: every group member plus any guest on the
+  // match (confirmed or waitlisted). Guests aren't group members, so without
+  // this they'd never show up in the pair-rule pickers even though the team
+  // generator treats their guest_players.id like any other player id.
+  const guestPlayersInMatch = [...confirmedListSignups, ...waitlistSignups]
+    .filter(s => s.guest_players !== null)
+    .map(s => ({ id: s.guest_players!.id, display_name: s.guest_players!.display_name, is_guest: true }))
+  const seenRulePlayerIds = new Set<string>()
+  const rulePlayers = [...allGroupPlayers, ...guestPlayersInMatch].filter(p => {
+    if (seenRulePlayerIds.has(p.id)) return false
+    seenRulePlayerIds.add(p.id)
+    return true
+  })
+
   // Players who participated (for voting) - from confirmed signups
   const matchPlayers = confirmedSignups
     .filter(s => s.player_profiles !== null)
@@ -561,7 +575,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <RulesManager
               groupId={group.id}
               matchId={match.id}
-              players={allGroupPlayers}
+              players={rulePlayers}
             />
           )}
 

@@ -14,6 +14,7 @@ import type { RuleSet, Json } from '@/types/database'
 interface Player {
   id: string
   display_name: string
+  is_guest?: boolean
 }
 
 // Canonical rule_sets.data shapes (see docs/rework-plan.md §2.2):
@@ -160,8 +161,13 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
     }
   }
 
-  const getPlayerName = (id: string | undefined) =>
-    players.find((p) => p.id === id)?.display_name || 'Desconocido'
+  const playerLabel = (p: Player) =>
+    p.is_guest ? `${p.display_name} (invitado)` : p.display_name
+
+  const getPlayerName = (id: string | undefined) => {
+    const p = players.find((x) => x.id === id)
+    return p ? playerLabel(p) : 'Desconocido'
+  }
 
   const renderRuleDescription = (rule: RuleSet) => {
     if (isPairRule(rule.rule_type)) {
@@ -239,7 +245,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
                   >
                     <option value="">Seleccionar...</option>
                     {players.map((p) => (
-                      <option key={p.id} value={p.id}>{p.display_name}</option>
+                      <option key={p.id} value={p.id}>{playerLabel(p)}</option>
                     ))}
                   </select>
                 </div>
@@ -252,7 +258,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
                   >
                     <option value="">Seleccionar...</option>
                     {players.filter((p) => p.id !== playerA).map((p) => (
-                      <option key={p.id} value={p.id}>{p.display_name}</option>
+                      <option key={p.id} value={p.id}>{playerLabel(p)}</option>
                     ))}
                   </select>
                 </div>
