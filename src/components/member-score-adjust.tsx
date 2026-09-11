@@ -88,7 +88,7 @@ export function MemberScoreAdjust({ groupId, playerId }: AdjustProps) {
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} data-testid="member-score-adjust">
-        <SlidersHorizontal className="mr-2 h-4 w-4" />
+        <SlidersHorizontal className="h-4 w-4" strokeWidth={1.75} />
         {t('memberScore.adjust')}
       </Button>
 
@@ -98,21 +98,21 @@ export function MemberScoreAdjust({ groupId, playerId }: AdjustProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="w-full max-w-md rounded-2xl border border-border/50 bg-card text-card-foreground shadow-lg p-6"
+            className="w-full max-w-md rounded-md border border-border bg-card text-card-foreground shadow-lg shadow-black/40 p-4 lg:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 id={titleId} className="text-lg font-semibold">{t('memberScore.adjustTitle')}</h2>
+                <h2 id={titleId} className="font-display text-base font-bold leading-tight">{t('memberScore.adjustTitle')}</h2>
                 <p className="text-sm text-muted-foreground mt-1">{t('memberScore.adjustDescription')}</p>
               </div>
               <button
                 type="button"
                 onClick={close}
-                className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+                className="rounded-[3px] p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                 aria-label={t('common.close')}
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" strokeWidth={1.75} />
               </button>
             </div>
 
@@ -143,7 +143,7 @@ export function MemberScoreAdjust({ groupId, playerId }: AdjustProps) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder={t('memberScore.notePlaceholder')}
-                  className="flex w-full rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                  className="flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
 
@@ -197,11 +197,11 @@ export function MemberEventDeleteButton({ eventId }: DeleteProps) {
         type="button"
         onClick={handleDelete}
         disabled={busy}
-        className="rounded-md p-1 text-muted-foreground hover:text-destructive disabled:opacity-50"
+        className="rounded-[3px] p-1 text-muted-foreground hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label={t('memberScore.deleteEvent')}
         title={t('memberScore.deleteEvent')}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2 className="h-4 w-4" strokeWidth={1.75} />
       </button>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </span>

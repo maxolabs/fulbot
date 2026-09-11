@@ -424,5 +424,17 @@
     "viewDetail": "View details",
     "plusOne": "+1 commitment",
     "plusOneHint": "Reporting the result adds to your member score"
+  },
+  "ui": {
+    "guest": "guest",
+    "close": "Close",
+    "spots": {
+      "label": "Spots",
+      "of": "of {max} signed up",
+      "full": "Full",
+      "left": "{n} spots left",
+      "leftOne": "1 spot left",
+      "waiting": "{n} waiting"
+    }
   }
 }

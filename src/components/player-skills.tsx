@@ -22,7 +22,7 @@ export function SkillSummaryLine({ summary }: { summary: RatingSummary | undefin
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <span className="flex items-center gap-1 font-medium">
-        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+        <Star className="h-4 w-4 text-primary fill-primary" strokeWidth={1.75} aria-hidden="true" />
         {overallOf(summary).toFixed(1)}
       </span>
       {noData ? (
@@ -45,8 +45,8 @@ export function SkillSummaryCard({ summary }: { summary: RatingSummary | undefin
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1">
-          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-          <span className="text-2xl font-bold">{overallOf(summary).toFixed(1)}</span>
+          <Star className="h-6 w-6 text-primary fill-primary" strokeWidth={1.75} aria-hidden="true" />
+          <span className="font-display text-2xl font-bold tabular-nums">{overallOf(summary).toFixed(1)}</span>
         </div>
         <div className="text-xs text-muted-foreground">
           {noData ? (
@@ -72,8 +72,8 @@ export function SkillSummaryCard({ summary }: { summary: RatingSummary | undefin
                 <span className="text-xs text-muted-foreground">{DIMENSION_LABELS[dim]}</span>
                 <span className="text-sm font-semibold">{fmt(value)}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+              <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
+                <div className="h-full rounded-sm bg-primary" style={{ width: `${pct}%` }} />
               </div>
             </div>
           )

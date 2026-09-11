@@ -15,6 +15,8 @@ const sizeClasses = {
 export function Spinner({ className, size = 'md' }: SpinnerProps) {
   return (
     <Loader2
+      aria-hidden="true"
+      strokeWidth={1.75}
       className={cn('animate-spin text-muted-foreground', sizeClasses[size], className)}
     />
   )

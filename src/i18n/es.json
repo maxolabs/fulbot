@@ -424,5 +424,17 @@
     "viewDetail": "Ver detalle",
     "plusOne": "+1 compromiso",
     "plusOneHint": "Reportar el resultado suma a tu puntaje de miembro"
+  },
+  "ui": {
+    "guest": "invitado",
+    "close": "Cerrar",
+    "spots": {
+      "label": "Lugares",
+      "of": "de {max} anotados",
+      "full": "Completo",
+      "left": "{n} lugares",
+      "leftOne": "1 lugar",
+      "waiting": "{n} en espera"
+    }
   }
 }

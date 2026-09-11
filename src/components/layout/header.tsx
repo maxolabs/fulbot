@@ -56,12 +56,12 @@ export function Header({ user }: HeaderProps) {
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/90 backdrop-blur">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo */}
         <div className="flex items-center gap-2">
           <Link href="/groups" className="flex items-center gap-2">
-            <span className="text-xl font-black tracking-tight">
+            <span className="font-display text-xl font-extrabold tracking-[-0.01em]">
               ful<span className="text-primary">bot</span>
             </span>
           </Link>
@@ -90,7 +90,7 @@ export function Header({ user }: HeaderProps) {
           {user && (
             <Link
               href="/notifications"
-              className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="relative rounded-full p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="Notificaciones"
             >
               <Bell className="h-5 w-5" />
@@ -120,8 +120,8 @@ export function Header({ user }: HeaderProps) {
                     className="fixed inset-0 z-10"
                     onClick={() => setUserMenuOpen(false)}
                   />
-                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl bg-card border border-border/50 shadow-lg shadow-black/20">
-                    <div className="px-4 py-3 border-b border-border/50">
+                  <div className="absolute right-0 z-20 mt-2 w-56 rounded-md bg-popover text-popover-foreground border border-border shadow-lg shadow-black/40">
+                    <div className="px-4 py-3 border-b border-border">
                       <p className="text-sm font-medium">{user.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {user.email}
@@ -131,7 +131,7 @@ export function Header({ user }: HeaderProps) {
                       <Link
                         href="/profile"
                         onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-lg mx-1 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-sm mx-1"
                       >
                         <User className="h-4 w-4 text-muted-foreground" />
                         {t('nav.profile')}
@@ -139,14 +139,14 @@ export function Header({ user }: HeaderProps) {
                       <Link
                         href="/settings"
                         onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-lg mx-1 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-accent rounded-sm mx-1"
                       >
                         <Settings className="h-4 w-4 text-muted-foreground" />
                         {t('nav.settings')}
                       </Link>
                       <button
                         onClick={handleSignOut}
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-accent rounded-lg mx-1 transition-colors"
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-accent rounded-sm mx-1"
                       >
                         <LogOut className="h-4 w-4" />
                         {t('nav.logout')}
@@ -159,7 +159,7 @@ export function Header({ user }: HeaderProps) {
           ) : (
             <Link
               href="/login"
-              className="rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-card hover:border-border"
+              className="rounded-[3px] border border-border bg-transparent px-4 py-2 text-sm font-semibold hover:bg-accent"
             >
               {t('nav.login')}
             </Link>
@@ -168,7 +168,8 @@ export function Header({ user }: HeaderProps) {
           {/* Mobile menu button */}
           <button
             type="button"
-            className="md:hidden rounded-lg p-2 hover:bg-accent transition-colors"
+            className="md:hidden rounded-[3px] p-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label="Menú"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
@@ -182,7 +183,7 @@ export function Header({ user }: HeaderProps) {
 
       {/* Mobile Navigation */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-border/50">
+        <div className="md:hidden border-t border-border">
           <div className="space-y-1 px-4 py-3">
             {navigation.map((item) => (
               <Link
@@ -190,7 +191,7 @@ export function Header({ user }: HeaderProps) {
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
-                  'block rounded-lg px-3 py-2.5 text-base font-medium transition-colors',
+                  'block rounded-sm px-3 py-2.5 text-base font-medium',
                   pathname.startsWith(item.href)
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-accent'

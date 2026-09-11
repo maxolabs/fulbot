@@ -125,7 +125,7 @@ export default async function ProfilePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
-                <Avatar fallback={profile.display_name} size="xl" />
+                <Avatar fallback={profile.display_name} size="lg" />
                 <h2 className="mt-4 text-xl font-semibold">{profile.display_name}</h2>
                 {profile.nickname && (
                   <p className="text-muted-foreground">{profile.nickname}</p>

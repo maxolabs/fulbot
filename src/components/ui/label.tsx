@@ -2,8 +2,9 @@ import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils/cn'
 
+// Pizarra label = the mono eyebrow (docs/ui-rework/04-components.md §1).
 const labelVariants = cva(
-  'text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
+  'block font-mono text-[10px] font-medium uppercase leading-none tracking-[.12em] text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
 )
 
 const Label = React.forwardRef<
@@ -14,4 +15,4 @@ const Label = React.forwardRef<
 ))
 Label.displayName = 'Label'
 
-export { Label }
+export { Label, labelVariants }

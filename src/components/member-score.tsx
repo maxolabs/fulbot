@@ -33,6 +33,7 @@ export function MemberScoreStars({ score, variant = 'compact', language = 'es', 
     return (
       <span className={cn('inline-flex items-center gap-1 text-sm font-medium', className)}>
         <Star
+          strokeWidth={1.75}
           className={cn('h-4 w-4', value === null ? 'text-muted-foreground' : 'text-primary fill-primary')}
           aria-hidden="true"
         />
@@ -48,7 +49,7 @@ export function MemberScoreStars({ score, variant = 'compact', language = 'es', 
       <div className="relative inline-flex" aria-hidden="true">
         <div className="flex gap-0.5">
           {[0, 1, 2, 3, 4].map((i) => (
-            <Star key={i} className="h-6 w-6 text-muted-foreground/40" />
+            <Star key={i} className="h-6 w-6 text-muted-foreground" />
           ))}
         </div>
         <div className="absolute inset-0 overflow-hidden" style={{ width: `${pct}%` }}>
@@ -62,7 +63,7 @@ export function MemberScoreStars({ score, variant = 'compact', language = 'es', 
       {formatted === null ? (
         <span className="text-xl font-semibold text-muted-foreground">{t('memberScore.new')}</span>
       ) : (
-        <span className="text-2xl font-bold">
+        <span className="font-display text-2xl font-bold tabular-nums">
           {formatted}
           <span className="text-sm font-normal text-muted-foreground"> /5</span>
         </span>
@@ -76,7 +77,7 @@ type Dimension = (typeof DIMENSIONS)[number]
 
 function barColor(ratio: number): string {
   if (ratio >= 0.75) return 'bg-primary'
-  if (ratio >= 0.5) return 'bg-yellow-500'
+  if (ratio >= 0.5) return 'bg-warning'
   return 'bg-destructive'
 }
 
@@ -132,8 +133,8 @@ export function MemberScoreBreakdown({ breakdown, language = 'es', className }: 
                 <span className="text-sm font-medium">{t(`memberScore.dimensions.${dim}`)}</span>
                 <span className="text-xs text-muted-foreground text-right">{detailFor(t, dim, b)}</span>
               </div>
-              <div className="h-2 rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label={t(`memberScore.dimensions.${dim}`)}>
-                <div className={cn('h-full rounded-full transition-all', barColor(ratio))} style={{ width: `${ratio * 100}%` }} />
+              <div className="h-2 rounded-sm bg-muted overflow-hidden" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label={t(`memberScore.dimensions.${dim}`)}>
+                <div className={cn('h-full rounded-sm', barColor(ratio))} style={{ width: `${ratio * 100}%` }} />
               </div>
               {dim === 'participacion' && (
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground pt-0.5">
