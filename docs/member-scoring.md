@@ -2,7 +2,8 @@
 
 Design proposal, 2026-09-10. Revised 2026-09-11 on top of main after PR #1
 (peer ratings, 00018) and PR #2 (crowd-sourced results and scheduler,
-00019/00020). No code yet.
+00019/00020). Implemented on `maxolabs/member-scoring` (migration 00021); see §8 for
+what shipped and what is backlog.
 
 ## 1. What it is, and what it is not
 
@@ -405,42 +406,83 @@ In-app `notifications` rows inserted directly (never through
 - **Only admins/captains can report negatives**; peers only positives.
 - **Guests are outside the system**: they sign up through admins anyway.
 
-## 8. Phasing
+## 8. Status and backlog
 
-**v1 (core, no policies).** Migration 00021 with `member_events`, membership
-columns, settings shape, `recompute_member_score`, system events wired into
-`recompute_player_stats` / finish / cancel / set-status / `submit_match_report`
-/ rating and vote triggers, backfill, conduct check UI, score + breakdown on
-player page, settings card with enable/window/visibility. Replace
-`reliability_score` reads and drop the column. Groups get a meaningful score
-after this alone.
+### Shipped (migration `00021_member_scoring.sql` and the app on this branch)
 
-**v2 (policies).** `priority.mode = window` with `signup_opened_at` and the
-`priority_window_close` job, no-show cooldown, signup-box messaging, threshold
-nudges.
+- Events ledger (`member_events`), per-group score and breakdown on
+  `group_memberships`, rolling window, newcomer handling, recompute, backfill.
+- Every system input: attendance, no-shows, early/late cancels (counted
+  immediately), reported results, teammate ratings, MVP votes, newcomer ratings.
+- Conduct check (late, wrong jersey, unpaid) for admins and captains.
+- Admin adjustments with mandatory note, event deletion, group recompute.
+- Policies, all off by default: priority `window`, `reserved`, `waitlist`
+  modes, no-show cooldown, `priority_window_close` job in the scheduler.
+- Score on the player page (stars, five bars, event log), players list and
+  profile; team generator reads it; `reliability_score` dropped.
+- Signup policy notice, `waitlist_reason`, admin reason tags,
+  `member_score_dropped` / `member_score_recovered` notifications, "Ejemplar"
+  badge, "+1 compromiso" after reporting a result.
+- Settings card with every option and an "Avanzado" block for weights.
 
-**v3 (social).** Peer kudos, "Ejemplar" badge, `reserved` and `waitlist`
-modes, the "reported before the reminder" tier, payment tracking if it turns
-out to be wanted as a real feature rather than a flag.
+### Backlog (designed, not built)
+
+1. **Peer kudos** (§4.3). The `peer_kudos` event type and its weight exist in
+   the enum, the settings editor and the recompute, but there is no UI for a
+   member to give one and no RPC that inserts it. Needs: `give_kudos(match_id,
+   player_id, tag)` limited to confirmed players of a finished match inside
+   the results window, one per giver per receiver per match, +1 cap per
+   receiver per match in the recompute, a tag picker on the post-match voting
+   block, and a line in the event log.
+2. **"Reported before the reminder" tier** (§3.1). One extra participation
+   point when `match_reports.created_at` is earlier than the match's
+   `results_reminder` job `run_at`. Needs a weight key, a breakdown counter and
+   a sentence in the report form.
+3. **Payment tracking**. "No pagó" is a conduct flag only (decision 1 below).
+   If a group wants a ledger of who owes what, that is a separate feature
+   (amount per match, who collected, settle-up), and `unpaid`/`paid` events
+   would be emitted from it instead of from the conduct check.
+4. **Policy notice while a match is `full` in `reserved` mode**
+   (`src/components/signup-policy-notice.tsx` renders only for
+   `signup_open`). Signup itself behaves correctly; only the explanation is
+   missing on that state.
+5. **English copy on host pages**. The new components are translated, but the
+   surrounding player page, settings shell and badge labels were already
+   hardcoded Spanish before this feature, so an EN user sees a mixed page.
+6. **Guest row in the conduct check** is implemented but has never been
+   rendered against real data (no seeded finished match has a guest).
+7. **Weights validation against a real group** (decision 3 below): run the
+   backfill on a hosted group and eyeball the distribution before changing
+   the defaults.
+8. **Hosted rollout**: apply 00021 to the hosted Supabase after merge; the
+   backfill runs inside the migration and recomputes every group.
 
 ## 9. Open decisions
 
+Decided 2026-09-11 for the first release (each can be revisited; every value
+is a per-group setting except 7):
+
 1. **Payment**: is "no pagó" a conduct flag, or does the group want actual
    payment tracking (who owes what)? The flag is cheap; tracking is its own
-   feature. Proposal: flag only in v1.
+   feature. **Decided: flag only** (backlog item 3).
 2. **Captains reporting**: default on or off? Proposal: on, since captains
    already exist as a trusted role and admins are usually one person.
+   **Decided: on** (`captains_can_report`).
 3. **Default weights and dimension weights**: the numbers above are a first
    guess; they should be validated against one real group's history via the
    backfill before committing. Participación at 0.15 is deliberately the
    second-largest after Asistencia because it is the cheapest behavior to
-   change and the one the results feature depends on.
+   change and the one the results feature depends on. **Decided: ship the
+   proposed defaults**, validate later (backlog item 7).
 4. **Default priority mode when the admin enables it**: `window` proposed.
+   **Decided: `window`.**
 5. **`late_cancel_hours`**: 6h today; many groups would say "el día anterior".
-   Per group setting either way.
+   Per group setting either way. **Decided: 6h default.**
 6. **Newcomer rating deadline**: 14 days proposed for `rated_new_member`.
+   **Decided: 14 days.**
 7. **Fate of `reliability_score`**: drop the column (proposed, mirrors
    00018's drop of `overall_rating`), or keep it as a view over the new score.
+   **Decided: dropped.**
 
 ## 10. Implementation contract (agents build against this; names are final)
 
