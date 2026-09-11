@@ -96,6 +96,9 @@ export function MatchResults({
   // When locked the editor is collapsed behind "Corregir" so a re-save is deliberate.
   const [editingLocked, setEditingLocked] = useState(false)
   const [lockedByName, setLockedByName] = useState<string | null>(null)
+  // Formatted on the client only: toLocaleString differs between server and browser
+  // (timezone/locale data), which would otherwise be a hydration mismatch.
+  const [lockedAtLabel, setLockedAtLabel] = useState<string | null>(null)
 
   const isLocked = resultStatus === 'locked'
 
@@ -107,6 +110,12 @@ export function MatchResults({
     setMvpId(mvpPlayerId ?? '')
     setEditingLocked(false)
   }, [existingEvents, darkTeam?.score, lightTeam?.score, mvpPlayerId, resultStatus])
+
+  useEffect(() => {
+    setLockedAtLabel(
+      lockedAt ? new Date(lockedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+    )
+  }, [lockedAt])
 
   useEffect(() => {
     if (!isLocked || !lockedBy) {
@@ -349,10 +358,6 @@ export function MatchResults({
     )
   }
 
-  const lockedAtLabel = lockedAt
-    ? new Date(lockedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-    : null
-
   const showEditor = !isLocked || editingLocked
 
   return (
@@ -374,8 +379,8 @@ export function MatchResults({
         {isLocked && (
           <div className="rounded-md border px-4 py-3 text-sm space-y-3">
             <p>
-              Cerrado{lockedByName ? ` por ${lockedByName}` : ''}{lockedAtLabel ? ` el ${lockedAtLabel}` : ''}.
-              Los reportes que lleguen ahora se guardan pero no cambian el resultado.
+              Cerrado{lockedByName ? ` por ${lockedByName}` : ''}{lockedAtLabel ? ` el ${lockedAtLabel}` : ''}
+              {' — '}los reportes que lleguen ahora se guardan pero no cambian el resultado.
             </p>
             <div className="flex flex-wrap gap-2">
               {!editingLocked && (
