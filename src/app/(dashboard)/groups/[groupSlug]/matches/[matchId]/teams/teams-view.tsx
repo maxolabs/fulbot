@@ -305,7 +305,7 @@ export function TeamsView({
                   <CardTitle className="flex items-center justify-between">
                     <span>Equipo Oscuro</span>
                     <Badge variant="secondary" className="bg-white/20">
-                      {darkPlayers.length} jugadores · {darkAvgRating.toFixed(1)} avg
+                      {darkPlayers.length} jugadores{isAdminOrCaptain && ` · ${darkAvgRating.toFixed(1)} avg`}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
@@ -313,6 +313,7 @@ export function TeamsView({
                   <LineupField
                     players={darkPlayers}
                     teamColor="dark"
+                    showRatings={isAdminOrCaptain}
                   />
                 </CardContent>
               </Card>
@@ -323,7 +324,7 @@ export function TeamsView({
                   <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
                     <span>Equipo Claro</span>
                     <Badge variant="secondary" className="bg-white/30">
-                      {lightPlayers.length} jugadores · {lightAvgRating.toFixed(1)} avg
+                      {lightPlayers.length} jugadores{isAdminOrCaptain && ` · ${lightAvgRating.toFixed(1)} avg`}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
@@ -331,6 +332,7 @@ export function TeamsView({
                   <LineupField
                     players={lightPlayers}
                     teamColor="light"
+                    showRatings={isAdminOrCaptain}
                   />
                 </CardContent>
               </Card>
@@ -374,7 +376,7 @@ export function TeamsView({
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {player.mainPosition} · {player.overallRating.toFixed(1)}
+                      {player.mainPosition}{isAdminOrCaptain && ` · ${player.overallRating.toFixed(1)}`}
                     </p>
                   </div>
                 </div>

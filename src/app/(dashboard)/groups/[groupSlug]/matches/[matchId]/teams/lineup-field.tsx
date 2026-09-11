@@ -16,9 +16,11 @@ interface Player {
 interface LineupFieldProps {
   players: Player[]
   teamColor: 'dark' | 'light'
+  // Scores are visible to admins and captains only
+  showRatings?: boolean
 }
 
-export function LineupField({ players, teamColor }: LineupFieldProps) {
+export function LineupField({ players, teamColor, showRatings = false }: LineupFieldProps) {
   // Slot every player into the fixed formation for this team size
   const positionedPlayers = placePlayersInFormation(players).map(({ player, slot }) => ({
     ...player,
@@ -135,11 +137,13 @@ export function LineupField({ players, teamColor }: LineupFieldProps) {
           >
             {player.nickname || player.displayName.split(' ')[0]}
           </div>
-          {/* Rating badge */}
-          <div className="flex items-center gap-0.5 text-[10px] text-yellow-400">
-            <Star className="h-2.5 w-2.5 fill-yellow-400" />
-            {player.overallRating.toFixed(1)}
-          </div>
+          {/* Rating badge (admins/captains only) */}
+          {showRatings && (
+            <div className="flex items-center gap-0.5 text-[10px] text-yellow-400">
+              <Star className="h-2.5 w-2.5 fill-yellow-400" />
+              {player.overallRating.toFixed(1)}
+            </div>
+          )}
         </div>
       ))}
 

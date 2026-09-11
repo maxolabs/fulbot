@@ -54,7 +54,6 @@ export type Database = {
           goalkeeper_willingness: number
           reliability_score: number
           fitness_status: 'ok' | 'limited' | 'injured'
-          overall_rating: number
           matches_played: number
           goals: number
           assists: number
@@ -74,7 +73,6 @@ export type Database = {
           goalkeeper_willingness?: number
           reliability_score?: number
           fitness_status?: 'ok' | 'limited' | 'injured'
-          overall_rating?: number
           matches_played?: number
           goals?: number
           assists?: number
@@ -94,7 +92,6 @@ export type Database = {
           goalkeeper_willingness?: number
           reliability_score?: number
           fitness_status?: 'ok' | 'limited' | 'injured'
-          overall_rating?: number
           matches_played?: number
           goals?: number
           assists?: number
@@ -418,6 +415,71 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+      peer_ratings: {
+        Row: {
+          id: string
+          group_id: string
+          voter_player_id: string
+          rated_player_id: string
+          skipped: boolean
+          goalkeeping: number | null
+          defense: number | null
+          attack: number | null
+          physical: number | null
+          tags: string[]
+          is_baseline: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          voter_player_id: string
+          rated_player_id: string
+          skipped?: boolean
+          goalkeeping?: number | null
+          defense?: number | null
+          attack?: number | null
+          physical?: number | null
+          tags?: string[]
+          is_baseline?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          voter_player_id?: string
+          rated_player_id?: string
+          skipped?: boolean
+          goalkeeping?: number | null
+          defense?: number | null
+          attack?: number | null
+          physical?: number | null
+          tags?: string[]
+          is_baseline?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      player_rating_summary: {
+        Row: {
+          player_id: string
+          goalkeeping: number | null
+          defense: number | null
+          attack: number | null
+          physical: number | null
+          overall: number
+          tags: string[]
+          peer_votes: number
+          matches_rated: number
+          updated_at: string
+        }
+        Insert: never
+        Update: never
         Relationships: []
       }
       match_ratings: {

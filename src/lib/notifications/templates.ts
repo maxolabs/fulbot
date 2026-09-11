@@ -37,6 +37,8 @@ export function renderNotificationText(
       return `Hoy ${event.payload.time} -- ${event.payload.group_name} -- remera oscura/clara según tu equipo`
     case 'results_posted':
       return `Resultado cargado: Oscuro ${event.payload.dark_score} - Claro ${event.payload.light_score}.`
+    case 'rate_new_member':
+      return `¡${event.payload.player_name} se sumó al grupo! Si ya jugaste con esa persona, dejá tu calificación para que los equipos salgan parejos.`
     default: {
       const _exhaustive: never = event
       return _exhaustive

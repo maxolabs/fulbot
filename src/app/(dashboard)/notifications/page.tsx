@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NotificationList } from './notification-list'
-import type { NotificationRow } from '@/lib/notifications/types'
+import type { NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
 export default async function NotificationsPage() {
@@ -34,7 +34,14 @@ export default async function NotificationsPage() {
     .order('created_at', { ascending: false })
     .limit(100) as { data: NotificationRow[] | null }
 
-  const rows = notifications ?? []
+  // A "rate the new member" nudge is for everyone except the new member.
+  const rows = (notifications ?? []).filter(
+    (n) =>
+      !(
+        n.type === 'rate_new_member' &&
+        (n.payload as RateNewMemberPayload).player_id === playerProfile?.id
+      )
+  )
   const groupIds = Array.from(new Set(rows.map((n) => n.group_id)))
 
   const { data: groups } =

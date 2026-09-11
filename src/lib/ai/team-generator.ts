@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { generateFallbackTeams } from './fallback-balancer'
+import { tagLabel, type PlayerSkills } from '@/lib/ratings'
 
 export interface PlayerInput {
   id: string
@@ -9,6 +10,9 @@ export interface PlayerInput {
   mainPosition: string
   preferredPositions: string[]
   overallRating: number
+  // Peer-rated 1-5 skills (null when nobody has rated the player yet) and trait tags
+  skills: PlayerSkills | null
+  tags: string[]
   footedness: 'left' | 'right' | 'both'
   goalkeeperWillingness: number // 0-3
   fitnessStatus: 'ok' | 'limited' | 'injured'
@@ -38,6 +42,8 @@ export function guestPlayerDefaults(guest: {
     mainPosition: positions[0],
     preferredPositions: positions,
     overallRating: guest.estimatedRating ?? 2.5,
+    skills: null,
+    tags: [],
     footedness: 'right',
     goalkeeperWillingness: 1,
     fitnessStatus: 'ok',
@@ -143,9 +149,14 @@ function buildPrompt(
     const positions = [p.mainPosition, ...p.preferredPositions.filter((pos) => pos !== p.mainPosition)].join(', ')
     const foot = p.footedness === 'both' ? 'ambidextrous' : p.footedness === 'left' ? 'left-footed' : 'right-footed'
     const gkWillingness = ['never', 'only if needed', 'can do it', 'loves it'][p.goalkeeperWillingness] ?? 'unknown'
+    const skills = p.skills
+      ? `GK ${p.skills.goalkeeping.toFixed(1)} | DEF ${p.skills.defense.toFixed(1)} | ATT ${p.skills.attack.toFixed(1)} | PHY ${p.skills.physical.toFixed(1)}`
+      : 'not rated yet (assume average)'
+    const traits = p.tags.length > 0 ? p.tags.map(tagLabel).join(', ') : 'none'
 
     return `- ${p.displayName}${p.nickname ? ` (${p.nickname})` : ''} [ID: ${p.id}]
-  Rating: ${p.overallRating.toFixed(1)}/5 | Positions: ${positions} | ${foot}
+  Rating: ${p.overallRating.toFixed(1)}/5 | Skills (1-5): ${skills} | Traits: ${traits}
+  Positions: ${positions} | ${foot}
   GK willingness: ${gkWillingness} | Fitness: ${p.fitnessStatus} | Reliability: ${(p.reliabilityScore * 100).toFixed(0)}%
   Stats: ${p.matchesPlayed} matches, ${p.goals} goals, ${p.assists} assists
   ${p.isGuest ? '(Guest player - less known, use average defaults)' : ''}`
@@ -220,6 +231,8 @@ This match is ${teamSize}-a-side.
 Create two balanced teams (Dark and Light) considering:
 1. **Hard constraints first**: never violate avoid_pair/force_pair rules or the goalkeeper minimum
 2. **Overall Rating Balance**: The average rating of both teams should be as close as possible
+   - Also balance the DEF, ATT and PHY skill averages between the teams; don't stack all the attackers on one side
+   - For the goalkeeper slot prefer players with a high GK skill, then GK willingness
 3. **Position Coverage**: Each team needs players who can play key positions (especially GK and defense)
 4. **Complementary Skills**: Mix of attackers, midfielders, and defenders
 5. **Footedness Distribution**: Balance left and right-footed players when possible

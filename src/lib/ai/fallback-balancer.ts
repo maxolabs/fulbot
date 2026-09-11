@@ -103,9 +103,14 @@ export function generateFallbackTeams(
     })
 
   // Step 1: seed the two teams with the two most goalkeeper-willing (distinct) units
+  const gkSkill = (p: PlayerInput) => p.skills?.goalkeeping ?? 0
   const gkSorted = [...players]
     .filter((p) => p.goalkeeperWillingness >= 1)
-    .sort((a, b) => b.goalkeeperWillingness - a.goalkeeperWillingness || b.overallRating - a.overallRating)
+    .sort((a, b) =>
+      b.goalkeeperWillingness - a.goalkeeperWillingness ||
+      gkSkill(b) - gkSkill(a) ||
+      b.overallRating - a.overallRating
+    )
 
   const preassignedUnits = new Set<Unit>()
   const gkUnitsPicked: Unit[] = []

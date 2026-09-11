@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CalendarPlus, ArrowUpCircle, Users, Clock, Goal, Bell, type LucideIcon } from 'lucide-react'
+import { CalendarPlus, ArrowUpCircle, Users, Clock, Goal, Bell, Star, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { renderNotificationText } from '@/lib/notifications/templates'
-import type { NotificationEvent, NotificationRow } from '@/lib/notifications/types'
+import type { NotificationEvent, NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { formatMatchTime } from '@/lib/utils/datetime'
 
 interface NotificationItem extends NotificationRow {
@@ -23,6 +23,7 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   teams_created: Users,
   match_reminder: Clock,
   results_posted: Goal,
+  rate_new_member: Star,
 }
 
 // Date/month via Intl's default formatting is fine here (no AM/PM
@@ -117,11 +118,13 @@ export function NotificationList({
           const Icon = TYPE_ICON[n.type] ?? Bell
           const isRead = readIds.has(n.id)
           const href =
-            n.match_id && n.groupSlug
-              ? `/groups/${n.groupSlug}/matches/${n.match_id}`
-              : n.groupSlug
-                ? `/groups/${n.groupSlug}`
-                : null
+            n.type === 'rate_new_member' && n.groupSlug
+              ? `/groups/${n.groupSlug}/rate?player=${(n.payload as RateNewMemberPayload).player_id}`
+              : n.match_id && n.groupSlug
+                ? `/groups/${n.groupSlug}/matches/${n.match_id}`
+                : n.groupSlug
+                  ? `/groups/${n.groupSlug}`
+                  : null
 
           const card = (
             <Card className={isRead ? 'opacity-70' : 'border-primary/30'}>

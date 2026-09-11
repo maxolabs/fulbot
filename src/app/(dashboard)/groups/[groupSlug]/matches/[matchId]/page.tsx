@@ -139,7 +139,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
       display_name: string
       nickname: string | null
       main_position: string
-      overall_rating: number
     } | null
     guest_players: {
       id: string
@@ -162,8 +161,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         id,
         display_name,
         nickname,
-        main_position,
-        overall_rating
+        main_position
       ),
       guest_players (
         id,
@@ -208,6 +206,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
       if (badgesByPlayer[row.player_id].length < 3) {
         badgesByPlayer[row.player_id].push(row.badge_type)
       }
+    }
+  }
+
+  // Scores are visible to admins and captains only (RLS on player_rating_summary
+  // enforces it; this just avoids a pointless query for members).
+  const ratingsById: Record<string, number> = {}
+  if (isAdminOrCaptain && listedPlayerIds.length > 0) {
+    const { data: summaryRows } = await supabase
+      .from('player_rating_summary')
+      .select('player_id, overall')
+      .in('player_id', listedPlayerIds) as { data: { player_id: string; overall: number }[] | null }
+    for (const row of summaryRows || []) {
+      ratingsById[row.player_id] = row.overall
     }
   }
 
@@ -479,6 +490,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 isAdminOrCaptain={isAdminOrCaptain}
                 matchStatus={match.status}
                 badgesByPlayer={badgesByPlayer}
+                ratingsById={ratingsById}
               />
             </CardContent>
           </Card>
@@ -499,6 +511,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   emptyMessage="No hay nadie en espera"
                   isAdminOrCaptain={isAdminOrCaptain}
                   badgesByPlayer={badgesByPlayer}
+                  ratingsById={ratingsById}
                 />
               </CardContent>
             </Card>

@@ -164,15 +164,15 @@ ${lightList}
       const data = {
         groupName,
         matchDate: formatDate(matchDate),
+        // No scores here: the image is shared with the whole group and ratings are
+        // visible to admins and captains only.
         darkTeam: darkPlayers.map(p => ({
           name: formatPlayerName(p),
           position: p.position,
-          rating: p.overallRating,
         })),
         lightTeam: lightPlayers.map(p => ({
           name: formatPlayerName(p),
           position: p.position,
-          rating: p.overallRating,
         })),
       }
 

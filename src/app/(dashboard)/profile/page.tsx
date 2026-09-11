@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
-import { Trophy, Target, Star, Calendar, TrendingUp } from 'lucide-react'
+import { Trophy, Target, Calendar, TrendingUp } from 'lucide-react'
 import { ProfileForm } from './profile-form'
 
 const POSITION_LABELS: Record<string, string> = {
@@ -63,7 +63,6 @@ export default async function ProfilePage() {
       goalkeeper_willingness: number
       reliability_score: number
       fitness_status: 'ok' | 'limited' | 'injured'
-      overall_rating: number
       matches_played: number
       goals: number
       assists: number
@@ -94,12 +93,6 @@ export default async function ProfilePage() {
                 <p className="text-sm text-muted-foreground mt-1">
                   {POSITION_LABELS[profile.main_position] || profile.main_position}
                 </p>
-                <div className="flex items-center gap-1 mt-2">
-                  <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-                  <span className="text-lg font-semibold">
-                    {profile.overall_rating.toFixed(1)}
-                  </span>
-                </div>
               </div>
             </CardContent>
           </Card>

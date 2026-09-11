@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
 import { TeamsView } from './teams-view'
 import { DEFAULT_TIMEZONE, formatMatchDate } from '@/lib/utils/datetime'
 
@@ -83,7 +84,6 @@ export default async function TeamsPage({ params }: PageProps) {
       display_name: string
       nickname: string | null
       main_position: string
-      overall_rating: number
     } | null
     guest_players: {
       id: string
@@ -101,8 +101,7 @@ export default async function TeamsPage({ params }: PageProps) {
         id,
         display_name,
         nickname,
-        main_position,
-        overall_rating
+        main_position
       ),
       guest_players (
         id,
@@ -111,6 +110,19 @@ export default async function TeamsPage({ params }: PageProps) {
     `)
     .eq('match_id', matchId)
     .eq('status', 'confirmed') as { data: SignupResult[] | null }
+
+  // Scores: player_rating_summary is readable by admins/captains only, so members
+  // simply get the default here (and the UI hides the numbers for them anyway).
+  const ratedIds = (signups || [])
+    .map((s) => s.player_profiles?.id)
+    .filter((id): id is string => !!id)
+  const { data: summaryRows } = ratedIds.length > 0
+    ? await supabase
+        .from('player_rating_summary')
+        .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+        .in('player_id', ratedIds) as { data: RatingSummary[] | null }
+    : { data: [] as RatingSummary[] }
+  const summaries = summariesById(summaryRows)
 
   const players = (signups || [])
     .filter((s) => s.player_profiles !== null || s.guest_players !== null)
@@ -121,7 +133,7 @@ export default async function TeamsPage({ params }: PageProps) {
           displayName: s.player_profiles.display_name,
           nickname: s.player_profiles.nickname,
           mainPosition: s.player_profiles.main_position,
-          overallRating: s.player_profiles.overall_rating,
+          overallRating: overallOf(summaries.get(s.player_profiles.id)),
           isGuest: false,
         }
       }

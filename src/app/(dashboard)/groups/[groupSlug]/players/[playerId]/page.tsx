@@ -12,6 +12,8 @@ import {
   Award,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { SkillSummaryCard } from '@/components/player-skills'
+import type { RatingSummary } from '@/lib/ratings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
@@ -55,6 +57,14 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
 
+  const { data: currentPlayer } = await supabase
+    .from('player_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single() as { data: { id: string } | null }
+
+  if (!currentPlayer) return notFound()
+
   // Get group
   const { data: group } = await supabase
     .from('groups')
@@ -77,7 +87,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     goalkeeper_willingness: number
     reliability_score: number
     fitness_status: string
-    overall_rating: number
     matches_played: number
     goals: number
     assists: number
@@ -93,6 +102,29 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     .single() as { data: PlayerProfileFull | null }
 
   if (!player) return notFound()
+
+  // Viewer's role in this group: scores are visible to admins and captains only
+  const { data: viewerMembership } = await supabase
+    .from('group_memberships')
+    .select('role')
+    .eq('group_id', group.id)
+    .eq('player_id', currentPlayer.id)
+    .eq('is_active', true)
+    .single() as { data: { role: 'admin' | 'captain' | 'member' } | null }
+
+  if (!viewerMembership) return notFound()
+
+  const isAdminOrCaptain = viewerMembership.role === 'admin' || viewerMembership.role === 'captain'
+
+  let ratingSummary: RatingSummary | null = null
+  if (isAdminOrCaptain) {
+    const { data: summaryRow } = await supabase
+      .from('player_rating_summary')
+      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .eq('player_id', playerId)
+      .maybeSingle() as { data: RatingSummary | null }
+    ratingSummary = summaryRow
+  }
 
   // Get player badges
   type BadgeRow = {
@@ -200,14 +232,15 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                 )}
               </div>
             </div>
-            <div className="text-center">
-              <div className="flex items-center gap-1">
-                <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-                <span className="text-2xl font-bold">{player.overall_rating.toFixed(1)}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Rating</p>
-            </div>
           </div>
+
+          {/* Scores: admins and captains only */}
+          {isAdminOrCaptain && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs text-muted-foreground mb-3">Calificación del grupo</p>
+              <SkillSummaryCard summary={ratingSummary} />
+            </div>
+          )}
 
           {/* Preferred positions */}
           {player.preferred_positions.length > 0 && (
