@@ -720,6 +720,8 @@ export type Database = {
           p_match_id: string
           p_display_name: string
           p_notes?: string
+          p_estimated_rating?: number
+          p_preferred_positions?: string[]
         }
         Returns: Database['public']['Tables']['match_signups']['Row']
       }

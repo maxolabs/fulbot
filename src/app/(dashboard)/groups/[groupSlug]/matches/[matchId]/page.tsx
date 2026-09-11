@@ -144,6 +144,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
+      notes: string | null
+      estimated_rating: number
+      preferred_positions: string[]
     } | null
   }
 
@@ -167,7 +170,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
       ),
       guest_players (
         id,
-        display_name
+        display_name,
+        notes,
+        estimated_rating,
+        preferred_positions
       )
     `)
     .eq('match_id', matchId)
@@ -567,6 +573,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
               isFull={confirmedSignups.length >= match.max_players}
               maxPlayers={match.max_players}
               confirmedCount={confirmedSignups.length}
+              groupName={group.name}
+              dateTime={match.date_time}
+              location={match.location}
+              timeZone={timeZone}
             />
           )}
 

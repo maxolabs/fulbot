@@ -29,6 +29,9 @@ interface Signup {
   guest_players: {
     id: string
     display_name: string
+    notes?: string | null
+    estimated_rating?: number
+    preferred_positions?: string[]
   } | null
 }
 
@@ -201,7 +204,19 @@ export function SignupList({
                     </span>
                   </>
                 ) : (
-                  <span>Jugador invitado</span>
+                  <>
+                    <span>
+                      {guest?.preferred_positions?.[0]
+                        ? POSITION_LABELS[guest.preferred_positions[0]] || guest.preferred_positions[0]
+                        : 'Jugador invitado'}
+                    </span>
+                    {typeof guest?.estimated_rating === 'number' && (
+                      <span className="flex items-center gap-0.5" title="Nivel estimado">
+                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                        {guest.estimated_rating.toFixed(1)}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
