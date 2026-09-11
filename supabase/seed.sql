@@ -18,6 +18,7 @@ BEGIN;
 
 -- ---------------------------------------------------------------- clean slate
 DELETE FROM public.notification_reads;
+DELETE FROM public.peer_ratings;
 DELETE FROM public.notification_outbox;
 DELETE FROM public.notifications;
 DELETE FROM public.player_badges;
@@ -67,16 +68,11 @@ FROM (VALUES
     ('luis@test.local',   'Luis Ortiz')
 ) AS t(e, n);
 
--- Player attributes: (email, nickname, main, preferred[], foot, gk 0-3, fitness, rating)
-UPDATE public.player_profiles pp SET
-    nickname = a.nick,
-    main_position = a.main,
-    preferred_positions = a.prefs,
-    footedness = a.foot::footedness,
-    goalkeeper_willingness = a.gk,
-    fitness_status = a.fit::fitness_status,
-    overall_rating = a.rating
-FROM (VALUES
+-- Player attributes: (email, nickname, main, preferred[], foot, gk 0-3, fitness, rating).
+-- `rating` is the seed's idea of the player's level; it feeds the peer ratings below
+-- (player_profiles no longer carries an overall_rating column).
+CREATE TEMP TABLE seed_attrs AS
+SELECT * FROM (VALUES
     ('maxo@test.local',   'Maxo',    'CM',  ARRAY['CM','CDM','CB'],  'right', 1, 'ok',      3.60),
     ('juan@test.local',   'Juampi',  'ST',  ARRAY['ST','LW','CAM'],  'left',  0, 'ok',      4.30),
     ('pedro@test.local',  'Pedrito', 'GK',  ARRAY['GK','CB'],        'right', 3, 'ok',      3.80),
@@ -97,7 +93,16 @@ FROM (VALUES
     ('pablo@test.local',  'Pablito', 'CB',  ARRAY['CB','LB'],        'right', 1, 'ok',      3.00),
     ('facu@test.local',   'Facu',    'ST',  ARRAY['ST','RW'],        'right', 0, 'ok',      3.40),
     ('luis@test.local',   'Luis',    'CM',  ARRAY['CM'],             'right', 0, 'ok',      3.00)
-) AS a(email, nick, main, prefs, foot, gk, fit, rating)
+) AS a(email, nick, main, prefs, foot, gk, fit, rating);
+
+UPDATE public.player_profiles pp SET
+    nickname = a.nick,
+    main_position = a.main,
+    preferred_positions = a.prefs,
+    footedness = a.foot::footedness,
+    goalkeeper_willingness = a.gk,
+    fitness_status = a.fit::fitness_status
+FROM seed_attrs a
 JOIN public.users u ON u.email = a.email
 WHERE pp.user_id = u.id;
 
@@ -131,6 +136,57 @@ SELECT '22222222-2222-4222-8222-222222222222', pp.id,
 FROM public.player_profiles pp JOIN public.users u ON u.id = pp.user_id
 WHERE u.email IN ('nico@test.local','maxo@test.local','facu@test.local','pablo@test.local','fede@test.local',
                   'gonza@test.local','tomi@test.local','santi@test.local','mati@test.local','agus@test.local');
+
+-- ---------------------------------------------------------------- peer ratings (initial scoring)
+-- The membership inserts above fired the rate_new_member trigger; a seeded group is not
+-- "everyone just joined", so drop those.
+DELETE FROM public.notifications WHERE type = 'rate_new_member';
+
+-- Per-dimension 1-5 values derived from the seed rating and the main position.
+CREATE TEMP TABLE seed_dims AS
+SELECT u.id AS user_id, pp.id AS player_id,
+    LEAST(5, GREATEST(1, ROUND(CASE WHEN a.main = 'GK' THEN a.rating + 0.6 ELSE 1 + a.gk END)))::smallint AS gk,
+    LEAST(5, GREATEST(1, ROUND(a.rating + CASE WHEN a.main IN ('CB','LB','RB','CDM') THEN 0.5
+                                              WHEN a.main IN ('ST','CF','LW','RW','CAM') THEN -0.6
+                                              WHEN a.main = 'GK' THEN -0.4 ELSE 0 END)))::smallint AS def,
+    LEAST(5, GREATEST(1, ROUND(a.rating + CASE WHEN a.main IN ('ST','CF','LW','RW','CAM') THEN 0.5
+                                              WHEN a.main IN ('CB','LB','RB','CDM') THEN -0.6
+                                              WHEN a.main = 'GK' THEN -1.4 ELSE 0 END)))::smallint AS att,
+    LEAST(5, GREATEST(1, ROUND(a.rating + CASE a.fit WHEN 'limited' THEN -0.8 WHEN 'injured' THEN -1.2 ELSE 0 END)))::smallint AS phy,
+    CASE WHEN a.main = 'GK' THEN ARRAY['can_keep']
+         WHEN a.main IN ('ST','CF') THEN ARRAY['scorer']
+         WHEN a.main IN ('CB','CDM') THEN ARRAY['marks_well']
+         WHEN a.main IN ('LW','RW','RM','LM') THEN ARRAY['fast']
+         ELSE ARRAY['good_passer'] END AS tags
+FROM seed_attrs a
+JOIN public.users u ON u.email = a.email
+JOIN public.player_profiles pp ON pp.user_id = u.id;
+
+-- Admin baseline for every other member of each group.
+INSERT INTO public.peer_ratings (group_id, voter_player_id, rated_player_id, goalkeeping, defense, attack, physical, tags, is_baseline)
+SELECT gm.group_id, adm.player_id, gm.player_id, d.gk, d.def, d.att, d.phy, d.tags, TRUE
+FROM public.group_memberships gm
+JOIN public.group_memberships adm ON adm.group_id = gm.group_id AND adm.role = 'admin'
+JOIN seed_dims d ON d.player_id = gm.player_id
+WHERE gm.player_id <> adm.player_id;
+
+-- Peer votes: roughly 60% of the remaining pairs vote (jittered -1..+1 per dimension),
+-- the rest skip, and a few pairs are left pending so the group page shows the queue.
+INSERT INTO public.peer_ratings (group_id, voter_player_id, rated_player_id, skipped, goalkeeping, defense, attack, physical, tags)
+SELECT v.group_id, v.player_id, r.player_id,
+    (x.h % 10) BETWEEN 6 AND 8,
+    CASE WHEN (x.h % 10) BETWEEN 6 AND 8 THEN NULL ELSE LEAST(5, GREATEST(1, d.gk  + ((x.h / 3)  % 3) - 1)) END,
+    CASE WHEN (x.h % 10) BETWEEN 6 AND 8 THEN NULL ELSE LEAST(5, GREATEST(1, d.def + ((x.h / 9)  % 3) - 1)) END,
+    CASE WHEN (x.h % 10) BETWEEN 6 AND 8 THEN NULL ELSE LEAST(5, GREATEST(1, d.att + ((x.h / 27) % 3) - 1)) END,
+    CASE WHEN (x.h % 10) BETWEEN 6 AND 8 THEN NULL ELSE LEAST(5, GREATEST(1, d.phy + ((x.h / 81) % 3) - 1)) END,
+    CASE WHEN (x.h % 10) BETWEEN 6 AND 8 THEN '{}'::text[]
+         ELSE d.tags || CASE (x.h / 243) % 4 WHEN 0 THEN ARRAY['hard_worker'] WHEN 1 THEN ARRAY['stamina'] ELSE '{}'::text[] END END
+FROM public.group_memberships v
+JOIN public.group_memberships r ON r.group_id = v.group_id AND r.player_id <> v.player_id
+JOIN seed_dims d ON d.player_id = r.player_id
+CROSS JOIN LATERAL (SELECT abs(hashtext(v.player_id::text || r.player_id::text || v.group_id::text)) AS h) x
+WHERE v.role <> 'admin'
+  AND (x.h % 10) <= 8;
 
 -- ---------------------------------------------------------------- recurring patterns
 INSERT INTO public.recurring_patterns (id, group_id, weekday, match_time, location, max_players,

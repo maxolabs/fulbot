@@ -8,7 +8,8 @@ import {
   Copy,
   Share2,
   Trophy,
-  Clock
+  Clock,
+  Star
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
@@ -32,7 +33,6 @@ interface GroupMember {
     id: string
     display_name: string
     nickname: string | null
-    overall_rating: number
     matches_played: number
     goals: number
     assists: number
@@ -114,7 +114,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
       id: string
       display_name: string
       nickname: string | null
-      overall_rating: number
       matches_played: number
       goals: number
       assists: number
@@ -131,7 +130,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
         id,
         display_name,
         nickname,
-        overall_rating,
         matches_played,
         goals,
         assists,
@@ -149,6 +147,16 @@ export default async function GroupDetailPage({ params }: PageProps) {
       role: m.role,
       player: m.player_profiles
     }))
+
+  // Initial scoring: members the current player hasn't rated or skipped yet in this
+  // group. RLS returns only the current voter's own peer_ratings rows.
+  const { data: myRatingRows } = await supabase
+    .from('peer_ratings')
+    .select('rated_player_id')
+    .eq('group_id', group.id)
+    .eq('voter_player_id', playerProfile.id) as { data: { rated_player_id: string }[] | null }
+  const ratedIds = new Set((myRatingRows || []).map(r => r.rated_player_id))
+  const pendingRatings = members.filter(m => m.player.id !== playerProfile.id && !ratedIds.has(m.player.id)).length
 
   // Lazily materialize the next recurring-match instance for this group, in
   // case the daily cron drifted or hasn't run yet (see docs/rework-plan.md
@@ -284,6 +292,30 @@ export default async function GroupDetailPage({ params }: PageProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pending peer ratings */}
+      {pendingRatings > 0 && (
+        <Card className="border-primary/30">
+          <CardContent className="py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+                <div>
+                  <p className="font-medium">
+                    Tenés {pendingRatings} {pendingRatings === 1 ? 'compañero' : 'compañeros'} sin calificar
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Un minuto por jugador. Es privado y ayuda a armar equipos parejos.
+                  </p>
+                </div>
+              </div>
+              <Link href={`/groups/${groupSlug}/rate`}>
+                <Button size="sm">Calificar</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Upcoming Matches */}

@@ -9,6 +9,7 @@ export type NotificationType =
   | 'teams_created'
   | 'match_reminder'
   | 'results_posted'
+  | 'rate_new_member'
 
 export const NOTIFICATION_TYPES: NotificationType[] = [
   'match_created',
@@ -16,6 +17,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'teams_created',
   'match_reminder',
   'results_posted',
+  'rate_new_member',
 ]
 
 export interface MatchCreatedPayload {
@@ -55,12 +57,20 @@ export interface ResultsPostedPayload {
   light_score: number
 }
 
+// Emitted by a trigger on group_memberships (00017_peer_ratings.sql) when someone
+// joins or is reactivated; group-wide, in-app only (never to the WhatsApp outbox).
+export interface RateNewMemberPayload {
+  player_id: string
+  player_name: string
+}
+
 export interface NotificationPayloadMap {
   match_created: MatchCreatedPayload
   waitlist_promoted: WaitlistPromotedPayload
   teams_created: TeamsCreatedPayload
   match_reminder: MatchReminderPayload
   results_posted: ResultsPostedPayload
+  rate_new_member: RateNewMemberPayload
 }
 
 // Discriminated union so templates.ts (and anything else switching on `type`)
@@ -71,6 +81,7 @@ export type NotificationEvent =
   | { type: 'teams_created'; payload: TeamsCreatedPayload }
   | { type: 'match_reminder'; payload: MatchReminderPayload }
   | { type: 'results_posted'; payload: ResultsPostedPayload }
+  | { type: 'rate_new_member'; payload: RateNewMemberPayload }
 
 export interface NotificationRow {
   id: string

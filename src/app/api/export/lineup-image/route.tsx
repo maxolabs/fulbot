@@ -7,7 +7,6 @@ export const runtime = 'edge'
 interface Player {
   name: string
   position: string
-  rating: number
 }
 
 type PositionedPlayer = Player & { slotPosition: string }
@@ -79,18 +78,6 @@ function PlayerCircle({
       >
         {player.name}
       </div>
-      {/* Rating */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '2px',
-          fontSize: '10px',
-          color: '#fbbf24',
-        }}
-      >
-        ★ {player.rating.toFixed(1)}
-      </div>
     </div>
   )
 }
@@ -110,9 +97,6 @@ function Field({
     slotPosition: slot.position,
     coords: { x: slot.x, y: slot.y },
   }))
-
-  const avgRating =
-    players.length > 0 ? players.reduce((sum, p) => sum + p.rating, 0) / players.length : 0
 
   return (
     <div
@@ -137,7 +121,7 @@ function Field({
       >
         <span style={{ fontSize: '18px', fontWeight: 'bold' }}>{teamName}</span>
         <span style={{ fontSize: '14px', opacity: 0.8 }}>
-          {players.length} jugadores · {avgRating.toFixed(1)} avg
+          {players.length} jugadores
         </span>
       </div>
 

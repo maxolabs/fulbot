@@ -8,6 +8,7 @@ import {
   MatchHistoryEntry,
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
+import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
 import type { TeamsCreatedPayload } from '@/lib/notifications/types'
 
 interface RouteContext {
@@ -81,7 +82,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         nickname: string | null
         main_position: string
         preferred_positions: string[]
-        overall_rating: number
         footedness: 'left' | 'right' | 'both'
         goalkeeper_willingness: number
         fitness_status: 'ok' | 'limited' | 'injured'
@@ -110,7 +110,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           nickname,
           main_position,
           preferred_positions,
-          overall_rating,
           footedness,
           goalkeeper_willingness,
           fitness_status,
@@ -144,19 +143,35 @@ export async function POST(request: NextRequest, context: RouteContext) {
       )
     }
 
+    // Scores come from player_rating_summary (peer ratings blended with post-match
+    // ratings). The caller is an admin/captain, so RLS lets them read it.
+    const ratedIds = signups
+      .map((s) => s.player_profiles?.id)
+      .filter((id): id is string => !!id)
+    const { data: summaryRows } = ratedIds.length > 0
+      ? await supabase
+          .from('player_rating_summary')
+          .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+          .in('player_id', ratedIds) as { data: RatingSummary[] | null }
+      : { data: [] as RatingSummary[] }
+    const summaries = summariesById(summaryRows)
+
     // Convert to PlayerInput format (registered players + guests)
     const players: PlayerInput[] = signups
       .filter((s) => s.player_profiles !== null || s.guest_players !== null)
       .map((s) => {
         if (s.player_profiles) {
           const pp = s.player_profiles
+          const summary = summaries.get(pp.id)
           return {
             id: pp.id,
             displayName: pp.display_name,
             nickname: pp.nickname,
             mainPosition: pp.main_position,
             preferredPositions: pp.preferred_positions,
-            overallRating: pp.overall_rating,
+            overallRating: overallOf(summary),
+            skills: skillsOf(summary),
+            tags: summary?.tags ?? [],
             footedness: pp.footedness,
             goalkeeperWillingness: pp.goalkeeper_willingness,
             fitnessStatus: pp.fitness_status,

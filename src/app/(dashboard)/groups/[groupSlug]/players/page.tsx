@@ -1,10 +1,13 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Trophy, Target, Footprints, Star } from 'lucide-react'
+import { ArrowLeft, Trophy, Star, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { SkillSummaryLine } from '@/components/player-skills'
+import { summariesById, type RatingSummary } from '@/lib/ratings'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
@@ -59,9 +62,12 @@ export default async function GroupPlayersPage({ params }: PageProps) {
     .eq('group_id', group.id)
     .eq('player_id', currentPlayer.id)
     .eq('is_active', true)
-    .single()
+    .single() as { data: { role: 'admin' | 'captain' | 'member' } | null }
 
   if (!membership) return notFound()
+
+  const isAdmin = membership.role === 'admin'
+  const isAdminOrCaptain = isAdmin || membership.role === 'captain'
 
   // Get all members with full player profiles
   type MembershipWithProfile = {
@@ -73,7 +79,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
       nickname: string | null
       main_position: string
       preferred_positions: string[]
-      overall_rating: number
       reliability_score: number
       matches_played: number
       goals: number
@@ -96,7 +101,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         nickname,
         main_position,
         preferred_positions,
-        overall_rating,
         reliability_score,
         matches_played,
         goals,
@@ -120,7 +124,6 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         nickname: string | null
         main_position: string
         preferred_positions: string[]
-        overall_rating: number
         reliability_score: number
         matches_played: number
         goals: number
@@ -139,6 +142,17 @@ export default async function GroupPlayersPage({ params }: PageProps) {
       return a.display_name.localeCompare(b.display_name)
     })
 
+  // Scores are visible to admins and captains only (RLS enforces it on
+  // player_rating_summary; this avoids a pointless query for members).
+  let summaries = summariesById(null)
+  if (isAdminOrCaptain && players.length > 0) {
+    const { data: summaryRows } = await supabase
+      .from('player_rating_summary')
+      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .in('player_id', players.map(p => p.id)) as { data: RatingSummary[] | null }
+    summaries = summariesById(summaryRows)
+  }
+
   return (
     <div className="space-y-6">
       {/* Back button */}
@@ -150,9 +164,27 @@ export default async function GroupPlayersPage({ params }: PageProps) {
         Volver a {group.name}
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Jugadores</h1>
-        <p className="text-muted-foreground">{players.length} miembros en {group.name}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Jugadores</h1>
+          <p className="text-muted-foreground">{players.length} miembros en {group.name}</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href={`/groups/${groupSlug}/rate`}>
+            <Button variant="outline" size="sm">
+              <Star className="mr-2 h-4 w-4" />
+              Calificar compañeros
+            </Button>
+          </Link>
+          {isAdmin && (
+            <Link href={`/groups/${groupSlug}/rate?mode=baseline`}>
+              <Button variant="outline" size="sm">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Puntaje base
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Players Grid */}
@@ -207,14 +239,9 @@ export default async function GroupPlayersPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {/* Rating */}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                  <span className="text-sm font-medium">
-                    {player.overall_rating.toFixed(1)}
-                  </span>
-                </div>
+              {/* Scores (admins/captains) + physical notes */}
+              <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
+                {isAdminOrCaptain && <SkillSummaryLine summary={summaries.get(player.id)} />}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>
                     {player.footedness === 'left'

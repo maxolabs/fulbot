@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
 import { MembersManager } from './members-manager'
@@ -167,10 +168,20 @@ export default async function GroupSettingsPage({ params }: PageProps) {
       {/* Members Management */}
       <Card>
         <CardHeader>
-          <CardTitle>Miembros ({members.length})</CardTitle>
-          <CardDescription>
-            Administra los roles y permisos de los miembros
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <CardTitle>Miembros ({members.length})</CardTitle>
+              <CardDescription className="mt-1.5">
+                Administra los roles y permisos de los miembros
+              </CardDescription>
+            </div>
+            <Link href={`/groups/${groupSlug}/rate?mode=baseline`}>
+              <Button variant="outline" size="sm">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Puntaje base
+              </Button>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           <MembersManager

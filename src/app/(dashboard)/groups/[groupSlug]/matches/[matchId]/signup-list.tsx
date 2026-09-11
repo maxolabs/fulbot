@@ -24,7 +24,6 @@ interface Signup {
     display_name: string
     nickname: string | null
     main_position: string
-    overall_rating: number
   } | null
   guest_players: {
     id: string
@@ -43,6 +42,8 @@ interface SignupListProps {
   isAdminOrCaptain?: boolean
   matchStatus?: string
   badgesByPlayer?: Record<string, string[]>
+  // Overall score per player id; only provided to admins/captains
+  ratingsById?: Record<string, number>
 }
 
 const POSITION_LABELS: Record<string, string> = {
@@ -77,6 +78,7 @@ export function SignupList({
   isAdminOrCaptain,
   matchStatus,
   badgesByPlayer,
+  ratingsById,
 }: SignupListProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -198,10 +200,12 @@ export function SignupList({
                 {player ? (
                   <>
                     <span>{POSITION_LABELS[player.main_position] || player.main_position}</span>
-                    <span className="flex items-center gap-0.5">
-                      <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                      {player.overall_rating.toFixed(1)}
-                    </span>
+                    {ratingsById?.[player.id] !== undefined && (
+                      <span className="flex items-center gap-0.5">
+                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                        {ratingsById[player.id].toFixed(1)}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
