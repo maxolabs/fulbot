@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
-import type { Database } from '@/types/database'
+import type { Database, WaitlistReason } from '@/types/database'
 import { useT } from '@/i18n/provider'
 
 interface SignupActionsProps {
@@ -16,6 +16,7 @@ interface SignupActionsProps {
     id: string
     status: string
     waitlistPosition: number | null
+    waitlistReason?: WaitlistReason | null
   } | null
   matchStatus: string
   isFull: boolean
@@ -32,6 +33,10 @@ export function SignupActions({
   const t = useT()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Reason returned by signup_for_match when the signup lands on the waitlist
+  // (docs/member-scoring.md §10.4). Shown right away; after router.refresh()
+  // the same value comes back through currentSignup.waitlistReason.
+  const [signupReason, setSignupReason] = useState<WaitlistReason | null>(null)
 
   const canSignUp = matchStatus === 'signup_open' || matchStatus === 'full'
 
@@ -43,12 +48,13 @@ export function SignupActions({
       const args: Database['public']['Functions']['signup_for_match']['Args'] = {
         p_match_id: matchId,
       }
-      const { error: signupError } = await supabase.rpc('signup_for_match', args)
+      const { data: signup, error: signupError } = await supabase.rpc('signup_for_match', args)
 
       if (signupError) {
         throw signupError
       }
 
+      setSignupReason(signup?.status === 'waitlist' ? signup.waitlist_reason ?? 'full' : null)
       router.refresh()
     } catch (err) {
       console.error('Error signing up:', err)
@@ -156,6 +162,7 @@ export function SignupActions({
 
   // Waitlist
   if (currentSignup.status === 'waitlist') {
+    const waitlistReason = currentSignup.waitlistReason ?? signupReason
     return (
       <Card className="border-yellow-500/30 bg-yellow-500/5">
         <CardContent className="py-4">
@@ -165,9 +172,10 @@ export function SignupActions({
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Clock className="h-5 w-5 text-yellow-600" />
+          {/* Stacks on phones: the reason line below makes the text column too narrow for a side-by-side button */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Clock className="h-5 w-5 mt-0.5 shrink-0 text-yellow-600" />
               <div>
                 <p className="font-medium text-yellow-700">
                   {t('matches.onWaitlist')}
@@ -175,9 +183,14 @@ export function SignupActions({
                 <p className="text-sm text-muted-foreground">
                   {t('matches.waitlistPositionDetail', { position: currentSignup.waitlistPosition ?? 0 })}
                 </p>
+                {waitlistReason && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {t(`signupPolicy.waitlistReason.${waitlistReason}`)}
+                  </p>
+                )}
               </div>
             </div>
-            <Button variant="outline" onClick={handleCancel} disabled={loading}>
+            <Button variant="outline" onClick={handleCancel} disabled={loading} className="self-start sm:self-auto">
               {loading && <Spinner size="sm" className="mr-2" />}
               {t('matches.leaveWaitlist')}
             </Button>

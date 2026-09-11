@@ -330,5 +330,25 @@
       "flagged": "{count} con alguna marca",
       "allGood": "Todos sin marcas"
     }
+  },
+  "signupPolicy": {
+    "priorityWindowUntil": "Inscripción prioritaria hasta el {date} a las {time}",
+    "priorityWindowBody": "Hasta entonces los lugares son para quienes tienen compromiso {threshold} o más. Te anotás en lista de espera y pasás automáticamente si queda lugar.",
+    "reservedUntil": "Lugares reservados hasta el {date} a las {time}",
+    "reservedBody": "Los últimos {spots} lugares son para quienes tienen compromiso {threshold} o más. Te anotás en lista de espera y pasás automáticamente si queda lugar.",
+    "cooldownTitle": "Esta vez vas a la lista de espera",
+    "cooldownBody": "Faltaste sin avisar al último partido. Te anotás en lista de espera y pasás automáticamente si se libera un lugar.",
+    "waitlistReason": {
+      "priority_window": "Estás en lista de espera por la ventana prioritaria. Cuando termine pasás automáticamente si queda lugar.",
+      "reserved": "Estás en lista de espera porque los últimos lugares están reservados. Pasás automáticamente si queda lugar.",
+      "cooldown": "Estás en lista de espera por tu ausencia en el último partido. Pasás automáticamente si se libera un lugar.",
+      "full": "Estás en lista de espera porque el partido está lleno. Te avisamos si se libera un lugar."
+    },
+    "tag": {
+      "priority_window": "Ventana prioritaria",
+      "reserved": "Lugar reservado",
+      "cooldown": "Ausencia previa",
+      "full": "Lleno"
+    }
   }
 }

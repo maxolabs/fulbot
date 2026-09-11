@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Star,
   RefreshCw,
+  TrendingDown,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -41,6 +43,8 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   results_reminder: AlarmClock,
   results_needs_review: AlertCircle,
   results_changed: RefreshCw,
+  member_score_dropped: TrendingDown,
+  member_score_recovered: TrendingUp,
 }
 
 // Types whose natural landing spot is the report form on the match page
@@ -163,8 +167,14 @@ export function NotificationList({
           const Icon = TYPE_ICON[n.type] ?? Bell
           const isRead = readIds.has(n.id)
           const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
+          // Score nudges are addressed to one member and land on their own
+          // player page in that group (docs/member-scoring.md §10.4).
+          const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'
+          const ownPlayerId = n.recipient_player_id ?? currentPlayerId
           const href =
-            n.type === 'rate_new_member' && n.groupSlug
+            isScoreNudge && n.groupSlug && ownPlayerId
+              ? `/groups/${n.groupSlug}/players/${ownPlayerId}`
+              : n.type === 'rate_new_member' && n.groupSlug
               ? `/groups/${n.groupSlug}/rate?player=${(n.payload as RateNewMemberPayload).player_id}`
               : n.match_id && n.groupSlug
                 ? `/groups/${n.groupSlug}/matches/${n.match_id}${anchor}`
