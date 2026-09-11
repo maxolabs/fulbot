@@ -80,7 +80,7 @@ export default async function NotificationsPage() {
         <p className="text-muted-foreground">Novedades de tus grupos</p>
       </div>
 
-      <NotificationList items={items} prefs={prefs} />
+      <NotificationList items={items} prefs={prefs} currentPlayerId={playerProfile?.id ?? null} />
     </div>
   )
 }

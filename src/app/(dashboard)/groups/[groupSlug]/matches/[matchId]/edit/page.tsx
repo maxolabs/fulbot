@@ -57,10 +57,18 @@ export default async function EditMatchPage({ params }: PageProps) {
 
   const { data: match } = await supabase
     .from('matches')
-    .select('id, date_time, location, max_players, notes')
+    .select('id, date_time, location, max_players, notes, duration_minutes, results_request_delay_minutes')
     .eq('id', matchId)
     .eq('group_id', group.id)
-    .single() as { data: { id: string; date_time: string; location: string | null; max_players: number; notes: string | null } | null }
+    .single() as { data: {
+      id: string
+      date_time: string
+      location: string | null
+      max_players: number
+      notes: string | null
+      duration_minutes: number | null
+      results_request_delay_minutes: number | null
+    } | null }
 
   if (!match) return notFound()
 
@@ -94,6 +102,8 @@ export default async function EditMatchPage({ params }: PageProps) {
               location: match.location || '',
               maxPlayers: match.max_players,
               notes: match.notes || '',
+              durationMinutes: match.duration_minutes ?? 60,
+              resultsRequestDelayMinutes: match.results_request_delay_minutes ?? 60,
             }}
           />
         </CardContent>

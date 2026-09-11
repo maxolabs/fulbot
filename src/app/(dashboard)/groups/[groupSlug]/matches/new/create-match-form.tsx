@@ -17,6 +17,8 @@ interface CreateMatchFormProps {
     date: string
     time: string
     maxPlayers: number
+    durationMinutes: number
+    resultsRequestDelayMinutes: number
   }
 }
 
@@ -32,6 +34,8 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
   const [location, setLocation] = useState('')
   const [maxPlayers, setMaxPlayers] = useState(defaults.maxPlayers)
   const [notes, setNotes] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState(defaults.durationMinutes)
+  const [resultsRequestDelayMinutes, setResultsRequestDelayMinutes] = useState(defaults.resultsRequestDelayMinutes)
   const [openSignup, setOpenSignup] = useState(true)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,6 +56,8 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           location: location || null,
           max_players: maxPlayers,
           notes: notes || null,
+          duration_minutes: durationMinutes,
+          results_request_delay_minutes: resultsRequestDelayMinutes,
           status: openSignup ? 'signup_open' : 'draft',
         })
         .select('id')
@@ -131,6 +137,43 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
         <p className="text-xs text-muted-foreground">
           Cuando se alcance el límite, los siguientes quedarán en lista de espera
         </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="durationMinutes">Duración (min)</Label>
+          <Input
+            id="durationMinutes"
+            type="number"
+            min={10}
+            max={300}
+            step={5}
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+            required
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Al pasar este tiempo el partido se da por terminado solo
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
+          <Input
+            id="resultsRequestDelayMinutes"
+            type="number"
+            min={0}
+            max={1440}
+            step={5}
+            value={resultsRequestDelayMinutes}
+            onChange={(e) => setResultsRequestDelayMinutes(Number(e.target.value))}
+            required
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Cuándo se les pide a los jugadores que carguen el resultado
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">

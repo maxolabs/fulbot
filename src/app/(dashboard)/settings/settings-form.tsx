@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Users, Trophy, CalendarClock } from 'lucide-react'
+import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
@@ -132,6 +132,18 @@ export function SettingsForm({
       icon: Trophy,
       title: t('settings.notifResultsPostedTitle'),
       desc: t('settings.notifResultsPostedDesc'),
+    },
+    {
+      key: 'results_request',
+      icon: ClipboardList,
+      title: t('settings.notifResultsRequestTitle'),
+      desc: t('settings.notifResultsRequestDesc'),
+    },
+    {
+      key: 'results_reminder',
+      icon: AlarmClock,
+      title: t('settings.notifResultsReminderTitle'),
+      desc: t('settings.notifResultsReminderDesc'),
     },
   ]
 

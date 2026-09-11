@@ -2,7 +2,20 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CalendarPlus, ArrowUpCircle, Users, Clock, Goal, Bell, Star, type LucideIcon } from 'lucide-react'
+import {
+  CalendarPlus,
+  ArrowUpCircle,
+  Users,
+  Clock,
+  Goal,
+  Bell,
+  ClipboardList,
+  AlarmClock,
+  AlertCircle,
+  Star,
+  RefreshCw,
+  type LucideIcon,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
@@ -24,6 +37,35 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   match_reminder: Clock,
   results_posted: Goal,
   rate_new_member: Star,
+  results_request: ClipboardList,
+  results_reminder: AlarmClock,
+  results_needs_review: AlertCircle,
+  results_changed: RefreshCw,
+}
+
+// Types whose natural landing spot is the report form on the match page
+// (docs/match-results-consensus.md §11.2), not the top of the page.
+const REPORT_ANCHOR_TYPES = new Set<NotificationRow['type']>(['results_request', 'results_reminder'])
+
+// results_reminder is one group-wide row per match carrying the ids of the
+// players who still haven't reported; everyone else already did their part
+// and shouldn't see it. Without a player id (no profile yet) hide it too.
+//
+// results_request is group-wide too; since the payload carries player_ids (the
+// confirmed players) only they see it. Rows without the field predate it and
+// stay visible to everyone.
+function isVisibleTo(item: NotificationItem, currentPlayerId: string | null): boolean {
+  if (item.type === 'results_reminder') {
+    const pending = (item.payload as { pending_player_ids?: unknown }).pending_player_ids
+    if (!Array.isArray(pending)) return false
+    return currentPlayerId !== null && pending.includes(currentPlayerId)
+  }
+  if (item.type === 'results_request') {
+    const players = (item.payload as { player_ids?: unknown }).player_ids
+    if (!Array.isArray(players)) return true
+    return currentPlayerId !== null && players.includes(currentPlayerId)
+  }
+  return true
 }
 
 // Date/month via Intl's default formatting is fine here (no AM/PM
@@ -42,7 +84,8 @@ function safeRenderText(item: NotificationItem): string {
   try {
     return renderNotificationText(
       { type: item.type, payload: item.payload } as unknown as NotificationEvent,
-      item.groupTimezone
+      item.groupTimezone,
+      { channel: 'inapp' }
     )
   } catch {
     return ''
@@ -52,9 +95,11 @@ function safeRenderText(item: NotificationItem): string {
 export function NotificationList({
   items,
   prefs,
+  currentPlayerId = null,
 }: {
   items: NotificationItem[]
   prefs: Record<string, boolean>
+  currentPlayerId?: string | null
 }) {
   const supabase = createClient()
   // Read state comes from notification_reads (per-player), passed in as
@@ -69,7 +114,7 @@ export function NotificationList({
   // Respect users.notification_prefs client-side -- never filter in SQL
   // (see docs/rework-plan.md §2.6). match_created has no per-user toggle
   // (it's a group-level setting), so it's always shown.
-  const visibleItems = items.filter((n) => prefs[n.type] !== false)
+  const visibleItems = items.filter((n) => prefs[n.type] !== false && isVisibleTo(n, currentPlayerId))
   const unreadIds = visibleItems.filter((n) => !readIds.has(n.id)).map((n) => n.id)
 
   const markAllRead = async () => {
@@ -117,11 +162,12 @@ export function NotificationList({
         {visibleItems.map((n) => {
           const Icon = TYPE_ICON[n.type] ?? Bell
           const isRead = readIds.has(n.id)
+          const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
           const href =
             n.type === 'rate_new_member' && n.groupSlug
               ? `/groups/${n.groupSlug}/rate?player=${(n.payload as RateNewMemberPayload).player_id}`
               : n.match_id && n.groupSlug
-                ? `/groups/${n.groupSlug}/matches/${n.match_id}`
+                ? `/groups/${n.groupSlug}/matches/${n.match_id}${anchor}`
                 : n.groupSlug
                   ? `/groups/${n.groupSlug}`
                   : null

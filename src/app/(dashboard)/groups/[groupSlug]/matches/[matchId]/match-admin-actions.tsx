@@ -17,6 +17,8 @@ interface MatchAdminActionsProps {
   groupSlug: string
   currentStatus: string
   hasEnoughPlayers: boolean
+  /** Teams exist for this match; without them the status can never reach 'finished'. */
+  hasTeams?: boolean
 }
 
 export function MatchAdminActions({
@@ -24,6 +26,7 @@ export function MatchAdminActions({
   groupSlug,
   currentStatus,
   hasEnoughPlayers,
+  hasTeams = true,
 }: MatchAdminActionsProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -88,6 +91,13 @@ export function MatchAdminActions({
         <CardTitle className="text-base">Administrar partido</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!hasTeams &&
+          (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
+            <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+              Sin equipos no se puede cerrar el partido: armá los equipos primero.
+            </p>
+          )}
+
         {/* Open signup */}
         {currentStatus === 'draft' && (
           <Button

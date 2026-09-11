@@ -86,8 +86,8 @@
     "nextMatch": "Next match",
     "noUpcomingMatch": "No matches scheduled",
     "nextMatchSummary": "{day} {time} · {confirmed}/{max} confirmed",
-    "mvpNudgeTitle": "Vote for {group}'s MVP — {date}",
-    "mvpNudgeSubtitle": "Pick the best player of the match",
+    "resultNudgeTitle": "Report the result of {group} — {date}",
+    "resultNudgeSubtitle": "Score, goals and MVP: report what you remember",
     "roles": {
       "admin": "Admin",
       "captain": "Captain",
@@ -241,6 +241,10 @@
     "notifMatchReminderDesc": "Before a match you're signed up for starts",
     "notifResultsPostedTitle": "Results posted",
     "notifResultsPostedDesc": "When a match's results are recorded",
+    "notifResultsRequestTitle": "Result request",
+    "notifResultsRequestDesc": "After a match you played, to report the score, goals and MVP",
+    "notifResultsReminderTitle": "Result reminder",
+    "notifResultsReminderDesc": "If you still haven't reported a match's result",
     "saved": "Settings saved successfully",
     "saveError": "Error saving settings"
   }

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
+import { maybeTick } from '@/lib/notifications/opportunistic-tick'
 import { LanguageProvider } from '@/i18n/provider'
 import type { Language } from '@/i18n/core'
 
@@ -18,6 +19,11 @@ export default async function DashboardLayout({
   if (!user) {
     redirect('/login')
   }
+
+  // Let signed-in traffic drive the results scheduler when no ticker is
+  // running (docs/match-results-consensus.md §5). Detached and throttled:
+  // never awaited, never throws, at most once a minute per instance.
+  maybeTick()
 
   // Get user profile data
   const { data: userData } = await supabase

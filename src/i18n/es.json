@@ -86,8 +86,8 @@
     "nextMatch": "Próximo partido",
     "noUpcomingMatch": "Sin partidos programados",
     "nextMatchSummary": "{day} {time} · {confirmed}/{max} confirmados",
-    "mvpNudgeTitle": "Votá el MVP de {group} — {date}",
-    "mvpNudgeSubtitle": "Elegí al mejor jugador del partido",
+    "resultNudgeTitle": "Cargá el resultado de {group} — {date}",
+    "resultNudgeSubtitle": "Resultado, goles y MVP: cargá lo que te acuerdes",
     "roles": {
       "admin": "Admin",
       "captain": "Capitán",
@@ -241,6 +241,10 @@
     "notifMatchReminderDesc": "Antes de que empiece un partido en el que estás anotado",
     "notifResultsPostedTitle": "Resultados publicados",
     "notifResultsPostedDesc": "Cuando se cargan los resultados de un partido",
+    "notifResultsRequestTitle": "Pedido de resultado",
+    "notifResultsRequestDesc": "Después de un partido que jugaste, para cargar el resultado, los goles y el MVP",
+    "notifResultsReminderTitle": "Recordatorio de resultado",
+    "notifResultsReminderDesc": "Si todavía no reportaste el resultado de un partido",
     "saved": "Configuración guardada correctamente",
     "saveError": "Error al guardar la configuración"
   }

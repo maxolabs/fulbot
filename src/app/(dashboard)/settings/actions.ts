@@ -12,6 +12,8 @@ export interface NotificationPrefsInput {
   teams_created: boolean
   match_reminder: boolean
   results_posted: boolean
+  results_request: boolean
+  results_reminder: boolean
 }
 
 export interface SaveSettingsInput {

@@ -20,6 +20,8 @@ interface EditMatchFormProps {
     location: string
     maxPlayers: number
     notes: string
+    durationMinutes: number
+    resultsRequestDelayMinutes: number
   }
 }
 
@@ -36,6 +38,8 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
   const [location, setLocation] = useState(defaults.location)
   const [maxPlayers, setMaxPlayers] = useState(defaults.maxPlayers)
   const [notes, setNotes] = useState(defaults.notes)
+  const [durationMinutes, setDurationMinutes] = useState(defaults.durationMinutes)
+  const [resultsRequestDelayMinutes, setResultsRequestDelayMinutes] = useState(defaults.resultsRequestDelayMinutes)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +56,8 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           location: location || null,
           max_players: maxPlayers,
           notes: notes || null,
+          duration_minutes: durationMinutes,
+          results_request_delay_minutes: resultsRequestDelayMinutes,
         })
         .eq('id', matchId)
 
@@ -126,6 +132,43 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           required
           disabled={loading}
         />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="durationMinutes">Duración (min)</Label>
+          <Input
+            id="durationMinutes"
+            type="number"
+            min={10}
+            max={300}
+            step={5}
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+            required
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Al pasar este tiempo el partido se da por terminado solo
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
+          <Input
+            id="resultsRequestDelayMinutes"
+            type="number"
+            min={0}
+            max={1440}
+            step={5}
+            value={resultsRequestDelayMinutes}
+            onChange={(e) => setResultsRequestDelayMinutes(Number(e.target.value))}
+            required
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Cuándo se les pide a los jugadores que carguen el resultado
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">

@@ -1,4 +1,4 @@
-// Initial scoring: shared vocabulary for peer ratings (see migration 00017_peer_ratings.sql).
+// Initial scoring: shared vocabulary for peer ratings (see migration 00018_peer_ratings.sql).
 //
 // Peers rate each other per group on four 1-5 dimensions plus structured tags. The
 // database aggregates everything into player_rating_summary, which only admins and
