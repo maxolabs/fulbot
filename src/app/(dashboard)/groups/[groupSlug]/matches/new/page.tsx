@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { TopBarConfig } from '@/components/layout/top-bar'
+import { PageHeader } from '@/components/layout/page-header'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 import { CreateMatchForm } from './create-match-form'
 
 interface PageProps {
@@ -16,6 +17,13 @@ export default async function CreateMatchPage({ params }: PageProps) {
   // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const t = getT(userData?.preferred_language ?? 'es')
 
   // Get user's player profile
   const { data: playerProfile } = await supabase
@@ -89,39 +97,27 @@ export default async function CreateMatchPage({ params }: PageProps) {
     return nextDate.toISOString().split('T')[0]
   }
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a {group.name}
-      </Link>
+  const title = t('ui.matchScreens.forms.createMatch')
+  const subtitle = t('ui.matchScreens.forms.createMatchSubtitle', { group: group.name })
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Crear partido</CardTitle>
-          <CardDescription>
-            Programa un nuevo partido para {group.name}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CreateMatchForm
-            groupId={group.id}
-            groupSlug={group.slug}
-            timezone={group.timezone}
-            defaults={{
-              date: getNextMatchDate(),
-              time: group.default_match_time?.slice(0, 5) || '21:00',
-              maxPlayers: group.default_max_players,
-              durationMinutes,
-              resultsRequestDelayMinutes,
-            }}
-          />
-        </CardContent>
-      </Card>
+  return (
+    <div className="mx-auto max-w-xl space-y-6">
+      <TopBarConfig title={title} back={`/groups/${groupSlug}`} />
+      <PageHeader title={title} subtitle={subtitle} />
+      <p className="text-sm text-muted-foreground text-pretty lg:hidden">{subtitle}</p>
+
+      <CreateMatchForm
+        groupId={group.id}
+        groupSlug={group.slug}
+        timezone={group.timezone}
+        defaults={{
+          date: getNextMatchDate(),
+          time: group.default_match_time?.slice(0, 5) || '21:00',
+          maxPlayers: group.default_max_players,
+          durationMinutes,
+          resultsRequestDelayMinutes,
+        }}
+      />
     </div>
   )
 }
