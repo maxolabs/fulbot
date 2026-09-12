@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { NotificationList } from './notification-list'
-import { TopBarConfig } from '@/components/layout/top-bar'
 import type { NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
+// Notifications (docs/ui-rework/03-screens.md §10). The list component owns
+// the read state, so it also renders the page header and the top-bar action
+// ("Marcar todo como leído" in both shells).
 export default async function NotificationsPage() {
   const supabase = await createClient()
 
@@ -75,13 +77,7 @@ export default async function NotificationsPage() {
   }))
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <TopBarConfig title="Notificaciones" />
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Notificaciones</h1>
-        <p className="text-muted-foreground">Novedades de tus grupos</p>
-      </div>
-
+    <div className="mx-auto max-w-3xl space-y-6">
       <NotificationList items={items} prefs={prefs} currentPlayerId={playerProfile?.id ?? null} />
     </div>
   )

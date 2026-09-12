@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   CalendarPlus,
@@ -9,6 +9,7 @@ import {
   Clock,
   Goal,
   Bell,
+  CheckCheck,
   ClipboardList,
   AlarmClock,
   AlertCircle,
@@ -19,11 +20,19 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { PageHeader } from '@/components/layout/page-header'
+import { TopBarAction, useTopBar } from '@/components/layout/top-bar'
+import { useShell } from '@/components/layout/shell-context'
 import { createClient } from '@/lib/supabase/client'
 import { renderNotificationText } from '@/lib/notifications/templates'
 import type { NotificationEvent, NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
-import { formatMatchTime } from '@/lib/utils/datetime'
+import { formatMatchDayMonth, formatMatchTime } from '@/lib/utils/datetime'
+import { useT } from '@/i18n/provider'
+import { cn } from '@/lib/utils/cn'
+
+// Notification rows (docs/ui-rework/03-screens.md §10, 06-principles.md §9):
+// mono time on the right, and an unread row carries both the 6px cone dot
+// and a bold title, so colour is never the only carrier.
 
 interface NotificationItem extends NotificationRow {
   groupSlug: string | null
@@ -72,18 +81,6 @@ function isVisibleTo(item: NotificationItem, currentPlayerId: string | null): bo
   return true
 }
 
-// Date/month via Intl's default formatting is fine here (no AM/PM
-// ambiguity); the hour/minute portion goes through formatMatchTime so it's
-// always 24h and deterministic between server render and hydration.
-function formatWhen(iso: string, timeZone: string): string {
-  const dateOnly = new Intl.DateTimeFormat('es-AR', {
-    day: 'numeric',
-    month: 'short',
-    timeZone,
-  }).format(new Date(iso))
-  return `${dateOnly} ${formatMatchTime(iso, timeZone)}`
-}
-
 function safeRenderText(item: NotificationItem): string {
   try {
     return renderNotificationText(
@@ -105,6 +102,8 @@ export function NotificationList({
   prefs: Record<string, boolean>
   currentPlayerId?: string | null
 }) {
+  const t = useT()
+  const shell = useShell()
   const supabase = createClient()
   // Read state comes from notification_reads (per-player), passed in as
   // isRead -- never from a shared column on the notification row itself, so
@@ -120,6 +119,7 @@ export function NotificationList({
   // (it's a group-level setting), so it's always shown.
   const visibleItems = items.filter((n) => prefs[n.type] !== false && isVisibleTo(n, currentPlayerId))
   const unreadIds = visibleItems.filter((n) => !readIds.has(n.id)).map((n) => n.id)
+  const canMark = !marking && unreadIds.length > 0
 
   const markAllRead = async () => {
     if (unreadIds.length === 0) return
@@ -132,81 +132,106 @@ export function NotificationList({
           unreadIds.forEach((id) => next.add(id))
           return next
         })
+        shell?.setUnreadCount(0)
       }
     } finally {
       setMarking(false)
     }
   }
 
-  if (visibleItems.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-muted-foreground">
-          <Bell className="h-8 w-8 mx-auto mb-3 opacity-50" />
-          No tenés notificaciones todavía.
-        </CardContent>
-      </Card>
-    )
-  }
+  const title = t('ui.shell.notifications')
+  const markLabel = t('ui.screens.notifications.markAllRead')
+
+  // Mobile top bar: title + the "mark all read" icon action.
+  const topBarAction = useMemo(
+    () =>
+      canMark ? (
+        <TopBarAction onClick={markAllRead} label={markLabel}>
+          <CheckCheck className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+        </TopBarAction>
+      ) : undefined,
+    // markAllRead changes identity every render; the visible inputs are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canMark, markLabel, unreadIds.join(',')]
+  )
+  useTopBar({ title, action: topBarAction })
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={markAllRead}
-          disabled={marking || unreadIds.length === 0}
-        >
-          Marcar todo como leído
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title={title}
+        subtitle={t('ui.screens.notifications.subtitle')}
+        actions={
+          <Button variant="outline" size="sm" onClick={markAllRead} disabled={!canMark}>
+            <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {markLabel}
+          </Button>
+        }
+      />
 
-      <div className="space-y-2">
-        {visibleItems.map((n) => {
-          const Icon = TYPE_ICON[n.type] ?? Bell
-          const isRead = readIds.has(n.id)
-          const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
-          // Score nudges are addressed to one member and land on their own
-          // player page in that group (docs/member-scoring.md §10.4).
-          const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'
-          const ownPlayerId = n.recipient_player_id ?? currentPlayerId
-          const href =
-            isScoreNudge && n.groupSlug && ownPlayerId
-              ? `/groups/${n.groupSlug}/players/${ownPlayerId}`
-              : n.type === 'rate_new_member' && n.groupSlug
-              ? `/groups/${n.groupSlug}/rate?player=${(n.payload as RateNewMemberPayload).player_id}`
-              : n.match_id && n.groupSlug
-                ? `/groups/${n.groupSlug}/matches/${n.match_id}${anchor}`
-                : n.groupSlug
-                  ? `/groups/${n.groupSlug}`
-                  : null
+      {visibleItems.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('ui.screens.notifications.empty')}</p>
+      ) : (
+        <ul className="[&>li:last-child>*]:border-b-0">
+          {visibleItems.map((n) => {
+            const Icon = TYPE_ICON[n.type] ?? Bell
+            const isRead = readIds.has(n.id)
+            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
+            // Score nudges are addressed to one member and land on their own
+            // player page in that group (docs/member-scoring.md §10.4).
+            const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'
+            const ownPlayerId = n.recipient_player_id ?? currentPlayerId
+            const href =
+              isScoreNudge && n.groupSlug && ownPlayerId
+                ? `/groups/${n.groupSlug}/players/${ownPlayerId}`
+                : n.type === 'rate_new_member' && n.groupSlug
+                  ? `/groups/${n.groupSlug}/rate?player=${(n.payload as RateNewMemberPayload).player_id}`
+                  : n.match_id && n.groupSlug
+                    ? `/groups/${n.groupSlug}/matches/${n.match_id}${anchor}`
+                    : n.groupSlug
+                      ? `/groups/${n.groupSlug}`
+                      : null
 
-          const card = (
-            <Card className={isRead ? 'opacity-70' : 'border-primary/30'}>
-              <CardContent className="py-4 flex items-start gap-3">
-                <Icon className="h-5 w-5 mt-0.5 shrink-0 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm">{safeRenderText(n)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {n.groupName ? `${n.groupName} · ` : ''}
-                    {formatWhen(n.created_at, n.groupTimezone)}
-                  </p>
-                </div>
-                {!isRead && <span className="h-2 w-2 rounded-full bg-primary mt-2 shrink-0" />}
-              </CardContent>
-            </Card>
-          )
+            const rowClassName = cn(
+              'flex min-h-11 w-full items-start gap-3 border-b border-border py-3 text-left',
+              href &&
+                'hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            )
 
-          return href ? (
-            <Link key={n.id} href={href} className="block">
-              {card}
-            </Link>
-          ) : (
-            <div key={n.id}>{card}</div>
-          )
-        })}
-      </div>
-    </div>
+            const content = (
+              <>
+                <span className="flex w-3 shrink-0 justify-center pt-[7px]" aria-hidden="true">
+                  {!isRead && <span className="block h-1.5 w-1.5 rounded-full bg-primary" />}
+                </span>
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className={cn('block text-sm text-pretty', !isRead && 'font-semibold')}>
+                    {!isRead && <span className="sr-only">{t('ui.screens.notifications.unread')} </span>}
+                    {safeRenderText(n)}
+                  </span>
+                  {n.groupName && <span className="mt-0.5 block text-xs text-muted-foreground">{n.groupName}</span>}
+                </span>
+                <span className="shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                  <span className="block">{formatMatchDayMonth(n.created_at, n.groupTimezone)}</span>
+                  <span className="block">{formatMatchTime(n.created_at, n.groupTimezone)}</span>
+                </span>
+              </>
+            )
+
+            return (
+              <li key={n.id}>
+                {href ? (
+                  <Link href={href} className={rowClassName}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div className={rowClassName}>{content}</div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </>
   )
 }

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
 
 interface RecurringPatternFormProps {
   groupId: string
@@ -170,45 +171,36 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex items-center gap-2">
-        <Repeat className="h-4 w-4 text-muted-foreground" />
+        <Repeat className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
           Crea automáticamente el próximo partido cada semana, con inscripciones que abren solas.
         </p>
         {patternId && (
-          <Badge variant={isActive ? 'default' : 'outline'} className="ml-auto">
+          <Badge variant={isActive ? 'success' : 'outline'} className="ml-auto">
             {isActive ? 'Activo' : 'Inactivo'}
           </Badge>
         )}
       </div>
 
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          Partido recurrente guardado correctamente
-        </div>
-      )}
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      {success && <FormNotice kind="success">Partido recurrente guardado correctamente</FormNotice>}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="weekday">Día del partido</Label>
-          <select
+          <NativeSelect
             id="weekday"
             value={weekday}
             onChange={(e) => setWeekday(Number(e.target.value))}
             disabled={loading}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {DAYS.map((day) => (
               <option key={day.value} value={day.value}>{day.label}</option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="matchTime">Hora del partido</Label>
           <Input
             id="matchTime"
@@ -220,7 +212,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="location">Lugar</Label>
           <Input
             id="location"
@@ -232,7 +224,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="maxPlayers">Jugadores máx.</Label>
           <Input
             id="maxPlayers"
@@ -246,22 +238,21 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="signupOpensWeekday">Día en que abre inscripción</Label>
-          <select
+          <NativeSelect
             id="signupOpensWeekday"
             value={signupOpensWeekday}
             onChange={(e) => setSignupOpensWeekday(Number(e.target.value))}
             disabled={loading}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {DAYS.map((day) => (
               <option key={day.value} value={day.value}>{day.label}</option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="signupOpensTime">Hora en que abre inscripción</Label>
           <Input
             id="signupOpensTime"
@@ -273,20 +264,19 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           />
         </div>
 
-        <div className="space-y-2 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="timezone">Zona horaria</Label>
-          <select
+          <NativeSelect
             id="timezone"
             value={timezoneChoice}
             onChange={(e) => setTimezoneChoice(e.target.value)}
             disabled={loading}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {TIMEZONE_PRESETS.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
             ))}
             <option value="__custom__">Otra (escribir)…</option>
-          </select>
+          </NativeSelect>
           {timezoneChoice === '__custom__' && (
             <Input
               value={customTimezone}
@@ -301,12 +291,12 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
 
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={loading}>
-          {loading ? <Spinner size="sm" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
+          {loading ? <Spinner size="sm" /> : <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
           Guardar
         </Button>
         {patternId && (
           <Button type="button" variant="outline" onClick={handleToggleActive} disabled={loading}>
-            <Power className="mr-2 h-4 w-4" />
+            <Power className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
             {isActive ? 'Desactivar' : 'Activar'}
           </Button>
         )}

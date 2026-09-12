@@ -3,11 +3,17 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Shield, ShieldCheck, User, MoreVertical, UserMinus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Popover } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
+import { cn } from '@/lib/utils/cn'
+
+// Members of a group with their role, as rows (docs/ui-rework/06-principles.md
+// §3). The per-member menu is the Popover primitive; the role badge is never
+// cone so the page keeps its one orange for the save buttons.
 
 interface Member {
   membershipId: string
@@ -24,20 +30,20 @@ interface MembersManagerProps {
   currentUserId: string
 }
 
-export function MembersManager({ groupId, members, currentUserId }: MembersManagerProps) {
+const menuItemClassName =
+  'flex min-h-10 w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
+
+export function MembersManager({ members }: MembersManagerProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState<string | null>(null)
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
 
   const adminCount = members.filter((m) => m.role === 'admin').length
 
   const handleRoleChange = async (membershipId: string, newRole: 'admin' | 'captain' | 'member') => {
     setLoading(membershipId)
-    setOpenMenu(null)
-
     try {
-       
       const { error } = await (supabase as any)
         .from('group_memberships')
         .update({ role: newRole })
@@ -47,22 +53,19 @@ export function MembersManager({ groupId, members, currentUserId }: MembersManag
       router.refresh()
     } catch (err) {
       console.error('Error changing role:', err)
-      alert('Error al cambiar el rol')
+      alert(t('ui.screens.members.roleError'))
     } finally {
       setLoading(null)
     }
   }
 
   const handleRemoveMember = async (membershipId: string, displayName: string) => {
-    if (!confirm(`¿Estás seguro de querer eliminar a ${displayName} del grupo?`)) {
+    if (!confirm(t('ui.screens.members.removeConfirm', { name: displayName }))) {
       return
     }
 
     setLoading(membershipId)
-    setOpenMenu(null)
-
     try {
-       
       const { error } = await (supabase as any)
         .from('group_memberships')
         .update({ is_active: false })
@@ -72,146 +75,135 @@ export function MembersManager({ groupId, members, currentUserId }: MembersManag
       router.refresh()
     } catch (err) {
       console.error('Error removing member:', err)
-      alert('Error al eliminar al miembro')
+      alert(t('ui.screens.members.removeError'))
     } finally {
       setLoading(null)
     }
   }
 
-  const getRoleIcon = (role: string) => {
+  const roleIcon = (role: string) => {
     switch (role) {
       case 'admin':
-        return <ShieldCheck className="h-4 w-4" />
+        return <ShieldCheck className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
       case 'captain':
-        return <Shield className="h-4 w-4" />
+        return <Shield className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
       default:
-        return <User className="h-4 w-4" />
-    }
-  }
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'Admin'
-      case 'captain':
-        return 'Capitán'
-      default:
-        return 'Miembro'
+        return null
     }
   }
 
   return (
-    <div className="space-y-2">
-      {members.map((member) => (
-        <div
-          key={member.membershipId}
-          className="flex items-center justify-between py-3 px-4 rounded-lg hover:bg-muted/50"
-        >
-          <div className="flex items-center gap-3">
-            <Avatar fallback={member.displayName} size="sm" />
-            <div>
-              <p className="text-sm font-medium">
-                {member.displayName}
-                {member.isCurrentUser && (
-                  <span className="text-muted-foreground ml-1">(tú)</span>
-                )}
-              </p>
-            </div>
-          </div>
+    <div className="space-y-4">
+      <ul className="[&>li:last-child]:border-b-0">
+        {members.map((member) => (
+          <li
+            key={member.membershipId}
+            className="flex min-h-11 items-center gap-3 border-b border-border py-2"
+          >
+            <Avatar fallback={member.displayName} size="xs" aria-hidden="true" />
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <span className="truncate text-sm font-medium">{member.displayName}</span>
+              {member.isCurrentUser && (
+                <span className="shrink-0 text-xs text-muted-foreground">{t('ui.screens.members.you')}</span>
+              )}
+            </span>
 
-          <div className="flex items-center gap-2">
             <Badge
-              variant={
-                member.role === 'admin'
-                  ? 'default'
-                  : member.role === 'captain'
-                  ? 'secondary'
-                  : 'outline'
-              }
-              className="flex items-center gap-1"
+              variant={member.role === 'admin' ? 'secondary' : 'outline'}
+              className={cn('gap-1', member.role === 'member' && 'border-transparent text-muted-foreground')}
             >
-              {getRoleIcon(member.role)}
-              {getRoleLabel(member.role)}
+              {roleIcon(member.role)}
+              {t(`groups.roles.${member.role}`)}
             </Badge>
 
             {loading === member.membershipId ? (
-              <Spinner size="sm" />
+              <span className="inline-flex h-9 w-9 items-center justify-center">
+                <Spinner size="sm" />
+              </span>
             ) : (
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() =>
-                    setOpenMenu(openMenu === member.membershipId ? null : member.membershipId)
-                  }
-                  disabled={member.isCurrentUser && adminCount === 1}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-
-                {openMenu === member.membershipId && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setOpenMenu(null)}
-                    />
-                    <div className="absolute right-0 z-20 mt-1 w-48 rounded-md bg-card border shadow-lg py-1">
-                      {member.role !== 'admin' && (
+              <Popover
+                align="right"
+                aria-label={t('ui.screens.members.menu', { name: member.displayName })}
+                triggerClassName="inline-flex h-9 w-9 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                className="w-52"
+                trigger={<MoreVertical className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
+              >
+                {({ close }) => (
+                  <div className="py-1">
+                    {member.role !== 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close()
+                          handleRoleChange(member.membershipId, 'admin')
+                        }}
+                        className={menuItemClassName}
+                      >
+                        <ShieldCheck className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                        {t('ui.screens.members.makeAdmin')}
+                      </button>
+                    )}
+                    {member.role !== 'captain' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close()
+                          handleRoleChange(member.membershipId, 'captain')
+                        }}
+                        className={menuItemClassName}
+                      >
+                        <Shield className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                        {t('ui.screens.members.makeCaptain')}
+                      </button>
+                    )}
+                    {member.role !== 'member' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close()
+                          handleRoleChange(member.membershipId, 'member')
+                        }}
+                        className={menuItemClassName}
+                        disabled={member.role === 'admin' && adminCount === 1}
+                      >
+                        <User className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                        {t('ui.screens.members.makeMember')}
+                      </button>
+                    )}
+                    {!member.isCurrentUser && (
+                      <>
+                        <div className="my-1 border-t border-border" />
                         <button
-                          onClick={() => handleRoleChange(member.membershipId, 'admin')}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-muted"
+                          type="button"
+                          onClick={() => {
+                            close()
+                            handleRemoveMember(member.membershipId, member.displayName)
+                          }}
+                          className={cn(menuItemClassName, 'text-destructive')}
                         >
-                          <ShieldCheck className="h-4 w-4" />
-                          Hacer admin
+                          <UserMinus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                          {t('ui.screens.members.remove')}
                         </button>
-                      )}
-                      {member.role !== 'captain' && (
-                        <button
-                          onClick={() => handleRoleChange(member.membershipId, 'captain')}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-muted"
-                        >
-                          <Shield className="h-4 w-4" />
-                          Hacer capitán
-                        </button>
-                      )}
-                      {member.role !== 'member' && (
-                        <button
-                          onClick={() => handleRoleChange(member.membershipId, 'member')}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-muted"
-                          disabled={member.role === 'admin' && adminCount === 1}
-                        >
-                          <User className="h-4 w-4" />
-                          Hacer miembro
-                        </button>
-                      )}
-                      {!member.isCurrentUser && (
-                        <>
-                          <div className="border-t my-1" />
-                          <button
-                            onClick={() =>
-                              handleRemoveMember(member.membershipId, member.displayName)
-                            }
-                            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-destructive hover:bg-muted"
-                          >
-                            <UserMinus className="h-4 w-4" />
-                            Eliminar del grupo
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </>
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
+              </Popover>
             )}
-          </div>
-        </div>
-      ))}
+          </li>
+        ))}
+      </ul>
 
-      <div className="pt-4 text-xs text-muted-foreground">
-        <p><strong>Admin:</strong> Puede gestionar el grupo, miembros y partidos</p>
-        <p><strong>Capitán:</strong> Puede crear partidos y armar equipos</p>
-        <p><strong>Miembro:</strong> Puede inscribirse y votar</p>
+      <div className="space-y-0.5 text-xs text-muted-foreground">
+        <p>
+          <strong className="font-medium text-foreground">{t('groups.roles.admin')}:</strong> {t('ui.screens.members.adminHint')}
+        </p>
+        <p>
+          <strong className="font-medium text-foreground">{t('groups.roles.captain')}:</strong> {t('ui.screens.members.captainHint')}
+        </p>
+        <p>
+          <strong className="font-medium text-foreground">{t('groups.roles.member')}:</strong> {t('ui.screens.members.memberHint')}
+        </p>
       </div>
     </div>
   )

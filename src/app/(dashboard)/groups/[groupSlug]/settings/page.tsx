@@ -1,9 +1,11 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardList } from 'lucide-react'
+import { ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TopBarConfig } from '@/components/layout/top-bar'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { buttonVariants } from '@/components/ui/button'
+import { Eyebrow } from '@/components/ui/eyebrow'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
 import { MemberScoringSettingsCard } from './member-scoring-settings'
@@ -19,11 +21,14 @@ interface PageProps {
   params: Promise<{ groupSlug: string }>
 }
 
+// Group settings (docs/ui-rework/03-screens.md §9): one column of dashed
+// cards in today's order; the danger zone is the one solid, destructive
+// outline on the page.
+
 export default async function GroupSettingsPage({ params }: PageProps) {
   const { groupSlug } = await params
   const supabase = await createClient()
 
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
 
@@ -35,7 +40,6 @@ export default async function GroupSettingsPage({ params }: PageProps) {
 
   const t = getT(userData?.preferred_language ?? 'es')
 
-  // Get user's player profile
   const { data: playerProfile } = await supabase
     .from('player_profiles')
     .select('id')
@@ -44,7 +48,6 @@ export default async function GroupSettingsPage({ params }: PageProps) {
 
   if (!playerProfile) return notFound()
 
-  // Get group
   const { data: group } = await supabase
     .from('groups')
     .select('*')
@@ -64,7 +67,6 @@ export default async function GroupSettingsPage({ params }: PageProps) {
 
   if (!group) return notFound()
 
-  // Check if user is admin
   const { data: membership } = await supabase
     .from('group_memberships')
     .select('role')
@@ -77,7 +79,6 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     redirect(`/groups/${groupSlug}`)
   }
 
-  // Get all members
   type MembershipWithProfile = {
     id: string
     role: string
@@ -106,8 +107,8 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     .order('role') as { data: MembershipWithProfile[] | null }
 
   const members = (memberships || [])
-    .filter(m => m.player_profiles !== null)
-    .map(m => ({
+    .filter((m) => m.player_profiles !== null)
+    .map((m) => ({
       membershipId: m.id,
       role: m.role as 'admin' | 'captain' | 'member',
       playerId: (m.player_profiles as { id: string }).id,
@@ -116,7 +117,6 @@ export default async function GroupSettingsPage({ params }: PageProps) {
       isCurrentUser: (m.player_profiles as { user_id: string | null }).user_id === user.id,
     }))
 
-  // Get notification settings
   type NotificationSettingsType = {
     id: string
     send_signup_link_on_create: boolean
@@ -161,7 +161,7 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         results_window_days: 7,
       }
 
-  // Get recurring pattern (one per group; UI creates/edits/deactivates it)
+  // Recurring pattern (one per group; UI creates/edits/deactivates it)
   const { data: recurringPattern } = await supabase
     .from('recurring_patterns')
     .select('id, weekday, match_time, location, max_players, signup_opens_weekday, signup_opens_time, timezone, is_active')
@@ -171,29 +171,16 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     .maybeSingle()
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <TopBarConfig title="Ajustes" back={`/groups/${groupSlug}`} />
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver al grupo
-      </Link>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <TopBarConfig title={t('ui.shell.groupSettings')} back={`/groups/${groupSlug}`} />
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground">{group.name}</p>
-      </div>
+      <PageHeader title={t('ui.shell.groupSettings')} subtitle={group.name} />
+      <Eyebrow className="lg:hidden">{group.name}</Eyebrow>
 
-      {/* General Settings */}
       <Card>
         <CardHeader>
-          <CardTitle>Configuración general</CardTitle>
-          <CardDescription>
-            Información básica y valores por defecto del grupo
-          </CardDescription>
+          <CardTitle>{t('ui.screens.groupSettings.general')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.generalHint')}</CardDescription>
         </CardHeader>
         <CardContent>
           <GroupSettingsForm group={group} />
@@ -211,21 +198,19 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Members Management */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div>
-              <CardTitle>Miembros ({members.length})</CardTitle>
-              <CardDescription className="mt-1.5">
-                Administra los roles y permisos de los miembros
-              </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle>{t('ui.screens.groupSettings.members', { n: members.length })}</CardTitle>
+              <CardDescription>{t('ui.screens.groupSettings.membersHint')}</CardDescription>
             </div>
-            <Link href={`/groups/${groupSlug}/rate?mode=baseline`}>
-              <Button variant="outline" size="sm">
-                <ClipboardList className="mr-2 h-4 w-4" />
-                Puntaje base
-              </Button>
+            <Link
+              href={`/groups/${groupSlug}/rate?mode=baseline`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              <ClipboardList className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {t('ui.screens.players.baselineCta')}
             </Link>
           </div>
         </CardHeader>
@@ -238,13 +223,10 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Notification Settings */}
       <Card>
         <CardHeader>
-          <CardTitle>Notificaciones</CardTitle>
-          <CardDescription>
-            Configura las notificaciones automáticas del grupo
-          </CardDescription>
+          <CardTitle>{t('ui.screens.groupSettings.notifications')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.notificationsHint')}</CardDescription>
         </CardHeader>
         <CardContent>
           <NotificationSettings
@@ -254,13 +236,10 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Recurring Match */}
       <Card>
         <CardHeader>
-          <CardTitle>Partido recurrente</CardTitle>
-          <CardDescription>
-            Configura el partido que se arma solo cada semana
-          </CardDescription>
+          <CardTitle>{t('ui.screens.groupSettings.recurring')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.recurringHint')}</CardDescription>
         </CardHeader>
         <CardContent>
           <RecurringPatternForm
@@ -276,13 +255,10 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Danger Zone */}
-      <Card className="border-destructive/50">
+      <Card variant="solid" className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Zona de peligro</CardTitle>
-          <CardDescription>
-            Acciones irreversibles
-          </CardDescription>
+          <CardTitle className="text-destructive">{t('ui.screens.groupSettings.danger')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.dangerHint')}</CardDescription>
         </CardHeader>
         <CardContent>
           <DangerZone groupId={group.id} groupName={group.name} />

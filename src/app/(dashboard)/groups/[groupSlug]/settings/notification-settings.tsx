@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { FormNotice, Toggle } from '@/components/form-controls'
 
 interface NotificationSettingsProps {
   groupId: string
@@ -30,35 +31,6 @@ interface NotificationSettingsProps {
 function toInt(value: string, fallback: number): number {
   const n = parseInt(value, 10)
   return Number.isFinite(n) ? n : fallback
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-        checked ? 'bg-primary' : 'bg-gray-200'
-      }`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  )
 }
 
 export function NotificationSettings({ groupId, settings: initialSettings }: NotificationSettingsProps) {
@@ -126,26 +98,18 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
   return (
     <div className="space-y-6">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <FormNotice kind="error">{error}</FormNotice>}
 
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          Configuración guardada correctamente
-        </div>
-      )}
+      {success && <FormNotice kind="success">Configuración guardada correctamente</FormNotice>}
 
       {/* Auto-send signup link */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-            <MessageCircle className="h-5 w-5 text-blue-600" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <MessageCircle className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Enviar link de inscripción</Label>
+            <p className="text-sm font-medium">Enviar link de inscripción</p>
             <p className="text-sm text-muted-foreground">
               Al crear un partido, copiar automáticamente el link de inscripción
             </p>
@@ -160,13 +124,13 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
       </div>
 
       {/* Reminder hours */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
-            <Clock className="h-5 w-5 text-orange-600" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <Clock className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Recordatorio antes del partido</Label>
+            <p className="text-sm font-medium">Recordatorio antes del partido</p>
             <p className="text-sm text-muted-foreground">
               Horas antes del partido para enviar recordatorio
             </p>
@@ -191,13 +155,13 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
       </div>
 
       {/* Waitlist promotion notification */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-            <Users className="h-5 w-5 text-green-600" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <Users className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Notificar promoción de lista de espera</Label>
+            <p className="text-sm font-medium">Notificar promoción de lista de espera</p>
             <p className="text-sm text-muted-foreground">
               Avisar cuando un jugador pasa de lista de espera a confirmado
             </p>
@@ -212,13 +176,13 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
       </div>
 
       {/* Teams created notification */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-            <Bell className="h-5 w-5 text-purple-600" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <Bell className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Notificar cuando se armen equipos</Label>
+            <p className="text-sm font-medium">Notificar cuando se armen equipos</p>
             <p className="text-sm text-muted-foreground">
               Avisar al grupo cuando se generan los equipos para un partido
             </p>
@@ -234,12 +198,12 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
       {/* Crowd-sourced results: timing defaults */}
       <div className="space-y-4 pt-4 border-t">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
-            <ClipboardList className="h-5 w-5 text-amber-600" />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <ClipboardList className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Resultado después del partido</Label>
+            <p className="text-sm font-medium">Resultado después del partido</p>
             <p className="text-sm text-muted-foreground">
               Cuándo pedirle a los jugadores el resultado, los goles y el MVP. Los partidos
               nuevos copian estos valores; cada partido puede cambiarlos.
@@ -348,12 +312,12 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
       {/* WhatsApp webhook */}
       <div className="space-y-3 pt-4 border-t">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-            <MessageCircle className="h-5 w-5 text-green-600" />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+            <MessageCircle className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <Label className="text-base">Webhook de WhatsApp (opcional)</Label>
+            <p className="text-sm font-medium">Webhook de WhatsApp (opcional)</p>
             <p className="text-sm text-muted-foreground">
               URL para enviar notificaciones automáticas a WhatsApp
             </p>
@@ -379,12 +343,12 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
           <Button onClick={handleSave} disabled={saving}>
             {saving ? (
               <>
-                <Spinner size="sm" className="mr-2" />
+                <Spinner size="sm" />
                 Guardando...
               </>
             ) : (
               <>
-                <Save className="mr-2 h-4 w-4" />
+                <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                 Guardar cambios
               </>
             )}

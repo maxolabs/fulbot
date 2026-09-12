@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { FormNotice, Toggle } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
 import type { Json, MemberScoringPriorityMode, MemberScoringSettings } from '@/types/database'
 
@@ -35,38 +36,6 @@ const DIMENSION_KEYS = ['asistencia', 'aviso', 'puntualidad', 'reglas', 'partici
 type DimensionKey = (typeof DIMENSION_KEYS)[number]
 
 const PRIORITY_MODES: MemberScoringPriorityMode[] = ['off', 'window', 'waitlist', 'reserved']
-
-function Toggle({
-  id,
-  checked,
-  onChange,
-  disabled,
-}: {
-  id?: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-        checked ? 'bg-primary' : 'bg-gray-200'
-      }`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  )
-}
 
 function ToggleRow({
   id,
@@ -116,8 +85,8 @@ function RadioOption({
   return (
     <label
       htmlFor={id}
-      className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
-        selected ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-border'
+      className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors duration-100 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-card ${
+        selected ? 'border-foreground bg-accent' : 'border-border hover:bg-accent/60'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <input
@@ -287,12 +256,8 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
 
   return (
     <div className="space-y-6">
-      {error && <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          {t('memberScoring.settings.saved')}
-        </div>
-      )}
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      {success && <FormNotice kind="success">{t('memberScoring.settings.saved')}</FormNotice>}
 
       <ToggleRow
         id="ms-enabled"
@@ -467,7 +432,7 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
       />
 
       {/* Avanzado: per-event points and dimension weights */}
-      <div className="rounded-xl border border-border/50">
+      <div className="rounded-md border border-border">
         <button
           type="button"
           onClick={() => setAdvancedOpen(o => !o)}
@@ -483,7 +448,7 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
         </button>
 
         {advancedOpen && (
-          <div className="space-y-6 border-t border-border/50 px-4 py-4">
+          <div className="space-y-6 border-t border-border px-4 py-4">
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium">{t('memberScoring.settings.eventWeights')}</p>
@@ -534,7 +499,7 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
                   </div>
                 ))}
               </div>
-              <p className={`text-sm font-medium ${dimensionsValid ? 'text-green-600' : 'text-destructive'}`}>
+              <p className={`text-sm font-medium ${dimensionsValid ? 'text-foreground' : 'text-destructive'}`}>
                 {t('memberScoring.settings.dimensionSum', { sum: dimensionSum.toFixed(2) })}
               </p>
               {!dimensionsValid && (
@@ -548,7 +513,7 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
       </div>
 
       <Button type="button" onClick={handleSave} disabled={saving || !dimensionsValid}>
-        {saving && <Spinner size="sm" className="mr-2" />}
+        {saving && <Spinner size="sm" />}
         {t('memberScoring.settings.save')}
       </Button>
     </div>

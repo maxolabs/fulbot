@@ -1,44 +1,29 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { ChevronRight, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
+import { buttonVariants } from '@/components/ui/button'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
-import { Trophy, Target, Calendar, TrendingUp, ChevronRight } from 'lucide-react'
+import { SignOutButton } from '@/components/sign-out-button'
+import { PageHeader } from '@/components/layout/page-header'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
 import { ProfileForm } from './profile-form'
-import { TopBarConfig } from '@/components/layout/top-bar'
+import { MeLinks } from './me-links'
 
-const POSITION_LABELS: Record<string, string> = {
-  GK: 'Arquero',
-  CB: 'Defensor central',
-  LB: 'Lateral izquierdo',
-  RB: 'Lateral derecho',
-  CDM: 'Mediocampista defensivo',
-  CM: 'Mediocampista central',
-  CAM: 'Mediocampista ofensivo',
-  LM: 'Mediocampista izquierdo',
-  RM: 'Mediocampista derecho',
-  LW: 'Extremo izquierdo',
-  RW: 'Extremo derecho',
-  ST: 'Delantero',
-  CF: 'Centro delantero',
-}
+// Profile (docs/ui-rework/03-screens.md §10): hero with the avatar and the
+// name in the display face, "Editar" jumps to the form card. Browser: form in
+// the main column, Estadísticas and Compromiso in the aside; on mobile (the
+// `Yo` tab) the aside comes first, under the Avisos / Preferencias rows, and
+// "Salir" closes the page.
 
-const POSITIONS = [
-  { value: 'GK', label: 'Arquero (GK)' },
-  { value: 'CB', label: 'Defensor central (CB)' },
-  { value: 'LB', label: 'Lateral izquierdo (LB)' },
-  { value: 'RB', label: 'Lateral derecho (RB)' },
-  { value: 'CDM', label: 'Mediocampista defensivo (CDM)' },
-  { value: 'CM', label: 'Mediocampista central (CM)' },
-  { value: 'CAM', label: 'Mediocampista ofensivo (CAM)' },
-  { value: 'LW', label: 'Extremo izquierdo (LW)' },
-  { value: 'RW', label: 'Extremo derecho (RW)' },
-  { value: 'ST', label: 'Delantero (ST)' },
-]
+const POSITION_CODES = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LW', 'RW', 'ST'] as const
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -46,14 +31,6 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
 
-  // Get user data
-  const { data: userData } = await supabase
-    .from('users')
-    .select('name, email')
-    .eq('id', user.id)
-    .single() as { data: { name: string; email: string } | null }
-
-  // Get player profile
   const { data: profile } = await supabase
     .from('player_profiles')
     .select('*')
@@ -113,124 +90,115 @@ export default async function ProfilePage() {
   )
   groupScores.sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name))
 
+  const positions = POSITION_CODES.map((value) => ({ value, label: `${t(`positions.${value}`)} (${value})` }))
+  const positionLabel = t(`positions.${profile.main_position}`)
+  const subtitle = [profile.nickname, positionLabel === `positions.${profile.main_position}` ? profile.main_position : positionLabel]
+    .filter(Boolean)
+    .join(' · ')
+
+  const stats = [
+    { label: t('players.matchesPlayed'), value: profile.matches_played },
+    { label: t('players.goals'), value: profile.goals },
+    { label: t('players.assists'), value: profile.assists },
+    { label: t('players.mvpCount'), value: profile.mvp_count },
+    ...(profile.clean_sheets > 0 ? [{ label: t('players.cleanSheets'), value: profile.clean_sheets }] : []),
+  ]
+
+  const editLink = (
+    <Link href="#informacion" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+      {t('common.edit')}
+    </Link>
+  )
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       <TopBarConfig title={t('ui.shell.profile')} />
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Mi perfil</h1>
-        <p className="text-muted-foreground">Administra tu información de jugador</p>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Stats Card */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center">
-                <Avatar fallback={profile.display_name} size="lg" />
-                <h2 className="mt-4 text-xl font-semibold">{profile.display_name}</h2>
-                {profile.nickname && (
-                  <p className="text-muted-foreground">{profile.nickname}</p>
-                )}
-                <p className="text-sm text-muted-foreground mt-1">
-                  {POSITION_LABELS[profile.main_position] || profile.main_position}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+      <MeLinks />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Estadísticas</CardTitle>
+      <PageHeader eyebrow={t('ui.shell.profile')} title={profile.display_name} subtitle={subtitle} actions={editLink} />
+
+      {/* Mobile hero */}
+      <header className="flex items-center gap-4 lg:hidden">
+        <Avatar fallback={profile.display_name} size="lg" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <h1 className="truncate font-display text-2xl font-extrabold leading-tight tracking-tight">{profile.display_name}</h1>
+          <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+            {profile.nickname && <span>{profile.nickname}</span>}
+            <PositionChip position={profile.main_position} />
+          </div>
+        </div>
+        {editLink}
+      </header>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
+          <Card id="informacion" className="scroll-mt-16">
+            <CardHeader>
+              <CardTitle>{t('ui.screens.profile.infoTitle')}</CardTitle>
+              <CardDescription>{t('ui.screens.profile.infoHint')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Partidos jugados</span>
-                </div>
-                <span className="font-semibold">{profile.matches_played}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Goles</span>
-                </div>
-                <span className="font-semibold">{profile.goals}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Asistencias</span>
-                </div>
-                <span className="font-semibold">{profile.assists}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Trophy className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm">MVPs</span>
-                </div>
-                <span className="font-semibold">{profile.mvp_count}</span>
-              </div>
-              {profile.clean_sheets > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Vallas invictas</span>
-                  <span className="font-semibold">{profile.clean_sheets}</span>
-                </div>
-              )}
+            <CardContent>
+              <ProfileForm profile={profile} positions={positions} />
+            </CardContent>
+          </Card>
+        </div>
+
+        <aside className="order-first min-w-0 space-y-6 lg:order-none">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('players.stats')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="[&>div:last-child]:border-b-0">
+                {stats.map((s) => (
+                  <div key={s.label} className="flex items-center justify-between gap-4 border-b border-border py-2.5 text-sm">
+                    <dt className="text-muted-foreground">{s.label}</dt>
+                    <dd className="font-mono tabular-nums">{s.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </CardContent>
           </Card>
 
-          {/* Member score per group ("Compromiso") */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{t('memberScore.title')}</CardTitle>
+            <CardHeader>
+              <CardTitle>{t('memberScore.title')}</CardTitle>
               <CardDescription>{t('memberScore.profileDescription')}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-1">
+            <CardContent>
               {groupScores.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t('memberScore.profileEmpty')}</p>
               ) : (
-                groupScores.map((g) => (
-                  <Link
-                    key={g.id}
-                    href={`/groups/${g.slug}/players/${profile.id}`}
-                    className="flex items-center justify-between gap-3 -mx-2 px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
-                    title={t('memberScore.viewDetail')}
-                  >
-                    <span className="text-sm flex-1 min-w-0 truncate">{g.name}</span>
-                    <span className="flex items-center gap-1.5 shrink-0">
-                      {g.enabled ? (
-                        <MemberScoreStars score={g.score} language={language} />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{t('memberScore.profileDisabled')}</span>
-                      )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </span>
-                  </Link>
-                ))
+                <ul className="[&>li:last-child>a]:border-b-0">
+                  {groupScores.map((g) => (
+                    <li key={g.id}>
+                      <Link
+                        href={`/groups/${g.slug}/players/${profile.id}`}
+                        className="flex min-h-11 items-center gap-3 border-b border-border py-2 text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                        title={t('memberScore.viewDetail')}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                        {g.enabled ? (
+                          <MemberScoreStars score={g.score} language={language} />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{t('memberScore.profileDisabled')}</span>
+                        )}
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
-        </div>
+        </aside>
+      </div>
 
-        {/* Edit Form */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Información del jugador</CardTitle>
-              <CardDescription>
-                Actualiza tu perfil para que los equipos se armen mejor
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ProfileForm
-                profile={profile}
-                positions={POSITIONS}
-              />
-            </CardContent>
-          </Card>
-        </div>
+      <div className="flex flex-col items-center gap-2 pt-2 lg:hidden">
+        <Eyebrow>{user.email}</Eyebrow>
+        <SignOutButton />
       </div>
     </div>
   )

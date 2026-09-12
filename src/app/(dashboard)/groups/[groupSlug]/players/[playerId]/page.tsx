@@ -1,15 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import {
-  ArrowLeft,
-  Trophy,
-  Star,
-  Calendar,
-  Target,
-  Footprints,
-  Shield,
-  Award,
-} from 'lucide-react'
+import { Award } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { SkillSummaryCard } from '@/components/player-skills'
 import { MemberScoreBreakdown, MemberScoreStars } from '@/components/member-score'
@@ -18,46 +9,37 @@ import type { RatingSummary } from '@/lib/ratings'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { PositionChip } from '@/components/ui/player-row'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberBreakdown, MemberEventSource, MemberEventType, MemberScoringSettings } from '@/types/database'
-import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchDateShort, formatMatchDayMonth, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import {
+  DEFAULT_TIMEZONE,
+  formatMatchDateNumeric,
+  formatMatchDateShort,
+  formatMatchDayMonth,
+  formatMatchTime,
+  formatWeekday,
+} from '@/lib/utils/datetime'
+import { cn } from '@/lib/utils/cn'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; playerId: string }>
 }
 
-const POSITION_LABELS: Record<string, string> = {
-  GK: 'Arquero',
-  CB: 'Defensor Central',
-  LB: 'Lateral Izquierdo',
-  RB: 'Lateral Derecho',
-  CDM: 'Volante Defensivo',
-  CM: 'Mediocampista',
-  CAM: 'Enganche',
-  LM: 'Medio Izquierdo',
-  RM: 'Medio Derecho',
-  LW: 'Extremo Izquierdo',
-  RW: 'Extremo Derecho',
-  ST: 'Delantero',
-  CF: 'Centro Delantero',
-}
+// Player detail (docs/ui-rework/03-screens.md §7): hero with the 64px avatar
+// and the name in the display face; two columns in the browser (main =
+// stats, aside = member score, badges, skills), stacked main-then-aside on
+// mobile.
 
-const BADGE_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  hat_trick: { label: 'Hat-trick Hero', icon: '⚽', color: 'bg-yellow-500/10 text-yellow-700' },
-  playmaker: { label: 'Playmaker', icon: '🎯', color: 'bg-blue-500/10 text-blue-700' },
-  ironman: { label: 'Ironman', icon: '💪', color: 'bg-red-500/10 text-red-700' },
-  safe_hands: { label: 'Safe Hands', icon: '🧤', color: 'bg-green-500/10 text-green-700' },
-  mvp: { label: 'MVP', icon: '🏆', color: 'bg-purple-500/10 text-purple-700' },
-  mvp_streak: { label: 'MVP Streak', icon: '🏆', color: 'bg-purple-500/10 text-purple-700' },
-  first_match: { label: 'Primera vez', icon: '🌟', color: 'bg-cyan-500/10 text-cyan-700' },
-}
+const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'mvp_streak', 'first_match'])
 
 export default async function PlayerProfilePage({ params }: PageProps) {
   const { groupSlug, playerId } = await params
   const supabase = await createClient()
 
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
 
@@ -69,7 +51,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
   if (!currentPlayer) return notFound()
 
-  // Get group
   const { data: group } = await supabase
     .from('groups')
     .select('id, name, slug, timezone')
@@ -80,7 +61,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
   const timeZone = group.timezone || DEFAULT_TIMEZONE
 
-  // Get player profile
   type PlayerProfileFull = {
     id: string
     display_name: string
@@ -106,7 +86,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
   if (!player) return notFound()
 
-  // Viewer's role in this group: scores are visible to admins and captains only
   const { data: viewerMembership } = await supabase
     .from('group_memberships')
     .select('role')
@@ -127,6 +106,15 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     .single() as { data: { preferred_language: Language } | null }
   const language: Language = userData?.preferred_language ?? 'es'
   const t = getT(language)
+
+  // The player's own role in this group, for the hero.
+  const { data: playerMembership } = await supabase
+    .from('group_memberships')
+    .select('role')
+    .eq('group_id', group.id)
+    .eq('player_id', playerId)
+    .eq('is_active', true)
+    .maybeSingle() as { data: { role: 'admin' | 'captain' | 'member' } | null }
 
   // Member score ("Compromiso", docs/member-scoring.md §5.4): visible when the
   // group opted into 'group' visibility, or the viewer is admin/captain, or the
@@ -186,13 +174,13 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       .eq('player_id', playerId)
       .order('created_at', { ascending: false }) as { data: MemberEventRow[] | null }
 
-    memberEvents = (eventRows || []).filter(e =>
+    memberEvents = (eventRows || []).filter((e) =>
       e.match_id
         ? windowMatchById.has(e.match_id)
         : oldest === null || e.created_at >= oldest
     )
 
-    const reporterIds = Array.from(new Set(memberEvents.map(e => e.reported_by).filter((id): id is string => !!id)))
+    const reporterIds = Array.from(new Set(memberEvents.map((e) => e.reported_by).filter((id): id is string => !!id)))
     if (reporterIds.length > 0) {
       const { data: reporters } = await supabase
         .from('player_profiles')
@@ -212,7 +200,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     ratingSummary = summaryRow
   }
 
-  // Get player badges
   type BadgeRow = {
     id: string
     badge_type: string
@@ -226,7 +213,6 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     .eq('player_id', playerId)
     .order('earned_at', { ascending: false }) as { data: BadgeRow[] | null }
 
-  // Get recent match history for this player in this group
   type RecentMatch = {
     id: string
     match_id: string
@@ -260,13 +246,12 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     .limit(10) as { data: RecentMatch[] | null }
 
   const recentMatches = (recentSignups || [])
-    .filter(s => s.matches !== null)
-    .map(s => ({
+    .filter((s) => s.matches !== null)
+    .map((s) => ({
       signupStatus: s.status,
       ...(s.matches as { id: string; date_time: string; location: string | null; status: string }),
     }))
 
-  // Get average rating received
   type RatingAgg = { rating: number }
   const { data: ratingsReceived } = await supabase
     .from('match_ratings')
@@ -277,292 +262,262 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     ? ratingsReceived.reduce((sum, r) => sum + r.rating, 0) / ratingsReceived.length
     : null
 
-  const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const positionLabel = (code: string) => {
+    const label = t(`positions.${code}`)
+    return label === `positions.${code}` ? code : label
+  }
+  const footednessLabel =
+    player.footedness === 'left'
+      ? t('ui.screens.player.leftFooted')
+      : player.footedness === 'right'
+        ? t('ui.screens.player.rightFooted')
+        : t('ui.screens.player.bothFooted')
+  const roleLabel = playerMembership ? t(`groups.roles.${playerMembership.role}`) : null
+  const otherPositions = (player.preferred_positions || []).filter((p) => p !== player.main_position)
+
+  const stats: { label: string; value: string }[] = [
+    { label: t('players.matchesPlayed'), value: String(player.matches_played) },
+    { label: t('players.goals'), value: String(player.goals) },
+    { label: t('players.assists'), value: String(player.assists) },
+    { label: t('players.mvpCount'), value: String(player.mvp_count) },
+  ]
+
+  const gkWillingness = [
+    t('ui.screens.player.gkNever'),
+    t('ui.screens.player.gkIfNeeded'),
+    t('ui.screens.player.gkOk'),
+    t('ui.screens.player.gkLoves'),
+  ][player.goalkeeper_willingness] ?? '–'
+
+  const statRow = (label: string, value: string, key: string) => (
+    <div key={key} className="flex items-center justify-between gap-4 border-b border-border py-2.5 text-sm last:border-b-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono tabular-nums">{value}</span>
+    </div>
+  )
+
+  const memberScoreCard = canSeeScore && (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <CardTitle>{t('memberScore.title')}</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {scoringSettings?.visibility === 'self' && currentPlayer.id === playerId && !isAdminOrCaptain
+                ? t('memberScore.privateHint')
+                : t('memberScore.subtitle')}
+            </p>
+          </div>
+          {isAdmin && <MemberScoreAdjust groupId={group.id} playerId={playerId} />}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <MemberScoreStars score={memberScore?.member_score ?? null} variant="full" language={language} />
+        <MemberScoreBreakdown breakdown={memberScore?.member_breakdown ?? null} language={language} />
+
+        <div className="border-t border-border pt-3">
+          <Eyebrow as="h4">{t('memberScore.eventLog')}</Eyebrow>
+          <p className="mt-1 text-xs text-muted-foreground">{t('memberScore.eventLogHint')}</p>
+          {memberEvents.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">{t('memberScore.eventLogEmpty')}</p>
+          ) : (
+            <ul className="mt-2 [&>li:last-child]:border-b-0">
+              {memberEvents
+                .map((e) => ({ ...e, when: e.match_id ? windowMatchById.get(e.match_id)?.date_time ?? e.created_at : e.created_at }))
+                .sort((a, b) => b.when.localeCompare(a.when) || b.created_at.localeCompare(a.created_at))
+                .map((event) => {
+                  const match = event.match_id ? windowMatchById.get(event.match_id) : undefined
+                  const reporter = event.reported_by ? reporterNameById.get(event.reported_by) : undefined
+                  return (
+                    <li key={event.id} className="flex items-start gap-3 border-b border-border py-2 text-sm">
+                      <span className="w-11 shrink-0 pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+                        {formatMatchDayMonth(event.when, timeZone)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{t(`memberScore.events.${event.type}`)}</p>
+                        <p className="break-words text-xs text-muted-foreground">
+                          {match ? (
+                            <Link href={`/groups/${groupSlug}/matches/${match.id}`} className="hover:underline">
+                              {formatMatchDateShort(match.date_time, timeZone)}
+                              {match.location ? ` · ${match.location}` : ''}
+                            </Link>
+                          ) : (
+                            formatMatchDateNumeric(event.created_at, timeZone)
+                          )}
+                          {' · '}
+                          {reporter ? t('memberScore.reportedBy', { name: reporter }) : t('memberScore.system')}
+                        </p>
+                        {event.note && <p className="mt-0.5 text-xs italic text-muted-foreground">{event.note}</p>}
+                      </div>
+                      <span
+                        className={cn(
+                          'font-mono text-sm font-medium tabular-nums',
+                          event.points < 0 ? 'text-destructive' : event.points > 0 ? 'text-foreground' : 'text-muted-foreground'
+                        )}
+                      >
+                        {event.points > 0 ? '+' : ''}{event.points}
+                      </span>
+                      {isAdmin && <MemberEventDeleteButton eventId={event.id} />}
+                    </li>
+                  )
+                })}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}/players`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a jugadores
-      </Link>
+    <div className="space-y-6">
+      <TopBarConfig title={player.display_name} back={`/groups/${groupSlug}/players`} />
 
-      {/* Player Header */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <Avatar fallback={player.display_name} size="lg" />
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold">{player.display_name}</h1>
-              {player.nickname && (
-                <p className="text-muted-foreground">&quot;{player.nickname}&quot;</p>
-              )}
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Badge variant="secondary">
-                  {POSITION_LABELS[player.main_position] || player.main_position}
-                </Badge>
-                <Badge variant="outline">
-                  {player.footedness === 'left'
-                    ? 'Zurdo'
-                    : player.footedness === 'right'
-                    ? 'Diestro'
-                    : 'Ambidiestro'}
-                </Badge>
-                {player.fitness_status !== 'ok' && (
-                  <Badge variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
-                    {player.fitness_status === 'injured' ? 'Lesionado' : 'Limitado'}
-                  </Badge>
-                )}
-              </div>
-            </div>
+      {/* Hero: same block at every width (the avatar is part of the header, so PageHeader's text-only row is not used). */}
+      <header className="flex items-start gap-4">
+        <Avatar fallback={player.display_name} size="lg" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Eyebrow className="hidden lg:block">{group.name}</Eyebrow>
+          <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight text-balance lg:text-3xl">
+            {player.display_name}
+            {player.nickname && (
+              <span className="ml-2 font-sans text-base font-normal text-muted-foreground">({player.nickname})</span>
+            )}
+          </h1>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {roleLabel && playerMembership?.role !== 'member' && <Badge variant="secondary">{roleLabel}</Badge>}
+            <PositionChip position={player.main_position} className="text-foreground" />
+            {otherPositions.map((pos) => (
+              <PositionChip key={pos} position={pos} />
+            ))}
+            <span className="text-xs text-muted-foreground">{footednessLabel}</span>
+            {player.fitness_status !== 'ok' && (
+              <Badge variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
+                {player.fitness_status === 'injured' ? t('players.injured') : t('players.limited')}
+              </Badge>
+            )}
           </div>
+        </div>
+      </header>
 
-          {/* Scores: admins and captains only */}
-          {isAdminOrCaptain && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-3">Calificación del grupo</p>
-              <SkillSummaryCard summary={ratingSummary} />
-            </div>
-          )}
-
-          {/* Preferred positions */}
-          {player.preferred_positions.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-2">Posiciones preferidas</p>
-              <div className="flex gap-2">
-                {player.preferred_positions.map((pos) => (
-                  <Badge key={pos} variant="outline" className="text-xs">
-                    {POSITION_LABELS[pos] || pos}
-                  </Badge>
-                ))}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Main column */}
+        <div className="min-w-0 space-y-6">
+          <dl className="grid grid-cols-4 gap-2">
+            {stats.map((s) => (
+              <div key={s.label} className="rounded-md bg-card px-2 py-3 text-center">
+                <dd className="font-display text-2xl font-extrabold tabular-nums">{s.value}</dd>
+                <dt className="mt-1 font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">{s.label}</dt>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            ))}
+          </dl>
 
-      {/* Member score ("Compromiso") */}
-      {canSeeScore && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex-1 min-w-[200px]">
-                <CardTitle className="text-base">{t('memberScore.title')}</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {scoringSettings?.visibility === 'self' && currentPlayer.id === playerId && !isAdminOrCaptain
-                    ? t('memberScore.privateHint')
-                    : t('memberScore.subtitle')}
-                </p>
-              </div>
-              {isAdmin && <MemberScoreAdjust groupId={group.id} playerId={playerId} />}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <MemberScoreStars score={memberScore?.member_score ?? null} variant="full" language={language} />
-            <MemberScoreBreakdown breakdown={memberScore?.member_breakdown ?? null} language={language} />
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('ui.screens.player.detailedStats')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {statRow(t('players.cleanSheets'), String(player.clean_sheets), 'cs')}
+              {avgRating !== null && statRow(t('ui.screens.player.avgRating'), `${avgRating.toFixed(1)} / 5`, 'avg')}
+              {statRow(t('ui.screens.player.gkWillingness'), gkWillingness, 'gk')}
+              {player.matches_played > 0 &&
+                statRow(t('ui.screens.player.goalsPerMatch'), (player.goals / player.matches_played).toFixed(2), 'gpm')}
+              {statRow(t('ui.screens.player.mainPosition'), positionLabel(player.main_position), 'pos')}
+            </CardContent>
+          </Card>
 
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium">{t('memberScore.eventLog')}</p>
-              <p className="text-xs text-muted-foreground mb-2">{t('memberScore.eventLogHint')}</p>
-              {memberEvents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('memberScore.eventLogEmpty')}</p>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('ui.screens.player.recentMatches')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentMatches.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('ui.screens.player.noMatches')}</p>
               ) : (
-                <ul className="divide-y divide-border/50">
-                  {memberEvents
-                    .map(e => ({ ...e, when: e.match_id ? windowMatchById.get(e.match_id)?.date_time ?? e.created_at : e.created_at }))
-                    .sort((a, b) => b.when.localeCompare(a.when) || b.created_at.localeCompare(a.created_at))
-                    .map((event) => {
-                      const match = event.match_id ? windowMatchById.get(event.match_id) : undefined
-                      const reporter = event.reported_by ? reporterNameById.get(event.reported_by) : undefined
-                      return (
-                        <li key={event.id} className="flex items-start gap-3 py-2 text-sm">
-                          <div className="min-w-[44px] text-xs text-muted-foreground pt-0.5">
-                            {formatMatchDayMonth(event.when, timeZone)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium">{t(`memberScore.events.${event.type}`)}</p>
-                            <p className="text-xs text-muted-foreground break-words">
-                              {match ? (
-                                <Link href={`/groups/${groupSlug}/matches/${match.id}`} className="hover:underline">
-                                  {formatMatchDateShort(match.date_time, timeZone)}
-                                  {match.location ? ` · ${match.location}` : ''}
-                                </Link>
-                              ) : (
-                                formatMatchDateNumeric(event.created_at, timeZone)
-                              )}
-                              {' · '}
-                              {reporter ? t('memberScore.reportedBy', { name: reporter }) : t('memberScore.system')}
-                            </p>
-                            {event.note && <p className="text-xs italic text-muted-foreground mt-0.5">{event.note}</p>}
-                          </div>
-                          <span
-                            className={`text-sm font-semibold tabular-nums ${event.points > 0 ? 'text-primary' : event.points < 0 ? 'text-destructive' : 'text-muted-foreground'}`}
-                          >
-                            {event.points > 0 ? '+' : ''}{event.points}
-                          </span>
-                          {isAdmin && <MemberEventDeleteButton eventId={event.id} />}
-                        </li>
-                      )
-                    })}
+                <ul className="[&>li:last-child>a]:border-b-0">
+                  {recentMatches.map((match) => (
+                    <li key={match.id}>
+                      <Link
+                        href={`/groups/${groupSlug}/matches/${match.id}`}
+                        className="flex min-h-11 items-center gap-3 border-b border-border py-2 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      >
+                        <span className="w-16 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                          <span className="block">{formatWeekday(match.date_time, timeZone).slice(0, 3)}</span>
+                          <span className="block text-foreground">{formatMatchDayMonth(match.date_time, timeZone)}</span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">{match.location || t('ui.screens.player.noLocation')}</span>
+                          <span className="block font-mono text-xs text-muted-foreground">{formatMatchTime(match.date_time, timeZone)}</span>
+                        </span>
+                        <Badge
+                          variant={
+                            match.signupStatus === 'did_not_show'
+                              ? 'warning'
+                              : match.status === 'finished'
+                                ? 'outline'
+                                : match.status === 'cancelled'
+                                  ? 'destructive'
+                                  : 'secondary'
+                          }
+                        >
+                          {match.signupStatus === 'did_not_show'
+                            ? t('ui.screens.player.noShow')
+                            : match.status === 'finished'
+                              ? t('ui.screens.player.played')
+                              : match.status === 'cancelled'
+                                ? t('ui.screens.player.cancelled')
+                                : t('ui.screens.player.pending')}
+                        </Badge>
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Calendar className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-2xl font-bold">{player.matches_played}</p>
-            <p className="text-xs text-muted-foreground">Partidos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Target className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-2xl font-bold">{player.goals}</p>
-            <p className="text-xs text-muted-foreground">Goles</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Footprints className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-2xl font-bold">{player.assists}</p>
-            <p className="text-xs text-muted-foreground">Asistencias</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Trophy className="h-5 w-5 mx-auto mb-2 text-yellow-500" />
-            <p className="text-2xl font-bold">{player.mvp_count}</p>
-            <p className="text-xs text-muted-foreground">MVPs</p>
-          </CardContent>
-        </Card>
+        {/* Aside */}
+        <aside className="min-w-0 space-y-6">
+          {memberScoreCard}
+
+          {badges && badges.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('ui.screens.player.badges')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="[&>li:last-child]:border-b-0">
+                  {badges.map((badge) => {
+                    const label = BADGE_KEYS.has(badge.badge_type)
+                      ? t(`ui.screens.player.badgeNames.${badge.badge_type}`)
+                      : badge.badge_type
+                    return (
+                      <li key={badge.id} className="flex items-center gap-3 border-b border-border py-2 text-sm">
+                        <Award className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+                        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                          {formatMatchDateNumeric(badge.earned_at, timeZone)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {isAdminOrCaptain && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('ui.screens.player.groupRating')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SkillSummaryCard summary={ratingSummary} />
+              </CardContent>
+            </Card>
+          )}
+        </aside>
       </div>
-
-      {/* Additional Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Estadísticas detalladas</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              Vallas invictas
-            </span>
-            <span className="font-medium">{player.clean_sheets}</span>
-          </div>
-          {avgRating !== null && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground flex items-center gap-2">
-                <Star className="h-4 w-4" />
-                Rating promedio recibido
-              </span>
-              <span className="font-medium">{avgRating.toFixed(1)} / 5</span>
-            </div>
-          )}
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground flex items-center gap-2">
-              <Award className="h-4 w-4" />
-              Voluntad de arquero
-            </span>
-            <span className="font-medium">
-              {['Nunca', 'Si no queda otra', 'Me da igual', 'Me encanta'][player.goalkeeper_willingness]}
-            </span>
-          </div>
-          {player.matches_played > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Goles por partido</span>
-              <span className="font-medium">{(player.goals / player.matches_played).toFixed(2)}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Badges */}
-      {badges && badges.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Insignias</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              {badges.map((badge) => {
-                const config = BADGE_LABELS[badge.badge_type] || {
-                  label: badge.badge_type,
-                  icon: '🎖️',
-                  color: 'bg-gray-500/10 text-gray-700',
-                }
-                return (
-                  <div
-                    key={badge.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg ${config.color}`}
-                  >
-                    <span className="text-2xl">{config.icon}</span>
-                    <div>
-                      <p className="text-sm font-medium">{config.label}</p>
-                      <p className="text-xs opacity-70">
-                        {formatMatchDateNumeric(badge.earned_at, timeZone)}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Recent Matches */}
-      {recentMatches.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Últimos partidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {recentMatches.map((match) => {
-                const date = new Date(match.date_time)
-                return (
-                  <Link
-                    key={match.id}
-                    href={`/groups/${groupSlug}/matches/${match.id}`}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="text-center min-w-[48px]">
-                      <p className="text-xs text-muted-foreground">{DAYS[weekdayIndexInTimezone(date, timeZone)]}</p>
-                      <p className="text-sm font-medium">
-                        {formatMatchDayMonth(date, timeZone)}
-                      </p>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm">
-                        {match.location || 'Sin ubicación'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatMatchTime(date, timeZone)}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={match.status === 'finished' ? 'outline' : match.status === 'cancelled' ? 'destructive' : 'secondary'}
-                      className="text-xs"
-                    >
-                      {match.status === 'finished' ? 'Jugado' : match.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-                    </Badge>
-                  </Link>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
