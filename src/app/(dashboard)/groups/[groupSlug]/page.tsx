@@ -578,7 +578,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
               <Eyebrow>{t('ui.matchScreens.dashboard.tileTable')}</Eyebrow>
               <span className="flex items-end justify-between gap-2">
                 <span className="truncate text-sm font-medium">
-                  {table[0] ? `${table[0].name} · ${table[0].played} ${t('ui.matchScreens.dashboard.colPJ')}` : t('ui.matchScreens.dashboard.tileSeePlayers')}
+                  {table[0] ? table[0].name : t('ui.matchScreens.dashboard.tileSeePlayers')}
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
               </span>

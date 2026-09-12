@@ -171,7 +171,7 @@ export function SignupList({
                   )}
                   {typeof rating === 'number' && (
                     <span
-                      className="flex items-center gap-0.5 font-mono text-xs tabular-nums text-muted-foreground"
+                      className="hidden items-center gap-0.5 font-mono text-xs tabular-nums text-muted-foreground sm:flex"
                       title={ratingTitle}
                     >
                       <Star className="h-3 w-3 fill-primary text-primary" strokeWidth={1.75} aria-hidden="true" />

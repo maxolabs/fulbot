@@ -1,7 +1,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { badgeVariants, type BadgeProps } from '@/components/ui/badge'
 import { cn } from '@/lib/utils/cn'
 
 // Match rows (docs/ui-rework/03-screens.md §2, §5; 06-principles.md §3):
@@ -21,11 +21,12 @@ export const STATUS_BADGE_VARIANT: Record<string, NonNullable<BadgeProps['varian
   cancelled: 'destructive',
 }
 
+/** Status badge as a <span>, so it can sit inside <p> (page header subtitle) without a hydration error. */
 export function MatchStatusBadge({ status, label, className }: { status: string; label: string; className?: string }) {
   return (
-    <Badge variant={STATUS_BADGE_VARIANT[status] ?? 'outline'} className={className}>
+    <span className={cn(badgeVariants({ variant: STATUS_BADGE_VARIANT[status] ?? 'outline' }), className)}>
       {label}
-    </Badge>
+    </span>
   )
 }
 

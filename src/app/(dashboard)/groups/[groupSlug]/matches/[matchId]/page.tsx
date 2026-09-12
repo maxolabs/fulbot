@@ -22,10 +22,10 @@ import { MatchReportsTable } from './match-reports-table'
 import { ConductCheck } from './conduct-check'
 import { ManagePopover, MatchTopBar, ShareMatchButton } from './match-manage'
 import { MatchStatusBadge, ScoreText } from '../match-row'
-import { formatHeroDate } from '../match-format'
+import { formatHeroDate, formatRowDate } from '../match-format'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
-import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
+import { DEFAULT_TIMEZONE, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
@@ -602,10 +602,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {/* Mobile hero */}
           <div className="space-y-2 lg:hidden">
             <div className="flex items-center justify-between gap-3">
-              <Eyebrow>{isLive ? t('ui.matchScreens.match.eyebrowNext') : statusLabel}</Eyebrow>
+              <Eyebrow>{isLive ? t('ui.matchScreens.match.eyebrowNext') : t('ui.shell.tabMatch')}</Eyebrow>
               {statusBadge}
             </div>
-            <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance">{heroDate}</h1>
+            <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance">
+              {formatRowDate(t, match.date_time, timeZone)}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-mono tabular-nums">{formatMatchTime(match.date_time, timeZone)}</span>
+              {match.location && ` · ${match.location}`}
+            </p>
             {heroScore && (
               <p className="flex items-center gap-3 text-sm text-muted-foreground">
                 <span>{t('ui.matchScreens.dashboard.dark')}</span>
@@ -613,7 +619,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <span>{t('ui.matchScreens.dashboard.light')}</span>
               </p>
             )}
-            {match.location && <p className="text-sm text-muted-foreground">{match.location}</p>}
             {mvpPlayerName && showConsensus && (
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
