@@ -1,34 +1,139 @@
 import { ImageResponse } from '@vercel/og'
 import { NextRequest } from 'next/server'
 import { placePlayersInFormation } from '@/lib/formations'
+import { CHALK, CONE, PITCH, TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
+import { getTranslation, type Language } from '@/i18n/core'
 
 export const runtime = 'edge'
+
+// Exported lineup image (docs/ui-rework/01-brand.md §6): the same board as the
+// web pitch so the WhatsApp image is recognisably the app. Board canvas,
+// dashed chalk markings drawn as bordered divs (Satori has no SVG dasharray),
+// wordmark + match date in the header, 44px dots with initials in Syne 800
+// and the name below in IBM Plex Mono. Ratings never appear here: the image
+// goes to the whole group.
+//
+// Fonts are the two OFL files in src/assets/fonts, resolved relative to this
+// module so they work in `next dev` and `next build` on the edge runtime.
+// No system-ui fallback: every text node names one of the two faces.
+
+const WIDTH = 820
+const HEIGHT = 660
+const FIELD_W = 380
+const FIELD_H = 500
+const DOT = 44
 
 interface Player {
   name: string
   position: string
 }
 
-type PositionedPlayer = Player & { slotPosition: string }
-
 interface LineupData {
   groupName: string
   matchDate: string
   darkTeam: Player[]
   lightTeam: Player[]
+  lang?: Language
 }
 
-function PlayerCircle({
-  player,
-  x,
-  y,
-  isDark,
-}: {
-  player: PositionedPlayer
-  x: number
-  y: number
-  isDark: boolean
-}) {
+const fontFiles = {
+  syne: new URL('../../../../assets/fonts/Syne-ExtraBold.ttf', import.meta.url),
+  mono: new URL('../../../../assets/fonts/IBMPlexMono-Medium.ttf', import.meta.url),
+}
+
+async function loadFonts() {
+  const [syne, mono] = await Promise.all([
+    fetch(fontFiles.syne).then((r) => r.arrayBuffer()),
+    fetch(fontFiles.mono).then((r) => r.arrayBuffer()),
+  ])
+  return [
+    { name: 'Syne', data: syne, weight: 800 as const, style: 'normal' as const },
+    { name: 'IBM Plex Mono', data: mono, weight: 500 as const, style: 'normal' as const },
+  ]
+}
+
+function initialsOf(name: string): string {
+  return name.trim().slice(0, 2).toUpperCase()
+}
+
+const dashed = {
+  borderWidth: '2px',
+  borderStyle: 'dashed',
+  borderColor: CHALK,
+} as const
+
+function Markings() {
+  const inset = 8
+  const boxW = FIELD_W * 0.5
+  const boxH = FIELD_H * 0.16
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
+      {/* Outline */}
+      <div
+        style={{
+          position: 'absolute',
+          left: inset,
+          top: inset,
+          width: FIELD_W - inset * 2,
+          height: FIELD_H - inset * 2,
+          borderRadius: '2px',
+          ...dashed,
+        }}
+      />
+      {/* Halfway line */}
+      <div
+        style={{
+          position: 'absolute',
+          left: inset,
+          top: FIELD_H / 2 - 1,
+          width: FIELD_W - inset * 2,
+          height: 0,
+          borderTopWidth: '2px',
+          borderTopStyle: 'dashed',
+          borderTopColor: CHALK,
+        }}
+      />
+      {/* Centre circle */}
+      <div
+        style={{
+          position: 'absolute',
+          left: FIELD_W / 2 - 46,
+          top: FIELD_H / 2 - 46,
+          width: 92,
+          height: 92,
+          borderRadius: '50%',
+          ...dashed,
+        }}
+      />
+      {/* Top box (no top edge: it shares the outline) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: (FIELD_W - boxW) / 2,
+          top: inset,
+          width: boxW,
+          height: boxH,
+          ...dashed,
+          borderTopWidth: '0px',
+        }}
+      />
+      {/* Bottom box */}
+      <div
+        style={{
+          position: 'absolute',
+          left: (FIELD_W - boxW) / 2,
+          top: FIELD_H - inset - boxH,
+          width: boxW,
+          height: boxH,
+          ...dashed,
+          borderBottomWidth: '0px',
+        }}
+      />
+    </div>
+  )
+}
+
+function Dot({ player, x, y, dark }: { player: Player; x: number; y: number; dark: boolean }) {
   return (
     <div
       style={{
@@ -39,41 +144,38 @@ function PlayerCircle({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '4px',
+        gap: '3px',
       }}
     >
-      {/* Player circle */}
       <div
         style={{
-          width: '44px',
-          height: '44px',
+          width: DOT,
+          height: DOT,
           borderRadius: '50%',
-          backgroundColor: isDark ? '#1f2937' : '#ffffff',
-          border: `3px solid ${isDark ? '#4b5563' : '#d1d5db'}`,
+          backgroundColor: dark ? TEAM_DARK : TEAM_LIGHT,
+          border: `2px solid ${CHALK}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: isDark ? '#ffffff' : '#1f2937',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          color: dark ? TEAM_LIGHT : TEAM_LIGHT_INK,
+          fontFamily: 'Syne',
+          fontWeight: 800,
+          fontSize: '15px',
+          letterSpacing: '-0.02em',
         }}
       >
-        {player.slotPosition}
+        {initialsOf(player.name)}
       </div>
-      {/* Player name */}
       <div
         style={{
-          backgroundColor: isDark ? 'rgba(31,41,55,0.9)' : 'rgba(255,255,255,0.9)',
-          color: isDark ? '#ffffff' : '#1f2937',
-          padding: '2px 8px',
-          borderRadius: '4px',
-          fontSize: '11px',
-          fontWeight: '500',
-          maxWidth: '80px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          fontFamily: 'IBM Plex Mono',
+          fontWeight: 500,
+          fontSize: '13px',
+          color: TEAM_LIGHT,
           whiteSpace: 'nowrap',
+          maxWidth: '96px',
+          overflow: 'hidden',
+          textShadow: '0 1px 2px rgba(0,0,0,0.7)',
         }}
       >
         {player.name}
@@ -84,142 +186,56 @@ function PlayerCircle({
 
 function Field({
   players,
-  isDark,
+  dark,
   teamName,
+  countLabel,
+  emptyLabel,
 }: {
   players: Player[]
-  isDark: boolean
+  dark: boolean
   teamName: string
+  countLabel: string
+  emptyLabel: string
 }) {
-  // Slot every player into the fixed formation for this team size
-  const positionedPlayers = placePlayersInFormation(players).map(({ player, slot }) => ({
-    ...player,
-    slotPosition: slot.position,
-    coords: { x: slot.x, y: slot.y },
-  }))
+  const placed = placePlayersInFormation(players)
 
   return (
-    <div
-      style={{
-        width: '380px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-      }}
-    >
-      {/* Team header */}
+    <div style={{ width: FIELD_W, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* Team panel */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '12px 16px',
-          backgroundColor: isDark ? '#1f2937' : '#f3f4f6',
-          borderRadius: '8px',
-          color: isDark ? '#ffffff' : '#1f2937',
+          height: '44px',
+          padding: '0 14px',
+          borderRadius: '4px',
+          backgroundColor: dark ? TEAM_DARK : TEAM_LIGHT,
+          color: dark ? TEAM_LIGHT : TEAM_LIGHT_INK,
         }}
       >
-        <span style={{ fontSize: '18px', fontWeight: 'bold' }}>{teamName}</span>
-        <span style={{ fontSize: '14px', opacity: 0.8 }}>
-          {players.length} jugadores
+        <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '18px', letterSpacing: '-0.01em' }}>
+          {teamName}
         </span>
+        <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 500, fontSize: '13px' }}>{countLabel}</span>
       </div>
 
-      {/* Field */}
+      {/* Board */}
       <div
         style={{
           position: 'relative',
-          width: '100%',
-          height: '480px',
-          borderRadius: '12px',
-          background: 'linear-gradient(to bottom, #2d5a27 0%, #3a7233 50%, #2d5a27 100%)',
+          width: FIELD_W,
+          height: FIELD_H,
+          borderRadius: '2px',
+          backgroundColor: PITCH,
           overflow: 'hidden',
           display: 'flex',
         }}
       >
-        {/* Field markings */}
-        <svg
-          width="380"
-          height="480"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-        >
-          {/* Outer border */}
-          <rect
-            x="5"
-            y="5"
-            width="90"
-            height="90"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-          {/* Center line */}
-          <line
-            x1="5"
-            y1="50"
-            x2="95"
-            y2="50"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-          {/* Center circle */}
-          <circle cx="50" cy="50" r="12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="0.5" />
-          {/* Top penalty area */}
-          <rect
-            x="25"
-            y="5"
-            width="50"
-            height="18"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-          {/* Top goal area */}
-          <rect
-            x="35"
-            y="5"
-            width="30"
-            height="8"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-          {/* Bottom penalty area */}
-          <rect
-            x="25"
-            y="77"
-            width="50"
-            height="18"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-          {/* Bottom goal area */}
-          <rect
-            x="35"
-            y="87"
-            width="30"
-            height="8"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="0.5"
-          />
-        </svg>
-
-        {/* Players */}
-        {positionedPlayers.map((player, i) => (
-          <PlayerCircle
-            key={i}
-            player={player}
-            x={player.coords.x}
-            y={player.coords.y}
-            isDark={isDark}
-          />
+        <Markings />
+        {placed.map(({ player, slot }, i) => (
+          <Dot key={i} player={player} x={slot.x} y={slot.y} dark={dark} />
         ))}
-
-        {/* Empty state */}
         {players.length === 0 && (
           <div
             style={{
@@ -228,11 +244,12 @@ function Field({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'rgba(255,255,255,0.6)',
+              color: CHALK,
+              fontFamily: 'IBM Plex Mono',
               fontSize: '14px',
             }}
           >
-            Sin jugadores asignados
+            {emptyLabel}
           </div>
         )}
       </div>
@@ -255,7 +272,11 @@ export async function GET(request: NextRequest) {
     return new Response('Invalid data parameter', { status: 400 })
   }
 
-  const { groupName, matchDate, darkTeam, lightTeam } = data
+  const { groupName, matchDate, darkTeam = [], lightTeam = [] } = data
+  const t = getTranslation(data.lang === 'en' ? 'en' : 'es')
+  const countLabel = (n: number) =>
+    n === 1 ? t('ui.teamsScreen.playersOne') : t('ui.teamsScreen.players', { n })
+  const fonts = await loadFonts()
 
   return new ImageResponse(
     (
@@ -265,54 +286,68 @@ export async function GET(request: NextRequest) {
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#0f172a',
+          backgroundColor: PITCH,
           padding: '24px',
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: 'IBM Plex Mono',
+          color: TEAM_LIGHT,
         }}
       >
-        {/* Header */}
+        {/* Header: wordmark left, group + date right */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px',
+            alignItems: 'flex-end',
+            height: '40px',
+            marginBottom: '16px',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#ffffff' }}>
-              ⚽ {groupName}
-            </span>
-            <span style={{ fontSize: '16px', color: '#94a3b8' }}>📅 {matchDate}</span>
-          </div>
           <div
             style={{
-              fontSize: '12px',
-              color: '#64748b',
               display: 'flex',
-              alignItems: 'center',
+              fontFamily: 'Syne',
+              fontWeight: 800,
+              fontSize: '30px',
+              letterSpacing: '-0.01em',
+              lineHeight: 1,
             }}
           >
-            Generado con Fulbot
+            <span style={{ color: TEAM_LIGHT }}>ful</span>
+            <span style={{ color: CONE }}>bot</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+            <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: '16px', color: TEAM_LIGHT }}>
+              {groupName}
+            </span>
+            <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 500, fontSize: '14px', color: CHALK }}>
+              {matchDate}
+            </span>
           </div>
         </div>
 
-        {/* Teams */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '24px',
-            flex: 1,
-          }}
-        >
-          <Field players={darkTeam} isDark={true} teamName="Equipo Oscuro" />
-          <Field players={lightTeam} isDark={false} teamName="Equipo Claro" />
+        {/* Boards */}
+        <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
+          <Field
+            players={darkTeam}
+            dark
+            teamName={t('ui.teamsScreen.dark')}
+            countLabel={countLabel(darkTeam.length)}
+            emptyLabel={t('ui.teamsScreen.empty')}
+          />
+          <Field
+            players={lightTeam}
+            dark={false}
+            teamName={t('ui.teamsScreen.light')}
+            countLabel={countLabel(lightTeam.length)}
+            emptyLabel={t('ui.teamsScreen.empty')}
+          />
         </div>
       </div>
     ),
     {
-      width: 820,
-      height: 630,
+      width: WIDTH,
+      height: HEIGHT,
+      fonts,
     }
   )
 }
