@@ -499,7 +499,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const showAddGuest = isAdminOrCaptain && !isFinished && match.status !== 'cancelled'
   const showRules = isAdminOrCaptain && (match.status === 'signup_open' || match.status === 'full')
 
-  const adminActions = isAdminOrCaptain ? (
+  // MatchAdminActions renders nothing once the match is finished; without
+  // actions there is no "Gestionar" (the sheet would be empty too).
+  const hasAdminActions = isAdminOrCaptain && !isFinished
+
+  const adminActions = hasAdminActions ? (
     <MatchAdminActions
       hasTeams={hasTeams}
       matchId={match.id}
@@ -540,7 +544,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   ) : null
 
   // Mobile sheet: admin actions + announcement + add guest + rules (03-screens §3)
-  const sheetContent = isAdminOrCaptain ? (
+  const sheetContent = hasAdminActions ? (
     <>
       {adminActions}
       {announcement && <div className="border-t border-border pt-6">{announcement}</div>}
@@ -594,7 +598,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             actions={
               <>
                 <ShareMatchButton shareUrl={shareUrl} />
-                {isAdminOrCaptain && adminActions && <ManagePopover>{adminActions}</ManagePopover>}
+                {adminActions && <ManagePopover>{adminActions}</ManagePopover>}
               </>
             }
           />
