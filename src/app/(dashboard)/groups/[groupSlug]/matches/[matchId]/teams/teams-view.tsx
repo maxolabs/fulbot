@@ -238,17 +238,14 @@ export function TeamsView({
 
   return (
     <div className="space-y-6">
+      {/* The subtitle is a <p>, so the formation Badge (a div) sits in the actions slot. */}
       <PageHeader
         title={t('ui.teamsScreen.title')}
-        subtitle={
-          <span className="flex flex-wrap items-center gap-3">
-            <span className="font-mono">{dateLabel}</span>
-            {hasTeams && formationBadge}
-          </span>
-        }
+        subtitle={<span className="font-mono">{dateLabel}</span>}
         actions={
           hasTeams ? (
             <>
+              <span className="mr-2">{formationBadge}</span>
               {canEditTeams && editButton('default')}
               {sendButton('default')}
             </>
@@ -288,7 +285,7 @@ export function TeamsView({
                 style={{ backgroundColor: TEAM_DARK, color: TEAM_LIGHT }}
               >
                 <span className="font-display text-sm font-bold leading-tight">{teamNames.dark}</span>
-                <span className="font-mono text-[11px] leading-tight tabular-nums">
+                <span className="whitespace-nowrap font-mono text-[10px] leading-tight tabular-nums">
                   {isAdminOrCaptain && `${levelLabel(darkPlayers)} · `}
                   {countLabel(darkPlayers.length)}
                 </span>
@@ -298,7 +295,7 @@ export function TeamsView({
                 style={{ backgroundColor: TEAM_LIGHT, color: TEAM_LIGHT_INK }}
               >
                 <span className="font-display text-sm font-bold leading-tight">{teamNames.light}</span>
-                <span className="font-mono text-[11px] leading-tight tabular-nums">
+                <span className="whitespace-nowrap font-mono text-[10px] leading-tight tabular-nums">
                   {isAdminOrCaptain && `${levelLabel(lightPlayers)} · `}
                   {countLabel(lightPlayers.length)}
                 </span>

@@ -113,7 +113,8 @@ function Markings({ both }: { both: boolean }) {
   const H = both ? 355 : 400
   const inset = 6
   const boxW = W * 0.5
-  const boxH = H * (both ? 0.13 : 0.16)
+  // Deep enough that the striker's dot and label sit inside the box line.
+  const boxH = H * (both ? 0.17 : 0.24)
   const r = both ? 34 : 38
   const stroke = {
     fill: 'none',
