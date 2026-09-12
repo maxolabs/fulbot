@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
@@ -171,6 +172,7 @@ export default async function GroupSettingsPage({ params }: PageProps) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      <TopBarConfig title="Ajustes" back={`/groups/${groupSlug}`} />
       {/* Back button */}
       <Link
         href={`/groups/${groupSlug}`}

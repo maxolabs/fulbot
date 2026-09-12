@@ -6,6 +6,7 @@ import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
 import { SettingsForm } from './settings-form'
+import { TopBarConfig } from '@/components/layout/top-bar'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <TopBarConfig title={t('ui.shell.preferences')} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{t('settings.title')}</h1>
         <p className="text-muted-foreground">{t('settings.subtitle')}</p>

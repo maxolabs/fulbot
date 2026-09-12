@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Plus, Users, Calendar, ChevronRight, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
@@ -81,6 +82,12 @@ export default async function GroupsPage() {
       ...m.groups,
       role: m.role,
     }))
+
+  // Single-group users land on their dashboard (docs/ui-rework/03-screens.md
+  // §1, 06-principles.md §1.3); the list stays reachable from the switcher.
+  if (groups.length === 1) {
+    redirect(`/groups/${groups[0].slug}`)
+  }
 
   // Next upcoming, joinable match per group
   const nextMatchByGroup = new Map<string, NextMatch>()

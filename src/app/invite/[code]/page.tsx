@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Users, XCircle, Calendar, MapPin, UserPlus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { PublicFrame } from '@/components/layout/public-frame'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime, formatWeekday } from '@/lib/utils/datetime'
@@ -84,8 +85,8 @@ export default async function InvitePage({ params }: PageProps) {
 
   if (!group) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <PublicFrame className="justify-center">
+        <Card className="w-full">
           <CardContent className="flex flex-col items-center py-8">
             <XCircle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-xl font-semibold mb-2">Invitación inválida</h2>
@@ -97,7 +98,7 @@ export default async function InvitePage({ params }: PageProps) {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </PublicFrame>
     )
   }
 
@@ -108,8 +109,8 @@ export default async function InvitePage({ params }: PageProps) {
   // Anonymous visitor: account actions plus the guest path to the next match
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <PublicFrame className="justify-center">
+        <Card className="w-full">
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Users className="h-6 w-6 text-primary" />
@@ -139,7 +140,7 @@ export default async function InvitePage({ params }: PageProps) {
             <NextMatchCard group={group} />
           </CardContent>
         </Card>
-      </div>
+      </PublicFrame>
     )
   }
 
@@ -152,8 +153,8 @@ export default async function InvitePage({ params }: PageProps) {
 
   if (!playerProfile) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <PublicFrame className="justify-center">
+        <Card className="w-full">
           <CardContent className="flex flex-col items-center py-8">
             <XCircle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-xl font-semibold mb-2">Error</h2>
@@ -165,7 +166,7 @@ export default async function InvitePage({ params }: PageProps) {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </PublicFrame>
     )
   }
 
@@ -185,8 +186,8 @@ export default async function InvitePage({ params }: PageProps) {
   const tz = group.timezone || DEFAULT_TIMEZONE
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <PublicFrame className="justify-center">
+      <Card className="w-full">
         <CardHeader className="text-center">
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <Users className="h-6 w-6 text-primary" />
@@ -222,6 +223,6 @@ export default async function InvitePage({ params }: PageProps) {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </PublicFrame>
   )
 }

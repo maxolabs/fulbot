@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Calendar, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -104,6 +105,7 @@ export default async function MatchesListPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
+      <TopBarConfig title="Partidos" back={`/groups/${groupSlug}`} />
       {/* Back button */}
       <Link
         href={`/groups/${groupSlug}`}

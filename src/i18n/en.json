@@ -435,6 +435,31 @@
       "left": "{n} spots left",
       "leftOne": "1 spot left",
       "waiting": "{n} waiting"
+    },
+    "shell": {
+      "home": "Home",
+      "matches": "Matches",
+      "players": "Players",
+      "rate": "Rate",
+      "groupSettings": "Settings",
+      "notifications": "Notifications",
+      "groupNav": "Group",
+      "globalNav": "General",
+      "mainNav": "Main",
+      "tabMatch": "Match",
+      "tabGroup": "Group",
+      "tabMe": "Me",
+      "back": "Back",
+      "switchGroup": "Switch group",
+      "myGroups": "My groups",
+      "createGroup": "Create group",
+      "joinWithCode": "Join with a code",
+      "userMenu": "User menu",
+      "unread": "{n} unread",
+      "unreadDot": "You have unread notifications",
+      "pendingRatings": "{n} to rate",
+      "profile": "Profile",
+      "preferences": "Preferences"
     }
   }
 }

@@ -18,6 +18,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { CopyButton } from '@/components/ui/copy-button'
+import { TopBarAction, TopBarConfig } from '@/components/layout/top-bar'
+import { GroupSwitcherTitle } from '@/components/layout/group-switcher'
 import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
@@ -222,6 +224,16 @@ export default async function GroupDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
+      <TopBarConfig
+        title={<GroupSwitcherTitle fallback={group.name} />}
+        action={
+          isAdmin ? (
+            <TopBarAction href={`/groups/${groupSlug}/settings`} label="Ajustes">
+              <Settings className="h-5 w-5" strokeWidth={1.75} />
+            </TopBarAction>
+          ) : undefined
+        }
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

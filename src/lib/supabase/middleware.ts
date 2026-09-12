@@ -1,7 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { GROUP_COOKIE, GROUP_COOKIE_MAX_AGE, groupSlugFromPathname } from '@/lib/group-cookie'
 
 export async function updateSession(request: NextRequest) {
+  // Current-group memory (docs/ui-rework/02-shell.md §3): remember the slug
+  // of every /groups/[slug] visit. Only the response is touched (the cookie
+  // is set right before returning): mutating request.cookies here breaks
+  // the Supabase session cookies for the rest of the request.
+  const groupSlug = groupSlugFromPathname(request.nextUrl.pathname)
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -64,6 +71,16 @@ export async function updateSession(request: NextRequest) {
     url.pathname = redirectTo
     url.search = ''
     return NextResponse.redirect(url)
+  }
+
+  // Set right before returning: setAll may have re-created supabaseResponse.
+  if (groupSlug) {
+    supabaseResponse.cookies.set(GROUP_COOKIE, groupSlug, {
+      maxAge: GROUP_COOKIE_MAX_AGE,
+      sameSite: 'lax',
+      path: '/',
+      httpOnly: false,
+    })
   }
 
   return supabaseResponse
