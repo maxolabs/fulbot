@@ -1,21 +1,13 @@
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  MapPin,
-  Users,
-  Edit,
-  Trophy,
-} from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { SpotsMeter } from '@/components/ui/spots-meter'
+import { PageHeader } from '@/components/layout/page-header'
 import { MatchAnnouncement } from './match-announcement'
 import { SignupList } from './signup-list'
-import { SignupActions } from './signup-actions'
+import { MatchActionBar, SignupActions, SignupDetail, SignupProvider } from './signup-actions'
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { MatchAdminActions } from './match-admin-actions'
 import { AddGuestForm } from './add-guest-form'
@@ -28,24 +20,15 @@ import { ResultConsensus } from './result-consensus'
 import type { MatchResultStatus, WaitlistReason } from '@/types/database'
 import { MatchReportsTable } from './match-reports-table'
 import { ConductCheck } from './conduct-check'
+import { ManagePopover, MatchTopBar, ShareMatchButton } from './match-manage'
+import { MatchStatusBadge, ScoreText } from '../match-row'
+import { formatHeroDate } from '../match-format'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
-import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
-}
-
-const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
-
-const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  draft: 'outline',
-  signup_open: 'default',
-  signup_closed: 'outline',
-  full: 'secondary',
-  teams_created: 'default',
-  finished: 'outline',
-  cancelled: 'destructive',
 }
 
 export default async function MatchDetailPage({ params }: PageProps) {
@@ -62,7 +45,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .eq('id', user.id)
     .single() as { data: { preferred_language: Language } | null }
 
-  const t = getT(userData?.preferred_language ?? 'es')
+  const language: Language = userData?.preferred_language ?? 'es'
+  const t = getT(language)
 
   // Get user's player profile
   const { data: playerProfile } = await supabase
@@ -119,7 +103,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!match) return notFound()
 
-  // Current MVP (if voted) - shown with a trophy in the header
+  // Current MVP (if voted) - shown with a trophy in the hero
   let mvpPlayerName: string | null = null
   if (match.mvp_player_id) {
     const { data: mvpPlayer } = await supabase
@@ -198,26 +182,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
     ? [...confirmedSignups, ...noShowSignups].sort((a, b) => a.signup_time.localeCompare(b.signup_time))
     : confirmedSignups
 
-  // Badges for everyone shown in the signup lists (up to 3 icons each in SignupList)
   const listedPlayerIds = Array.from(new Set(
     [...confirmedListSignups, ...waitlistSignups]
       .map(s => s.player_profiles?.id)
       .filter((id): id is string => !!id)
   ))
-
-  // The map itself is built further down, once the blind rule (showConsensus)
-  // is known: badges earned in THIS match (e.g. mvp) would leak the result.
-  let badgeRows: { player_id: string; badge_type: string; earned_at: string; match_id: string | null }[] = []
-  if (listedPlayerIds.length > 0) {
-    const { data } = await supabase
-      .from('player_badges')
-      .select('player_id, badge_type, earned_at, match_id')
-      .in('player_id', listedPlayerIds)
-      .order('earned_at', { ascending: false }) as {
-        data: { player_id: string; badge_type: string; earned_at: string; match_id: string | null }[] | null
-      }
-    badgeRows = data || []
-  }
 
   // Scores are visible to admins and captains only (RLS on player_rating_summary
   // enforces it; this just avoids a pointless query for members).
@@ -429,15 +398,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // first like everyone else; one who did not play sees them right away.
   const showAdminTools = isAdminOrCaptain && showConsensus
 
-  const badgesByPlayer: Record<string, string[]> = {}
-  for (const row of badgeRows) {
-    if (!showConsensus && row.match_id === matchId) continue
-    if (!badgesByPlayer[row.player_id]) badgesByPlayer[row.player_id] = []
-    if (badgesByPlayer[row.player_id].length < 3) {
-      badgesByPlayer[row.player_id].push(row.badge_type)
-    }
-  }
-
   const scoredReports = reports.filter(r => r.dark_score !== null && r.light_score !== null)
   const agreement =
     ownReport && ownReport.dark_score !== null && ownReport.light_score !== null
@@ -473,7 +433,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   }))
 
   // Whether teams exist (only fetched above for finished matches): the admin
-  // actions card explains that a match without teams can't be finished (§5.1).
+  // actions explain that a match without teams can't be finished (§5.1), and
+  // the action bar offers "Armar equipos" while they are missing.
   let hasTeams = matchTeams.length > 0
   if (!hasTeams && isAdminOrCaptain && match.status !== 'finished') {
     const { count } = await supabase
@@ -508,301 +469,374 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   const date = new Date(match.date_time)
   const isPast = date < new Date()
-  const statusVariant = STATUS_VARIANTS[match.status] || STATUS_VARIANTS.draft
+  const isFinished = match.status === 'finished'
+  const isLive = !isPast && match.status !== 'cancelled' && !isFinished
+  const isFull = confirmedSignups.length >= match.max_players
   const statusLabel = t(`matches.status.${match.status}`)
+  const heroDate = formatHeroDate(t, match.date_time, timeZone)
+  const groupHref = `/groups/${groupSlug}`
+  const matchHref = `${groupHref}/matches/${matchId}`
+  const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
+
+  // Finished: the score replaces the count once the viewer may see it (blind rule).
+  const darkTeam = matchTeams.find(tm => tm.name === 'dark')
+  const lightTeam = matchTeams.find(tm => tm.name === 'light')
+  const heroScore = isFinished && showConsensus && darkTeam && lightTeam ? { dark: darkTeam.score, light: lightTeam.score } : null
+
+  const countLabel = t('ui.matchScreens.match.players', { confirmed: confirmedSignups.length, max: match.max_players })
+
+  // Action bar (mobile): one primary. Admin extra while the match is full or
+  // closed without teams; "Reportar resultado" after the match until reported.
+  const buildTeamsHref =
+    isLive && isAdminOrCaptain && !hasTeams && confirmedSignups.length >= 4 &&
+    (match.status === 'full' || match.status === 'signup_closed')
+      ? `${matchHref}/teams`
+      : undefined
+  const reportHref = isFinished && viewerCanReport && !ownReport && reportTeams.length > 0 ? '#reportar' : undefined
+  const showActionBar = (isLive && match.status !== 'draft') || !!reportHref
+
+  const showAnnouncement = match.status === 'signup_open' || match.status === 'full'
+  const showAddGuest = isAdminOrCaptain && !isFinished && match.status !== 'cancelled'
+  const showRules = isAdminOrCaptain && (match.status === 'signup_open' || match.status === 'full')
+
+  const adminActions = isAdminOrCaptain ? (
+    <MatchAdminActions
+      hasTeams={hasTeams}
+      matchId={match.id}
+      groupSlug={groupSlug}
+      currentStatus={match.status}
+      hasEnoughPlayers={confirmedSignups.length >= 4}
+    />
+  ) : null
+
+  const announcement = showAnnouncement ? (
+    <MatchAnnouncement
+      variant="bare"
+      groupName={group.name}
+      dateTime={match.date_time}
+      location={match.location}
+      confirmedCount={confirmedSignups.length}
+      maxPlayers={match.max_players}
+      matchId={match.id}
+      timeZone={timeZone}
+    />
+  ) : null
+
+  const addGuest = showAddGuest ? (
+    <AddGuestForm
+      matchId={match.id}
+      isFull={isFull}
+      maxPlayers={match.max_players}
+      confirmedCount={confirmedSignups.length}
+      groupName={group.name}
+      dateTime={match.date_time}
+      location={match.location}
+      timeZone={timeZone}
+    />
+  ) : null
+
+  const rules = showRules ? (
+    <RulesManager groupId={group.id} matchId={match.id} players={rulePlayers} />
+  ) : null
+
+  // Mobile sheet: admin actions + announcement + add guest + rules (03-screens §3)
+  const sheetContent = isAdminOrCaptain ? (
+    <>
+      {adminActions}
+      {announcement && <div className="border-t border-border pt-6">{announcement}</div>}
+      {addGuest && <div className="border-t border-border pt-6">{addGuest}</div>}
+      {rules && <div className="border-t border-border pt-6">{rules}</div>}
+    </>
+  ) : undefined
+
+  const statusBadge = <MatchStatusBadge status={match.status} label={statusLabel} />
 
   return (
     <RealtimeWrapper matchId={matchId}>
-      <div className="space-y-6">
-        {/* Back button */}
-        <Link
-          href={`/groups/${groupSlug}`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          {t('common.backTo', { name: group.name })}
-        </Link>
+      <SignupProvider
+        matchId={match.id}
+        currentSignup={currentUserSignup ? {
+          id: currentUserSignup.id,
+          status: currentUserSignup.status,
+          waitlistPosition: currentUserSignup.waitlist_position,
+          waitlistReason: currentUserSignup.waitlist_reason,
+        } : null}
+        matchStatus={match.status}
+        isFull={isFull}
+      >
+        <div className={showActionBar ? 'space-y-6 pb-32 lg:pb-0' : 'space-y-6'}>
+          <MatchTopBar
+            groupName={group.name}
+            groupHref={groupHref}
+            shareUrl={shareUrl}
+            manageContent={sheetContent}
+          />
 
-      {/* Match Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {t(`days.${DAY_KEYS[weekdayIndexInTimezone(date, timeZone)]}`)} {formatMatchDateNumeric(date, timeZone)}
-            </h1>
-            <Badge variant={statusVariant}>{statusLabel}</Badge>
-          </div>
-
-          {mvpPlayerName && showConsensus && (
-            <p className="flex items-center gap-1.5 text-sm text-yellow-600 dark:text-yellow-500 mb-2">
-              <Trophy className="h-4 w-4" />
-              MVP: {mvpPlayerName}
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              {formatMatchTime(date, timeZone)}
-            </span>
-            {match.location && (
-              <span className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4" />
-                {match.location}
+          <PageHeader
+            title={heroDate}
+            subtitle={
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {match.location && <span>{match.location}</span>}
+                {statusBadge}
+                {heroScore ? (
+                  <ScoreText dark={heroScore.dark} light={heroScore.light} className="text-base text-foreground" />
+                ) : (
+                  <span className="font-mono text-xs tabular-nums">{countLabel}</span>
+                )}
+                {mvpPlayerName && showConsensus && (
+                  <span className="flex items-center gap-1">
+                    <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
+                    {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
+                  </span>
+                )}
               </span>
+            }
+            actions={
+              <>
+                <ShareMatchButton shareUrl={shareUrl} />
+                {isAdminOrCaptain && adminActions && <ManagePopover>{adminActions}</ManagePopover>}
+              </>
+            }
+          />
+
+          {/* Mobile hero */}
+          <div className="space-y-2 lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <Eyebrow>{isLive ? t('ui.matchScreens.match.eyebrowNext') : statusLabel}</Eyebrow>
+              {statusBadge}
+            </div>
+            <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance">{heroDate}</h1>
+            {heroScore && (
+              <p className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span>{t('ui.matchScreens.dashboard.dark')}</span>
+                <ScoreText dark={heroScore.dark} light={heroScore.light} className="text-3xl text-foreground" />
+                <span>{t('ui.matchScreens.dashboard.light')}</span>
+              </p>
             )}
-            <span className="flex items-center gap-1.5">
-              <Users className="h-4 w-4" />
-              {confirmedSignups.length}/{match.max_players} {t('matches.playersLabel')}
-            </span>
+            {match.location && <p className="text-sm text-muted-foreground">{match.location}</p>}
+            {mvpPlayerName && showConsensus && (
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
+                {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
+              </p>
+            )}
           </div>
-        </div>
 
-        {isAdminOrCaptain && (
-          <div className="flex gap-2">
-            <Link href={`/groups/${groupSlug}/matches/${matchId}/edit`}>
-              <Button variant="outline" size="sm">
-                <Edit className="mr-2 h-4 w-4" />
-                {t('common.edit')}
-              </Button>
-            </Link>
-          </div>
-        )}
-      </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Main column */}
+            <div className="min-w-0 space-y-6">
+              {/* Notes */}
+              {match.notes && (
+                <p className="text-sm text-pretty">
+                  <span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">{t('ui.matchScreens.match.notes')}</span>{' '}
+                  {match.notes}
+                </p>
+              )}
 
-      {/* Notes */}
-      {match.notes && (
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-sm">{match.notes}</p>
-          </CardContent>
-        </Card>
-      )}
+              {/* Member scoring policy notice (docs/member-scoring.md §6): renders nothing unless it applies */}
+              {!isPast && match.status === 'signup_open' && !currentUserSignup && (
+                <SignupPolicyNotice
+                  matchId={match.id}
+                  groupId={group.id}
+                  playerId={playerProfile.id}
+                  timeZone={timeZone}
+                />
+              )}
 
-      {/* Match Announcement (replaces the bare share link + copy) */}
-      {(match.status === 'signup_open' || match.status === 'full') && (
-        <MatchAnnouncement
-          groupName={group.name}
-          dateTime={match.date_time}
-          location={match.location}
-          confirmedCount={confirmedSignups.length}
-          maxPlayers={match.max_players}
-          matchId={match.id}
-          timeZone={timeZone}
-        />
-      )}
+              {/* Signup action, inline in the browser; the action bar covers phones */}
+              {isLive && <SignupActions />}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content - Signup List */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Member scoring policy notice (docs/member-scoring.md §6): renders nothing unless it applies */}
-          {!isPast && match.status === 'signup_open' && !currentUserSignup && (
-            <SignupPolicyNotice
-              matchId={match.id}
-              groupId={group.id}
-              playerId={playerProfile.id}
-              timeZone={timeZone}
-            />
-          )}
+              {!isFinished && match.status !== 'cancelled' && (
+                <div className="space-y-2">
+                  <SpotsMeter
+                    confirmed={confirmedSignups.length}
+                    max={match.max_players}
+                    waitlist={waitlistSignups.length}
+                    language={language}
+                  />
+                  {isLive && <SignupDetail />}
+                </div>
+              )}
 
-          {/* Signup Actions for Current User */}
-          {!isPast && match.status !== 'cancelled' && match.status !== 'finished' && (
-            <SignupActions
-              matchId={match.id}
-              currentSignup={currentUserSignup ? {
-                id: currentUserSignup.id,
-                status: currentUserSignup.status,
-                waitlistPosition: currentUserSignup.waitlist_position,
-                waitlistReason: currentUserSignup.waitlist_reason,
-              } : null}
-              matchStatus={match.status}
-              isFull={confirmedSignups.length >= match.max_players}
-            />
-          )}
-
-          {/* Confirmed Players */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">
-                Confirmados ({confirmedSignups.length}/{match.max_players})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SignupList
-                signups={confirmedListSignups}
-                currentPlayerId={playerProfile.id}
-                emptyMessage="Nadie se inscribió todavía"
-                isAdminOrCaptain={isAdminOrCaptain}
-                matchStatus={match.status}
-                badgesByPlayer={badgesByPlayer}
-                ratingsById={ratingsById}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Waitlist */}
-          {waitlistSignups.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Lista de espera ({waitlistSignups.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+              {/* Confirmados */}
+              <section
+                id="confirmados"
+                className="lg:rounded-md lg:border lg:border-dashed lg:border-border lg:bg-card lg:p-5"
+                aria-labelledby="confirmados-title"
+              >
+                <div className="flex items-center justify-between pb-2">
+                  <Eyebrow as="h2" id="confirmados-title">
+                    {t('ui.matchScreens.match.confirmed')}
+                  </Eyebrow>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {confirmedSignups.length} / {match.max_players}
+                  </span>
+                </div>
                 <SignupList
-                  signups={waitlistSignups}
+                  signups={confirmedListSignups}
                   currentPlayerId={playerProfile.id}
-                  showWaitlistPosition
-                  emptyMessage="No hay nadie en espera"
+                  emptyMessage={t('ui.matchScreens.match.nobodyYet')}
                   isAdminOrCaptain={isAdminOrCaptain}
-                  badgesByPlayer={badgesByPlayer}
+                  matchStatus={match.status}
                   ratingsById={ratingsById}
                 />
-              </CardContent>
-            </Card>
-          )}
+              </section>
 
-          {/* Player report form (blind until the viewer has reported) */}
-          {match.status === 'finished' && viewerPlayed && reportTeams.length > 0 && (
-            <ReportForm
-              matchId={match.id}
-              teams={reportTeams}
-              mvpCandidates={matchPlayers.filter(p => p.id !== playerProfile.id)}
-              existingReport={ownReport}
-              agreement={agreement}
-              windowOpen={reportWindowOpen}
-              resultStatus={match.result_status}
-              scoringEnabled={scoringEnabled}
-            />
-          )}
+              {/* Lista de espera */}
+              {waitlistSignups.length > 0 && (
+                <section
+                  className="lg:rounded-md lg:border lg:border-dashed lg:border-border lg:bg-card lg:p-5"
+                  aria-labelledby="waitlist-title"
+                >
+                  <div className="flex items-center justify-between pb-2">
+                    <Eyebrow as="h2" id="waitlist-title">
+                      {t('ui.matchScreens.match.waitlist')}
+                    </Eyebrow>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">{waitlistSignups.length}</span>
+                  </div>
+                  <SignupList
+                    signups={waitlistSignups}
+                    currentPlayerId={playerProfile.id}
+                    showWaitlistPosition
+                    emptyMessage={t('ui.matchScreens.match.waitlistEmpty')}
+                    isAdminOrCaptain={isAdminOrCaptain}
+                    ratingsById={ratingsById}
+                  />
+                </section>
+              )}
 
-          {/* Consensus / locked result - shown once the viewer can't be anchored by it */}
-          {showConsensus && (
-            <ResultConsensus
-              teams={matchTeams.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
-              events={consensusEvents}
-              resultStatus={match.result_status}
-              reportersCount={reports.filter(r => !r.submitted_after_lock).length}
-              playersCount={confirmedSignups.filter(s => s.player_profiles !== null).length}
-              mvpName={mvpPlayerName}
-            />
-          )}
+              {/* Player report form (blind until the viewer has reported) */}
+              {isFinished && viewerPlayed && reportTeams.length > 0 && (
+                <ReportForm
+                  matchId={match.id}
+                  teams={reportTeams}
+                  mvpCandidates={matchPlayers.filter(p => p.id !== playerProfile.id)}
+                  existingReport={ownReport}
+                  agreement={agreement}
+                  windowOpen={reportWindowOpen}
+                  resultStatus={match.result_status}
+                  scoringEnabled={scoringEnabled}
+                />
+              )}
 
-          {/* Match Results Editor - shown to admins when match is finished */}
-          {match.status === 'finished' && showAdminTools && teamsForResults.length > 0 && (
-            <MatchResults
-              matchId={match.id}
-              teams={teamsForResults}
-              existingEvents={matchEvents.map(e => ({
-                id: e.id,
-                team_id: e.team_id,
-                player_id: e.player_id,
-                guest_player_id: e.guest_player_id,
-                event_type: e.event_type,
-                linked_event_id: e.linked_event_id,
-              }))}
-              resultStatus={resultMeta.result_status ?? 'pending'}
-              lockedBy={resultMeta.result_locked_by ?? null}
-              lockedAt={resultMeta.result_locked_at ?? null}
-              mvpPlayerId={match.mvp_player_id}
-              mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
-            />
-          )}
+              {/* Consensus / locked result - shown once the viewer can't be anchored by it */}
+              {showConsensus && (
+                <ResultConsensus
+                  teams={matchTeams.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
+                  events={consensusEvents}
+                  resultStatus={match.result_status}
+                  reportersCount={reports.filter(r => !r.submitted_after_lock).length}
+                  playersCount={confirmedSignups.filter(s => s.player_profiles !== null).length}
+                  mvpName={mvpPlayerName}
+                />
+              )}
 
-          {/* Player reports (who said what) - admins/captains only */}
-          {match.status === 'finished' && showAdminTools && teamsForResults.length > 0 && (
-            <MatchReportsTable
-              matchId={match.id}
-              resultStatus={resultMeta.result_status ?? 'pending'}
-              teams={teamsForResults.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
-              people={[
-                ...matchPlayers.map(p => ({ id: p.id, display_name: p.display_name })),
-                ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
-              ]}
-              confirmedCount={matchPlayers.length}
-            />
-          )}
+              {/* Match Results Editor - shown to admins when match is finished */}
+              {isFinished && showAdminTools && teamsForResults.length > 0 && (
+                <MatchResults
+                  matchId={match.id}
+                  teams={teamsForResults}
+                  existingEvents={matchEvents.map(e => ({
+                    id: e.id,
+                    team_id: e.team_id,
+                    player_id: e.player_id,
+                    guest_player_id: e.guest_player_id,
+                    event_type: e.event_type,
+                    linked_event_id: e.linked_event_id,
+                  }))}
+                  resultStatus={resultMeta.result_status ?? 'pending'}
+                  lockedBy={resultMeta.result_locked_by ?? null}
+                  lockedAt={resultMeta.result_locked_at ?? null}
+                  mvpPlayerId={match.mvp_player_id}
+                  mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+                />
+              )}
 
-          {/* Conduct check (docs/member-scoring.md §4.2) - admins, and captains when allowed; hidden when scoring is off */}
-          {match.status === 'finished' && isAdminOrCaptain && (
-            <ConductCheck
-              matchId={match.id}
-              groupId={group.id}
-              role={membership.role as 'admin' | 'captain' | 'member'}
-            />
-          )}
+              {/* Player reports (who said what) - admins/captains only */}
+              {isFinished && showAdminTools && teamsForResults.length > 0 && (
+                <MatchReportsTable
+                  matchId={match.id}
+                  resultStatus={resultMeta.result_status ?? 'pending'}
+                  teams={teamsForResults.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
+                  people={[
+                    ...matchPlayers.map(p => ({ id: p.id, display_name: p.display_name })),
+                    ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
+                  ]}
+                  confirmedCount={matchPlayers.length}
+                />
+              )}
 
-          {/* Optional teammate ratings - only for players of the match */}
-          {match.status === 'finished' && viewerPlayed && matchPlayers.length > 1 && (
-            <PostMatchVoting
-              matchId={match.id}
-              currentPlayerId={playerProfile.id}
-              players={matchPlayers}
-              windowOpen={reportWindowOpen}
+              {/* Conduct check (docs/member-scoring.md §4.2) - admins, and captains when allowed; hidden when scoring is off */}
+              {isFinished && isAdminOrCaptain && (
+                <ConductCheck
+                  matchId={match.id}
+                  groupId={group.id}
+                  role={membership.role as 'admin' | 'captain' | 'member'}
+                />
+              )}
+
+              {/* Optional teammate ratings - only for players of the match */}
+              {isFinished && viewerPlayed && matchPlayers.length > 1 && (
+                <PostMatchVoting
+                  matchId={match.id}
+                  currentPlayerId={playerProfile.id}
+                  players={matchPlayers}
+                  windowOpen={reportWindowOpen}
+                />
+              )}
+            </div>
+
+            {/* Aside (browser only; on phones this content lives in the admin sheet) */}
+            <aside className="hidden min-w-0 space-y-6 lg:block">
+              {showAnnouncement && (
+                <MatchAnnouncement
+                  groupName={group.name}
+                  dateTime={match.date_time}
+                  location={match.location}
+                  confirmedCount={confirmedSignups.length}
+                  maxPlayers={match.max_players}
+                  matchId={match.id}
+                  timeZone={timeZone}
+                />
+              )}
+
+              {addGuest && <div id="invitado">{addGuest}</div>}
+
+              {rules}
+
+              {/* Quick Stats */}
+              <Card variant="solid">
+                <CardContent className="space-y-2 p-4 lg:p-5">
+                  <Eyebrow as="h2">{t('ui.matchScreens.match.stats')}</Eyebrow>
+                  <dl className="space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsSigned')}</dt>
+                      <dd className="font-mono tabular-nums">{confirmedSignups.length}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsWaiting')}</dt>
+                      <dd className="font-mono tabular-nums">{waitlistSignups.length}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsAvailable')}</dt>
+                      <dd className="font-mono tabular-nums">{Math.max(0, match.max_players - confirmedSignups.length)}</dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+            </aside>
+          </div>
+
+          {showActionBar && (
+            <MatchActionBar
+              buildTeamsHref={buildTeamsHref}
+              buildTeamsLabel={t('ui.matchScreens.dashboard.buildTeams')}
+              reportHref={reportHref}
+              reportLabel={t('ui.matchScreens.match.reportResult')}
             />
           )}
         </div>
-
-        {/* Sidebar - Admin Actions */}
-        <div className="space-y-6">
-          {isAdminOrCaptain && (
-            <MatchAdminActions
-              hasTeams={hasTeams}
-              matchId={match.id}
-              groupSlug={groupSlug}
-              currentStatus={match.status}
-              hasEnoughPlayers={confirmedSignups.length >= 4}
-            />
-          )}
-
-          {/* Add Guest - Admin only */}
-          {isAdminOrCaptain && match.status !== 'finished' && match.status !== 'cancelled' && (
-            <AddGuestForm
-              matchId={match.id}
-              isFull={confirmedSignups.length >= match.max_players}
-              maxPlayers={match.max_players}
-              confirmedCount={confirmedSignups.length}
-              groupName={group.name}
-              dateTime={match.date_time}
-              location={match.location}
-              timeZone={timeZone}
-            />
-          )}
-
-          {/* Rules Manager - Admin only, before teams are created */}
-          {isAdminOrCaptain && (match.status === 'signup_open' || match.status === 'full') && (
-            <RulesManager
-              groupId={group.id}
-              matchId={match.id}
-              players={rulePlayers}
-            />
-          )}
-
-          {/* Quick Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Estadísticas</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Inscritos</span>
-                <span className="font-medium">{confirmedSignups.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">En espera</span>
-                <span className="font-medium">{waitlistSignups.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Disponibles</span>
-                <span className="font-medium">
-                  {Math.max(0, match.max_players - confirmedSignups.length)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      </div>
+      </SignupProvider>
     </RealtimeWrapper>
   )
 }

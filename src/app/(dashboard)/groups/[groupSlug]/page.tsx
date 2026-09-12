@@ -303,7 +303,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
       .eq('group_id', group.id)
       .maybeSingle() as { data: { results_window_days: number | null } | null }
     const windowMs = (settingsRow?.results_window_days ?? 7) * 24 * 60 * 60 * 1000
-    const now = Date.now()
+    const now = new Date().getTime()
     type NudgeCandidate = { id: string; date_time: string; result_status: string }
     const { data: candidateRows } = await supabase
       .from('matches')
