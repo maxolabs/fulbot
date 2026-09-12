@@ -1,9 +1,15 @@
-import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Users, Brain, BarChart3, ChevronRight } from 'lucide-react'
+import { Users, Brain, BarChart3 } from 'lucide-react'
 import { PublicFrame } from '@/components/layout/public-frame'
+import { Card, CardContent } from '@/components/ui/card'
+import { LinkButton } from '@/components/link-button'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
+
+// Landing (docs/ui-rework/03-screens.md §11, 06-principles.md §1.5): on the
+// board, tagline in the display face, the three feature blocks as three
+// dashed cards in a row (stacked on phones), one cone "Crear cuenta" and a
+// text "Iniciar sesión".
 
 export default async function Home() {
   const cookieStore = await cookies()
@@ -11,69 +17,47 @@ export default async function Home() {
   const language: Language = langCookie === 'en' ? 'en' : 'es'
   const t = getT(language)
 
+  const features = [
+    { icon: Users, title: t('landing.featureSignupTitle'), desc: t('landing.featureSignupDesc') },
+    { icon: Brain, title: t('landing.featureTeamsTitle'), desc: t('landing.featureTeamsDesc') },
+    { icon: BarChart3, title: t('landing.featureStatsTitle'), desc: t('landing.featureStatsDesc') },
+  ]
+
   return (
-    <PublicFrame className="justify-center">
-      <div className="w-full space-y-12">
-        {/* Tagline */}
-        <div className="text-center">
-          <p className="mx-auto max-w-xs text-lg text-muted-foreground">
-            {t('landing.tagline')}
-          </p>
-        </div>
+    <PublicFrame className="max-w-2xl justify-center">
+      <div className="w-full space-y-10">
+        <h1 className="mx-auto max-w-md text-center font-display text-3xl font-extrabold leading-tight tracking-tight text-balance lg:text-4xl">
+          {t('landing.tagline')}
+        </h1>
 
-        {/* Features */}
-        <div className="space-y-3">
-          {[
-            {
-              icon: Users,
-              title: t('landing.featureSignupTitle'),
-              desc: t('landing.featureSignupDesc'),
-            },
-            {
-              icon: Brain,
-              title: t('landing.featureTeamsTitle'),
-              desc: t('landing.featureTeamsDesc'),
-            },
-            {
-              icon: BarChart3,
-              title: t('landing.featureStatsTitle'),
-              desc: t('landing.featureStatsDesc'),
-            },
-          ].map((feature) => (
-            <div
-              key={feature.title}
-              className="group flex items-center gap-4 rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-4 transition-colors hover:border-primary/30 hover:bg-card"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <feature.icon className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm">{feature.title}</p>
-                <p className="text-sm text-muted-foreground">{feature.desc}</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
-            </div>
+        <ul className="grid gap-3 sm:grid-cols-3">
+          {features.map((feature) => (
+            <li key={feature.title}>
+              <Card className="h-full">
+                <CardContent className="flex items-start gap-3 pt-4 sm:flex-col sm:gap-3 lg:pt-5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-secondary">
+                    <feature.icon className="h-5 w-5 text-foreground" strokeWidth={1.75} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 space-y-1">
+                    <span className="block font-display text-base font-bold leading-tight">{feature.title}</span>
+                    <span className="block text-sm text-muted-foreground text-pretty">{feature.desc}</span>
+                  </span>
+                </CardContent>
+              </Card>
+            </li>
           ))}
-        </div>
+        </ul>
 
-        {/* CTA Buttons */}
-        <div className="space-y-3">
-          <Link
-            href="/register"
-            className="flex items-center justify-center rounded-2xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground transition-all hover:brightness-110"
-          >
+        <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-3">
+          <LinkButton href="/register" size="xl" className="w-full">
             {t('auth.createAccount')}
-          </Link>
-          <Link
-            href="/login"
-            className="flex items-center justify-center rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm px-6 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-card hover:border-border"
-          >
+          </LinkButton>
+          <LinkButton href="/login" variant="link" className="text-foreground">
             {t('auth.login')}
-          </Link>
+          </LinkButton>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground/60">
+        <p className="text-center font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">
           {t('landing.footer')}
         </p>
       </div>

@@ -1,50 +1,37 @@
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft, Trophy, Star, ClipboardList } from 'lucide-react'
+import { ClipboardList, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Avatar } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import { SkillSummaryLine } from '@/components/player-skills'
+import { LinkButton } from '@/components/link-button'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
-import { summariesById, type RatingSummary } from '@/lib/ratings'
-import { getT } from '@/i18n/server'
+import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
+import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
+import { cn } from '@/lib/utils/cn'
+import { PlayersSortControl, type PlayersSort } from './players-sort'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
   searchParams: Promise<{ sort?: string }>
 }
 
-const POSITION_LABELS: Record<string, string> = {
-  GK: 'Arquero',
-  CB: 'Defensor',
-  LB: 'Lateral Izq.',
-  RB: 'Lateral Der.',
-  CDM: 'Volante Def.',
-  CM: 'Mediocampista',
-  CAM: 'Enganche',
-  LM: 'Medio Izq.',
-  RM: 'Medio Der.',
-  LW: 'Extremo Izq.',
-  RW: 'Extremo Der.',
-  ST: 'Delantero',
-  CF: 'Centro Delantero',
-}
+// Players list (docs/ui-rework/03-screens.md §7): one column of rows. Each
+// row is the whole tap target: avatar, name, positions as mono chips, matches
+// played and the member score stars where the viewer may see them.
 
 export default async function GroupPlayersPage({ params, searchParams }: PageProps) {
   const { groupSlug } = await params
   const { sort } = await searchParams
   const supabase = await createClient()
 
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
 
-  // Get user's player profile
   const { data: currentPlayer } = await supabase
     .from('player_profiles')
     .select('id')
@@ -53,7 +40,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
 
   if (!currentPlayer) return notFound()
 
-  // Get group
   const { data: group } = await supabase
     .from('groups')
     .select('id, name, slug')
@@ -62,7 +48,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
 
   if (!group) return notFound()
 
-  // Check membership
   const { data: membership } = await supabase
     .from('group_memberships')
     .select('role')
@@ -93,8 +78,8 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   const canSeeAllScores = scoringEnabled && (scoringSettings?.visibility === 'group' || isAdminOrCaptain)
   const canSeeScoreOf = (playerId: string) => scoringEnabled && (canSeeAllScores || playerId === currentPlayer.id)
   const sortByScore = canSeeAllScores && sort === 'score'
+  const currentSort: PlayersSort = sortByScore ? 'score' : 'matches'
 
-  // Get all members with full player profiles
   type MembershipWithProfile = {
     id: string
     role: string
@@ -106,12 +91,7 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
       main_position: string
       preferred_positions: string[]
       matches_played: number
-      goals: number
-      assists: number
-      mvp_count: number
-      clean_sheets: number
       fitness_status: string
-      footedness: string
     } | null
   }
 
@@ -128,36 +108,18 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
         main_position,
         preferred_positions,
         matches_played,
-        goals,
-        assists,
-        mvp_count,
-        clean_sheets,
-        fitness_status,
-        footedness
+        fitness_status
       )
     `)
     .eq('group_id', group.id)
     .eq('is_active', true) as { data: MembershipWithProfile[] | null }
 
   const players = (memberships || [])
-    .filter(m => m.player_profiles !== null)
-    .map(m => ({
+    .filter((m) => m.player_profiles !== null)
+    .map((m) => ({
       role: m.role as 'admin' | 'captain' | 'member',
       memberScore: m.member_score === null ? null : Number(m.member_score),
-      ...(m.player_profiles as {
-        id: string
-        display_name: string
-        nickname: string | null
-        main_position: string
-        preferred_positions: string[]
-        matches_played: number
-        goals: number
-        assists: number
-        mvp_count: number
-        clean_sheets: number
-        fitness_status: string
-        footedness: string
-      })
+      ...(m.player_profiles as NonNullable<MembershipWithProfile['player_profiles']>),
     }))
     .sort((a, b) => {
       // ?sort=score: member score (desc), newcomers (NULL) last, then the default order
@@ -166,158 +128,138 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
         if (b.memberScore === null) return -1
         return b.memberScore - a.memberScore
       }
-      // Sort by: matches played (desc), then by name
       if (b.matches_played !== a.matches_played) {
         return b.matches_played - a.matches_played
       }
       return a.display_name.localeCompare(b.display_name)
     })
 
-  // Scores are visible to admins and captains only (RLS enforces it on
+  // Skill ratings are visible to admins and captains only (RLS enforces it on
   // player_rating_summary; this avoids a pointless query for members).
   let summaries = summariesById(null)
   if (isAdminOrCaptain && players.length > 0) {
     const { data: summaryRows } = await supabase
       .from('player_rating_summary')
       .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
-      .in('player_id', players.map(p => p.id)) as { data: RatingSummary[] | null }
+      .in('player_id', players.map((p) => p.id)) as { data: RatingSummary[] | null }
     summaries = summariesById(summaryRows)
   }
 
+  const basePath = `/groups/${groupSlug}/players`
+  const subtitle = t('ui.screens.players.count', { n: players.length, group: group.name })
+
+  const links = (
+    <>
+      <LinkButton href={`/groups/${groupSlug}/rate`} variant="outline" size="sm">
+        <Star className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        {t('ui.screens.players.rateCta')}
+      </LinkButton>
+      {isAdmin && (
+        <LinkButton href={`/groups/${groupSlug}/rate?mode=baseline`} variant="outline" size="sm">
+          <ClipboardList className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {t('ui.screens.players.baselineCta')}
+        </LinkButton>
+      )}
+    </>
+  )
+
+  const sortControl = canSeeAllScores ? (
+    <PlayersSortControl value={currentSort} basePath={basePath} />
+  ) : null
+
   return (
-    <div className="space-y-6">
-      <TopBarConfig title="Jugadores" back={`/groups/${groupSlug}`} />
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a {group.name}
-      </Link>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <TopBarConfig title={t('ui.shell.players')} back={`/groups/${groupSlug}`} />
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Jugadores</h1>
-          <p className="text-muted-foreground">{players.length} miembros en {group.name}</p>
-          {canSeeAllScores && (
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-              <span>{t('memberScore.sortBy')}:</span>
-              {sortByScore ? (
-                <>
-                  <Link href={`/groups/${groupSlug}/players`} className="hover:underline">{t('memberScore.sortByMatches')}</Link>
-                  <span aria-hidden="true">·</span>
-                  <span className="font-medium text-foreground">{t('memberScore.sortByScore')}</span>
-                </>
-              ) : (
-                <>
-                  <span className="font-medium text-foreground">{t('memberScore.sortByMatches')}</span>
-                  <span aria-hidden="true">·</span>
-                  <Link href={`/groups/${groupSlug}/players?sort=score`} className="hover:underline">{t('memberScore.sortByScore')}</Link>
-                </>
-              )}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Link href={`/groups/${groupSlug}/rate`}>
-            <Button variant="outline" size="sm">
-              <Star className="mr-2 h-4 w-4" />
-              Calificar compañeros
-            </Button>
-          </Link>
-          {isAdmin && (
-            <Link href={`/groups/${groupSlug}/rate?mode=baseline`}>
-              <Button variant="outline" size="sm">
-                <ClipboardList className="mr-2 h-4 w-4" />
-                Puntaje base
-              </Button>
-            </Link>
-          )}
+      <PageHeader
+        eyebrow={group.name}
+        title={t('ui.shell.players')}
+        subtitle={subtitle}
+        actions={
+          <>
+            {sortControl}
+            {links}
+          </>
+        }
+      />
+
+      {/* Mobile hero: the top bar carries the title, this row carries the meta and the sort. */}
+      <div className="space-y-3 lg:hidden">
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {sortControl}
+          {links}
         </div>
       </div>
 
-      {/* Players Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {players.map((player) => (
-          <Link key={player.id} href={`/groups/${groupSlug}/players/${player.id}`}>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <Avatar fallback={player.display_name} size="lg" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold truncate">{player.display_name}</h3>
-                    {player.role !== 'member' && (
-                      <Badge
-                        variant={player.role === 'admin' ? 'default' : 'secondary'}
-                        className="text-xs"
+      {players.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('ui.screens.players.empty')}</p>
+      ) : (
+        <ul className="[&>li:last-child>*]:border-b-0">
+          {players.map((player) => {
+            const positions = Array.from(
+              new Set([player.main_position, ...(player.preferred_positions || [])].filter(Boolean))
+            ).slice(0, 3)
+            const summary = summaries.get(player.id)
+            const showSkill = isAdminOrCaptain && !!summary && (summary.peer_votes > 0 || summary.matches_rated > 0)
+
+            return (
+              <li key={player.id}>
+                <PlayerRow
+                  name={player.display_name}
+                  nickname={player.nickname}
+                  href={`${basePath}/${player.id}`}
+                  language={language}
+                  trailing={
+                    <>
+                      {player.role !== 'member' && (
+                        <Badge variant="outline" className="hidden sm:inline-flex">
+                          {player.role === 'admin' ? t('groups.roles.admin') : t('groups.roles.captain')}
+                        </Badge>
+                      )}
+                      {player.fitness_status !== 'ok' && (
+                        <Badge variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
+                          {player.fitness_status === 'injured' ? t('players.injured') : t('players.limited')}
+                        </Badge>
+                      )}
+                      <span className="hidden items-center gap-1 sm:flex">
+                        {positions.map((pos) => (
+                          <PositionChip key={pos} position={pos} />
+                        ))}
+                      </span>
+                      <PositionChip position={player.main_position} className="sm:hidden" />
+                      <span
+                        className={cn(
+                          'w-12 text-right font-mono text-xs tabular-nums text-muted-foreground',
+                          showSkill && 'hidden sm:inline'
+                        )}
+                        title={t('players.matchesPlayed')}
                       >
-                        {player.role === 'admin' ? 'Admin' : 'Cap'}
-                      </Badge>
-                    )}
-                  </div>
-                  {player.nickname && (
-                    <p className="text-sm text-muted-foreground">{player.nickname}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    {POSITION_LABELS[player.main_position] || player.main_position}
-                  </p>
-                </div>
-              </div>
+                        {player.matches_played} {t('ui.screens.players.matchesShort')}
+                      </span>
+                      {showSkill && (
+                        <span
+                          className="w-8 text-right font-mono text-xs tabular-nums text-foreground"
+                          title={t('players.rating')}
+                        >
+                          {overallOf(summary).toFixed(1)}
+                        </span>
+                      )}
+                      {canSeeScoreOf(player.id) && (
+                        <MemberScoreStars score={player.memberScore} language={language} className="w-14 justify-end" />
+                      )}
+                    </>
+                  }
+                />
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
-              {/* Stats */}
-              <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t">
-                <div className="text-center">
-                  <p className="text-lg font-semibold">{player.matches_played}</p>
-                  <p className="text-xs text-muted-foreground">Partidos</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-semibold">{player.goals}</p>
-                  <p className="text-xs text-muted-foreground">Goles</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-semibold">{player.assists}</p>
-                  <p className="text-xs text-muted-foreground">Asist.</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-semibold flex items-center justify-center gap-1">
-                    {player.mvp_count > 0 && <Trophy className="h-4 w-4 text-yellow-500" />}
-                    {player.mvp_count}
-                  </p>
-                  <p className="text-xs text-muted-foreground">MVPs</p>
-                </div>
-              </div>
-
-              {/* Scores (admins/captains) + physical notes */}
-              <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
-                {isAdminOrCaptain && <SkillSummaryLine summary={summaries.get(player.id)} />}
-                {canSeeScoreOf(player.id) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-xs text-muted-foreground">{t('memberScore.title')}</span>
-                    <MemberScoreStars score={player.memberScore} language={language} />
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>
-                    {player.footedness === 'left'
-                      ? 'Zurdo'
-                      : player.footedness === 'right'
-                      ? 'Diestro'
-                      : 'Ambidiestro'}
-                  </span>
-                  {player.fitness_status !== 'ok' && (
-                    <Badge variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
-                      {player.fitness_status === 'injured' ? 'Lesionado' : 'Limitado'}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          </Link>
-        ))}
-      </div>
+      {isAdminOrCaptain && (
+        <Eyebrow>{t('ui.screens.players.legend')}</Eyebrow>
+      )}
     </div>
   )
 }

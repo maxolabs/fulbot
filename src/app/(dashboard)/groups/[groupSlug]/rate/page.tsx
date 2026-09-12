@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft, Lock } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
+import { TopBarConfig } from '@/components/layout/top-bar'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 import { RateMembersForm, type ExistingRating, type RateMember } from './rate-form'
 
 interface PageProps {
@@ -10,10 +13,11 @@ interface PageProps {
   searchParams: Promise<{ player?: string; mode?: string }>
 }
 
-// Peer rating flow for a group: each member rates the others on four dimensions
-// (or skips the ones they don't know). Admins can open it in baseline mode, where
-// their ratings weigh 3x and seed a group nobody has rated yet. Individual ratings
-// are private to the voter; only admins and captains see the aggregates.
+// Peer rating flow for a group (docs/ui-rework/03-screens.md §8): each member
+// rates the others on four dimensions (or skips the ones they don't know).
+// Admins can open it in baseline mode, where their ratings weigh 3x and seed
+// a group nobody has rated yet. Individual ratings are private to the voter;
+// only admins and captains see the aggregates.
 export default async function RateMembersPage({ params, searchParams }: PageProps) {
   const { groupSlug } = await params
   const { player: focusPlayerId, mode } = await searchParams
@@ -47,6 +51,13 @@ export default async function RateMembersPage({ params, searchParams }: PageProp
     .single() as { data: { role: 'admin' | 'captain' | 'member' } | null }
 
   if (!membership) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const t = getT(userData?.preferred_language ?? 'es')
 
   const isBaseline = mode === 'baseline' && membership.role === 'admin'
 
@@ -98,33 +109,32 @@ export default async function RateMembersPage({ params, searchParams }: PageProp
     existing[rated_player_id] = rest
   }
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <Link
-        href={`/groups/${groupSlug}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a {group.name}
-      </Link>
+  const title = isBaseline ? t('ui.screens.rate.baselineTitle') : t('ui.shell.rate')
+  const subtitle = isBaseline ? t('ui.screens.rate.baselineSubtitle') : t('ui.screens.rate.subtitle')
 
-      <div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isBaseline ? 'Puntaje base' : 'Calificá a tus compañeros'}
-          </h1>
-          {isBaseline && <Badge>Admin</Badge>}
-        </div>
-        <p className="text-muted-foreground mt-1">
-          {isBaseline
-            ? 'Como admin, tu calificación pesa el triple y sirve de punto de partida hasta que el grupo vote.'
-            : 'Cuatro aspectos del 1 al 5. Si a alguien no lo viste jugar, omitilo.'}
-        </p>
-        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-          <Lock className="h-3.5 w-3.5" />
-          Tus calificaciones son privadas. Solo los admins y capitanes ven los promedios, y los usan para armar equipos parejos.
-        </p>
+  return (
+    <div className="mx-auto max-w-xl space-y-6 pb-32">
+      <TopBarConfig title={title} back={`/groups/${groupSlug}`} />
+
+      <PageHeader
+        eyebrow={group.name}
+        title={
+          <>
+            {title}
+            {isBaseline && <Badge variant="secondary" className="ml-3 align-middle">Admin</Badge>}
+          </>
+        }
+        subtitle={subtitle}
+      />
+
+      <div className="space-y-1 lg:hidden">
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
+
+      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        {t('ui.screens.rate.privacy')}
+      </p>
 
       <RateMembersForm
         groupId={group.id}

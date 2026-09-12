@@ -3,23 +3,36 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronDown, ChevronUp, SkipForward, Pencil } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Check, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { PositionChip } from '@/components/ui/player-row'
 import { Spinner } from '@/components/ui/spinner'
+import { ActionBar } from '@/components/layout/action-bar'
+import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
+import { cn } from '@/lib/utils/cn'
 import type { Database } from '@/types/database'
 import {
   DIMENSION_HINTS,
   DIMENSION_LABELS,
+  DIMENSION_SHORT,
   PLAYER_TAGS,
   RATING_DIMENSIONS,
   RATING_SCALE_LABELS,
   tagLabel,
   type RatingDimension,
 } from '@/lib/ratings'
+
+// Rating queue (docs/ui-rework/03-screens.md §8). Closed members are rows;
+// the one being rated is a dashed card holding the form. The card's own
+// "Guardar" / "Omitir" show in the browser; on mobile the same form is
+// driven from the ActionBar through the `form` attribute, so the RPC logic
+// lives in exactly one place.
 
 export interface RateMember {
   id: string
@@ -53,21 +66,7 @@ type Draft = {
   tags: string[]
 }
 
-const POSITION_LABELS: Record<string, string> = {
-  GK: 'Arquero',
-  CB: 'Defensor',
-  LB: 'Lateral Izq.',
-  RB: 'Lateral Der.',
-  CDM: 'Volante Def.',
-  CM: 'Mediocampista',
-  CAM: 'Enganche',
-  LM: 'Medio Izq.',
-  RM: 'Medio Der.',
-  LW: 'Extremo Izq.',
-  RW: 'Extremo Der.',
-  ST: 'Delantero',
-  CF: 'Centro Delantero',
-}
+const FORM_ID = 'rate-member-form'
 
 function draftFrom(entry: ExistingRating | undefined): Draft {
   if (!entry || entry.skipped) return { dims: {}, tags: [] }
@@ -91,6 +90,7 @@ export function RateMembersForm({
   members,
   existing,
 }: RateMembersFormProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
 
@@ -162,15 +162,16 @@ export function RateMembersForm({
       router.refresh()
     } catch (err) {
       console.error('Error saving rating:', err)
-      setError('No se pudo guardar la calificación. Probá de nuevo.')
+      setError(t('ui.screens.rate.saveError'))
     } finally {
       setSaving(false)
     }
   }
 
+  const draftComplete = RATING_DIMENSIONS.every((dim) => draft.dims[dim] !== undefined)
+
   const handleSave = (playerId: string) => {
-    const complete = RATING_DIMENSIONS.every((dim) => draft.dims[dim] !== undefined)
-    if (!complete) return
+    if (!draftComplete) return
     void persist(playerId, {
       skipped: false,
       goalkeeping: draft.dims.goalkeeping!,
@@ -201,200 +202,245 @@ export function RateMembersForm({
     }))
   }
 
-  const draftComplete = RATING_DIMENSIONS.every((dim) => draft.dims[dim] !== undefined)
-
   if (members.length === 0) {
+    return <p className="text-sm text-muted-foreground">{t('ui.screens.rate.noMembers')}</p>
+  }
+
+  const progressPct = (doneCount / members.length) * 100
+
+  const renderRow = (member: RateMember) => {
+    const entry = entries[member.id]
+    const status = !entry ? 'pending' : entry.skipped ? 'skipped' : 'rated'
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          Todavía no hay otros jugadores en el grupo.
-        </CardContent>
-      </Card>
+      <button
+        type="button"
+        onClick={() => open(member.id)}
+        aria-expanded={false}
+        className="flex min-h-11 w-full items-center gap-3 border-b border-border py-2 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      >
+        <Avatar src={null} fallback={member.displayName} size="xs" aria-hidden="true" />
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <span className="truncate text-sm font-medium">{member.displayName}</span>
+          {member.nickname && <span className="truncate text-xs text-muted-foreground">({member.nickname})</span>}
+        </span>
+        {status === 'rated' && (
+          <span className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[.08em] text-muted-foreground sm:flex">
+            {RATING_DIMENSIONS.map((dim) => (
+              <span key={dim}>
+                {DIMENSION_SHORT[dim]} <span className="text-foreground">{entry![dim]}</span>
+              </span>
+            ))}
+          </span>
+        )}
+        <PositionChip position={member.mainPosition} />
+        <Badge variant={status === 'rated' ? 'secondary' : 'outline'}>
+          {status === 'pending'
+            ? t('ui.screens.rate.statusPending')
+            : status === 'skipped'
+              ? t('ui.screens.rate.statusSkipped')
+              : t('ui.screens.rate.statusRated')}
+        </Badge>
+        {status === 'pending' ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        ) : (
+          <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        )}
+      </button>
     )
   }
 
-  return (
-    <div className="space-y-4">
-      {/* Progress */}
-      <Card>
-        <CardContent className="py-4 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span>
-              {doneCount} de {members.length} listos
-              <span className="text-muted-foreground"> · {ratedCount} calificados</span>
+  const renderOpenCard = (member: RateMember) => (
+    <Card>
+      <CardHeader className="pb-3">
+        <button
+          type="button"
+          onClick={() => setOpenId(null)}
+          aria-expanded={true}
+          className="flex w-full items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        >
+          <Avatar src={null} fallback={member.displayName} size="md" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-display text-base font-bold leading-tight">
+              {member.displayName}
+              {member.nickname && (
+                <span className="ml-1.5 font-sans text-sm font-normal text-muted-foreground">({member.nickname})</span>
+              )}
             </span>
-            {pendingCount === 0 ? (
-              <Badge variant="secondary">Completo</Badge>
-            ) : (
-              <span className="text-muted-foreground">{pendingCount} pendientes</span>
-            )}
-          </div>
-          <div className="h-1.5 rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${(doneCount / members.length) * 100}%` }}
-            />
-          </div>
-        </CardContent>
-      </Card>
+            <span className="mt-1 block">
+              <PositionChip position={member.mainPosition} />
+            </span>
+          </span>
+          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </CardHeader>
+      <CardContent>
+        <form
+          id={FORM_ID}
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleSave(member.id)
+          }}
+          className="space-y-5 border-t border-border pt-4"
+        >
+          {RATING_DIMENSIONS.map((dim) => {
+            const value = draft.dims[dim]
+            return (
+              <div key={dim} className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium">{DIMENSION_LABELS[dim]}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {value ? RATING_SCALE_LABELS[value] : DIMENSION_HINTS[dim]}
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={DIMENSION_LABELS[dim]}>
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const selected = value === n
+                    const below = value !== undefined && n < value
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        aria-label={`${DIMENSION_LABELS[dim]} ${n}`}
+                        onClick={() => setDraft((d) => ({ ...d, dims: { ...d.dims, [dim]: n } }))}
+                        className={cn(
+                          'h-11 rounded-[3px] border font-mono text-sm tabular-nums transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:h-10',
+                          selected
+                            ? 'border-foreground bg-accent font-semibold text-foreground'
+                            : below
+                              ? 'border-border bg-accent/60 text-foreground'
+                              : 'border-border text-muted-foreground hover:bg-accent/60'
+                        )}
+                      >
+                        {n}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
 
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">
+              {t('ui.screens.rate.tagsTitle')}{' '}
+              <span className="font-normal text-muted-foreground">{t('ui.screens.rate.optional')}</span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {PLAYER_TAGS.map((tag) => {
+                const active = draft.tags.includes(tag.key)
+                return (
+                  <button
+                    key={tag.key}
+                    type="button"
+                    onClick={() => toggleTag(tag.key)}
+                    aria-pressed={active}
+                    className={cn(
+                      'rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-[.08em] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+                      active
+                        ? 'border-foreground bg-accent text-foreground'
+                        : 'border-border text-muted-foreground hover:bg-accent/60'
+                    )}
+                  >
+                    {tagLabel(tag.key)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {error && <FormNotice kind="error">{error}</FormNotice>}
+
+          {/* Browser: the card's own actions. On mobile the ActionBar drives this form. */}
+          <div className="hidden items-center justify-end gap-2 lg:flex">
+            <Button type="button" variant="ghost" onClick={() => handleSkip(member.id)} disabled={saving}>
+              {t('ui.screens.rate.skip')}
+            </Button>
+            <Button type="submit" disabled={saving || !draftComplete}>
+              {saving ? <Spinner size="sm" /> : <Check className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
+              {t('common.save')}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+
+  const openMember = openId ? members.find((m) => m.id === openId) ?? null : null
+
+  return (
+    <div className="space-y-6">
+      {/* Progress */}
+      <div className="space-y-1.5">
+        <div
+          role="meter"
+          aria-label={t('ui.screens.rate.progress')}
+          aria-valuemin={0}
+          aria-valuemax={members.length}
+          aria-valuenow={doneCount}
+          className="h-1.5 w-full overflow-hidden rounded-sm bg-muted"
+        >
+          <div className="h-full rounded-sm bg-muted-foreground" style={{ width: `${progressPct}%` }} />
         </div>
-      )}
+        <div className="flex items-baseline justify-between gap-3 font-mono text-xs tabular-nums text-muted-foreground">
+          <span>
+            <strong className="font-medium text-foreground">{doneCount}</strong>{' '}
+            {t('ui.screens.rate.progressOf', { total: members.length })}
+            {' · '}
+            {t('ui.screens.rate.progressRated', { n: ratedCount })}
+          </span>
+          {pendingCount === 0 ? (
+            <Badge variant="success">{t('ui.spots.full')}</Badge>
+          ) : (
+            <span>{t('ui.screens.rate.progressPending', { n: pendingCount })}</span>
+          )}
+        </div>
+      </div>
+
+      {error && !openMember && <FormNotice kind="error">{error}</FormNotice>}
 
       {pendingCount === 0 && openId === null && (
-        <Card className="border-primary/30">
-          <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Card>
+          <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between lg:pt-5">
             <div>
-              <p className="font-medium flex items-center gap-2">
-                <Check className="h-4 w-4 text-primary" />
-                ¡Listo! No te queda nadie por calificar.
+              <p className="flex items-center gap-2 font-medium">
+                <Check className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('ui.screens.rate.doneTitle')}
               </p>
-              <p className="text-sm text-muted-foreground">
-                Podés volver a editar cualquier calificación cuando quieras.
-              </p>
+              <p className="text-sm text-muted-foreground">{t('ui.screens.rate.doneHint')}</p>
             </div>
-            <Link href={`/groups/${groupSlug}`}>
-              <Button variant="outline" size="sm">Volver al grupo</Button>
+            <Link href={`/groups/${groupSlug}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              {t('ui.screens.rate.backToGroup')}
             </Link>
           </CardContent>
         </Card>
       )}
 
+      {openMember && renderOpenCard(openMember)}
+
       <div className="space-y-2">
-        {ordered.map((member) => {
-          const entry = entries[member.id]
-          const isOpen = openId === member.id
-          const status = !entry ? 'pending' : entry.skipped ? 'skipped' : 'rated'
-
-          return (
-            <Card key={member.id} className={isOpen ? 'border-primary/50' : ''}>
-              <CardContent className="py-3">
-                <button
-                  type="button"
-                  onClick={() => (isOpen ? setOpenId(null) : open(member.id))}
-                  className="w-full flex items-center gap-3 text-left"
-                >
-                  <Avatar fallback={member.displayName} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {member.displayName}
-                      {member.nickname && (
-                        <span className="text-muted-foreground ml-1">({member.nickname})</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {POSITION_LABELS[member.mainPosition] || member.mainPosition}
-                    </p>
-                  </div>
-                  {status === 'rated' && (
-                    <span className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-                      {RATING_DIMENSIONS.map((dim) => (
-                        <span key={dim}>
-                          {DIMENSION_LABELS[dim].slice(0, 3).toUpperCase()}{' '}
-                          <span className="font-medium text-foreground">{entry![dim]}</span>
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                  <Badge
-                    variant={status === 'rated' ? 'secondary' : 'outline'}
-                    className="text-xs shrink-0"
-                  >
-                    {status === 'pending' ? 'Pendiente' : status === 'skipped' ? 'Omitido' : 'Calificado'}
-                  </Badge>
-                  {isOpen ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
-                  ) : status === 'pending' ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                  ) : (
-                    <Pencil className="h-4 w-4 text-muted-foreground shrink-0" />
-                  )}
-                </button>
-
-                {isOpen && (
-                  <div className="mt-4 pt-4 border-t space-y-5">
-                    {RATING_DIMENSIONS.map((dim) => {
-                      const value = draft.dims[dim]
-                      return (
-                        <div key={dim} className="space-y-1.5">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-sm font-medium">{DIMENSION_LABELS[dim]}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {value ? RATING_SCALE_LABELS[value] : DIMENSION_HINTS[dim]}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-5 gap-1.5">
-                            {[1, 2, 3, 4, 5].map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                onClick={() => setDraft((d) => ({ ...d, dims: { ...d.dims, [dim]: n } }))}
-                                className={`h-10 rounded-md border text-sm font-medium transition-colors ${
-                                  value === n
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : value !== undefined && n < value
-                                      ? 'border-primary/40 bg-primary/10'
-                                      : 'border-border hover:bg-muted/50'
-                                }`}
-                                aria-label={`${DIMENSION_LABELS[dim]} ${n}`}
-                                aria-pressed={value === n}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-
-                    <div className="space-y-1.5">
-                      <span className="text-sm font-medium">¿Qué lo describe? <span className="text-muted-foreground font-normal">(opcional)</span></span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {PLAYER_TAGS.map((tag) => {
-                          const active = draft.tags.includes(tag.key)
-                          return (
-                            <button
-                              key={tag.key}
-                              type="button"
-                              onClick={() => toggleTag(tag.key)}
-                              aria-pressed={active}
-                              className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
-                                active
-                                  ? 'border-primary bg-primary/15 text-foreground'
-                                  : 'border-border text-muted-foreground hover:bg-muted/50'
-                              }`}
-                            >
-                              {tagLabel(tag.key)}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSkip(member.id)}
-                        disabled={saving}
-                      >
-                        <SkipForward className="mr-2 h-4 w-4" />
-                        No lo conozco, omitir
-                      </Button>
-                      <Button onClick={() => handleSave(member.id)} disabled={saving || !draftComplete}>
-                        {saving ? <Spinner size="sm" className="mr-2" /> : <Check className="mr-2 h-4 w-4" />}
-                        Guardar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
+        <Eyebrow as="h2">{t('ui.screens.rate.listTitle')}</Eyebrow>
+        <ul className="[&>li:last-child>button]:border-b-0">
+          {ordered
+            .filter((m) => m.id !== openId)
+            .map((member) => (
+              <li key={member.id}>{renderRow(member)}</li>
+            ))}
+        </ul>
       </div>
+
+      {openMember && (
+        <ActionBar>
+          <Button size="xl" type="submit" form={FORM_ID} disabled={saving || !draftComplete}>
+            {saving && <Spinner size="sm" />}
+            {t('common.save')}
+          </Button>
+          <Button size="xl" variant="outline" type="button" onClick={() => handleSkip(openMember.id)} disabled={saving}>
+            {t('ui.screens.rate.skip')}
+          </Button>
+        </ActionBar>
+      )}
     </div>
   )
 }

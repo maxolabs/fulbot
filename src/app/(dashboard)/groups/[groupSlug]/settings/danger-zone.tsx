@@ -48,7 +48,7 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
   return (
     <div className="space-y-4">
       {!showDeleteConfirm ? (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-medium">Eliminar grupo</p>
             <p className="text-sm text-muted-foreground">
@@ -59,12 +59,12 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
             variant="destructive"
             onClick={() => setShowDeleteConfirm(true)}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
             Eliminar grupo
           </Button>
         </div>
       ) : (
-        <div className="border border-destructive/50 rounded-lg p-4 space-y-4">
+        <div className="space-y-4 rounded-md border border-destructive p-4">
           <p className="text-sm">
             Esta acción <strong>no se puede deshacer</strong>. Se eliminarán todos los
             partidos, inscripciones, equipos y estadísticas del grupo.
@@ -78,13 +78,13 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
             placeholder={groupName}
             disabled={loading}
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="destructive"
               onClick={handleDeleteGroup}
               disabled={loading || deleteConfirmText !== groupName}
             >
-              {loading && <Spinner size="sm" className="mr-2" />}
+              {loading && <Spinner size="sm" />}
               Confirmar eliminación
             </Button>
             <Button

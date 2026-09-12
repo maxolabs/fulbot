@@ -1,16 +1,25 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
-import { Users, XCircle, Calendar, MapPin, UserPlus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { PublicFrame } from '@/components/layout/public-frame'
-import { Button } from '@/components/ui/button'
+import { LinkButton } from '@/components/link-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime, formatWeekday } from '@/lib/utils/datetime'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { LanguageProvider } from '@/i18n/provider'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
+import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 import { JoinGroupButton } from './join-button'
 
 interface PageProps {
   params: Promise<{ code: string }>
 }
+
+// Invite landing (docs/ui-rework/03-screens.md §12): one dashed card, "Te
+// invitaron a {group}", the member count and the next-match line, one cone
+// action ("Unirme" / "Crear cuenta para unirme") and the guest path to the
+// next open match as a text link.
 
 interface PublicGroup {
   id: string
@@ -31,52 +40,32 @@ interface PublicGroup {
   } | null
 }
 
-const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
-function NextMatchCard({ group }: { group: PublicGroup }) {
-  const match = group.next_match
-  if (!match) return null
-  const tz = group.timezone || DEFAULT_TIMEZONE
-  const isFull = match.confirmed_count >= match.max_players
-
+function Message({ title, body, cta }: { title: string; body: string; cta: { href: string; label: string } }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-3">
-      <p className="text-sm font-medium">Próximo partido</p>
-      <div className="space-y-1 text-sm text-muted-foreground">
-        <p className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          {formatMatchDate(match.date_time, tz)} · {formatMatchTime(match.date_time, tz)}
-        </p>
-        {match.location && (
-          <p className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            {match.location}
-          </p>
-        )}
-        <p className="flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          {match.confirmed_count}/{match.max_players} anotados
-          {isFull && ' · lista de espera'}
-        </p>
+    <PublicFrame width="sm" className="justify-center">
+      <div className="space-y-4 text-center">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance">{title}</h1>
+        <p className="text-sm text-muted-foreground text-pretty">{body}</p>
+        <div className="pt-2">
+          <LinkButton href={cta.href} variant="outline">
+            {cta.label}
+          </LinkButton>
+        </div>
       </div>
-      <Link href={`/m/${match.id}`} className="block">
-        <Button variant="secondary" className="w-full">
-          <UserPlus className="mr-2 h-4 w-4" />
-          Anotarme como invitado (sin cuenta)
-        </Button>
-      </Link>
-      <p className="text-xs text-center text-muted-foreground">
-        Solo para este partido, con tu nombre. Para quedar en el grupo, creá una cuenta.
-      </p>
-    </div>
+    </PublicFrame>
   )
 }
 
 export default async function InvitePage({ params }: PageProps) {
   const { code } = await params
   const supabase = await createClient()
+  const cookieStore = await cookies()
+  const langCookie = cookieStore.get('fulbot_lang')?.value
+  const language: Language = langCookie === 'en' ? 'en' : 'es'
+  const t = getT(language)
 
-  // Get current user
   const { data: { user } } = await supabase.auth.getUser()
 
   // Public view of the group (works for anonymous visitors, includes the next open match)
@@ -85,144 +74,135 @@ export default async function InvitePage({ params }: PageProps) {
 
   if (!group) {
     return (
-      <PublicFrame className="justify-center">
-        <Card className="w-full">
-          <CardContent className="flex flex-col items-center py-8">
-            <XCircle className="h-12 w-12 text-destructive mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Invitación inválida</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              Este código de invitación no existe o ya no es válido.
-            </p>
-            <Link href="/">
-              <Button>Ir al inicio</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </PublicFrame>
+      <Message
+        title={t('ui.screens.invite.invalidTitle')}
+        body={t('ui.screens.invite.invalidBody')}
+        cta={{ href: '/', label: t('ui.screens.publicMatch.goHome') }}
+      />
     )
-  }
-
-  const scheduleLine = group.default_match_day !== null
-    ? `${DAYS[group.default_match_day]}${group.default_match_time ? ` a las ${group.default_match_time.slice(0, 5)}` : ''}`
-    : null
-
-  // Anonymous visitor: account actions plus the guest path to the next match
-  if (!user) {
-    return (
-      <PublicFrame className="justify-center">
-        <Card className="w-full">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Users className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle>Te invitaron a {group.name}</CardTitle>
-            {group.description && (
-              <CardDescription>{group.description}</CardDescription>
-            )}
-            {scheduleLine && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Partidos: {scheduleLine} · {group.member_count} miembros
-              </p>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-center text-muted-foreground">
-              Iniciá sesión o creá una cuenta para unirte al grupo.
-            </p>
-            <div className="flex flex-col gap-2">
-              <Link href={`/login?redirect=/invite/${code}`}>
-                <Button className="w-full">Iniciar sesión</Button>
-              </Link>
-              <Link href={`/register?redirect=/invite/${code}`}>
-                <Button variant="outline" className="w-full">Crear cuenta</Button>
-              </Link>
-            </div>
-            <NextMatchCard group={group} />
-          </CardContent>
-        </Card>
-      </PublicFrame>
-    )
-  }
-
-  // Get user's player profile
-  const { data: playerProfile } = await supabase
-    .from('player_profiles')
-    .select('id')
-    .eq('user_id', user.id)
-    .single() as { data: { id: string } | null }
-
-  if (!playerProfile) {
-    return (
-      <PublicFrame className="justify-center">
-        <Card className="w-full">
-          <CardContent className="flex flex-col items-center py-8">
-            <XCircle className="h-12 w-12 text-destructive mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Error</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              No se encontró tu perfil de jugador.
-            </p>
-            <Link href="/groups">
-              <Button>Ir a mis grupos</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </PublicFrame>
-    )
-  }
-
-  // Check if user is already a member
-  const { data: existingMembership } = await supabase
-    .from('group_memberships')
-    .select('id, is_active')
-    .eq('group_id', group.id)
-    .eq('player_id', playerProfile.id)
-    .single() as { data: { id: string; is_active: boolean } | null }
-
-  if (existingMembership?.is_active) {
-    // Already a member, redirect to group
-    redirect(`/groups/${group.slug}`)
   }
 
   const tz = group.timezone || DEFAULT_TIMEZONE
+  const scheduleLine = group.default_match_day !== null
+    ? `${t(`days.${DAY_KEYS[group.default_match_day]}`)}${group.default_match_time ? ` ${group.default_match_time.slice(0, 5)}` : ''}`
+    : null
+  const match = group.next_match
+  const nextMatchLine = match
+    ? `${formatMatchDateShort(match.date_time, tz)} · ${formatMatchTime(match.date_time, tz)}${match.location ? ` · ${match.location}` : ''}`
+    : null
+  const isFull = match ? match.confirmed_count >= match.max_players : false
+
+  let playerId: string | null = null
+  let wasInactive = false
+
+  if (user) {
+    const { data: playerProfile } = await supabase
+      .from('player_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single() as { data: { id: string } | null }
+
+    if (!playerProfile) {
+      return (
+        <Message
+          title={t('ui.screens.invite.noProfileTitle')}
+          body={t('ui.screens.invite.noProfileBody')}
+          cta={{ href: '/groups', label: t('ui.shell.myGroups') }}
+        />
+      )
+    }
+    playerId = playerProfile.id
+
+    const { data: existingMembership } = await supabase
+      .from('group_memberships')
+      .select('id, is_active')
+      .eq('group_id', group.id)
+      .eq('player_id', playerProfile.id)
+      .single() as { data: { id: string; is_active: boolean } | null }
+
+    if (existingMembership?.is_active) {
+      redirect(`/groups/${group.slug}`)
+    }
+    wasInactive = existingMembership !== null && !existingMembership.is_active
+  }
 
   return (
-    <PublicFrame className="justify-center">
-      <Card className="w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <Users className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>Unirse a {group.name}</CardTitle>
-          {group.description && (
-            <CardDescription>{group.description}</CardDescription>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {scheduleLine && (
-            <div className="text-center text-sm text-muted-foreground">
-              Partidos: {scheduleLine} · {group.member_count} miembros
-            </div>
-          )}
+    <LanguageProvider language={language}>
+      <PublicFrame width="sm" className="justify-center">
+        <Card className="w-full">
+          <CardHeader>
+            <Eyebrow>{t('ui.screens.invite.eyebrow')}</Eyebrow>
+            <CardTitle className="text-2xl">{t('ui.screens.invite.title', { group: group.name })}</CardTitle>
+            {group.description && <CardDescription className="text-pretty">{group.description}</CardDescription>}
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <dl className="[&>div:last-child]:border-b-0">
+              <div className="flex items-center justify-between gap-4 border-b border-border py-2 text-sm">
+                <dt className="text-muted-foreground">{t('groups.members')}</dt>
+                <dd className="font-mono tabular-nums">{group.member_count}</dd>
+              </div>
+              {scheduleLine && (
+                <div className="flex items-center justify-between gap-4 border-b border-border py-2 text-sm">
+                  <dt className="text-muted-foreground">{t('ui.screens.invite.usually')}</dt>
+                  <dd className="font-mono tabular-nums">{scheduleLine}</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4 border-b border-border py-2 text-sm">
+                <dt className="shrink-0 text-muted-foreground">{t('groups.nextMatch')}</dt>
+                <dd className="text-right font-mono text-xs tabular-nums">
+                  {nextMatchLine ? (
+                    <>
+                      <span className="block">{nextMatchLine}</span>
+                      <span className="block text-muted-foreground">
+                        {match!.confirmed_count} / {match!.max_players}
+                        {isFull && ` · ${t('ui.screens.invite.waitlist')}`}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">{t('groups.noUpcomingMatch')}</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
 
-          {group.next_match && (
-            <p className="text-center text-sm">
-              Próximo: {formatWeekday(group.next_match.date_time, tz)} {formatMatchTime(group.next_match.date_time, tz)}
-              {' · '}{group.next_match.confirmed_count}/{group.next_match.max_players} anotados
-            </p>
-          )}
+            {user && playerId ? (
+              <>
+                <JoinGroupButton
+                  groupId={group.id}
+                  groupSlug={group.slug}
+                  playerId={playerId}
+                  wasInactive={wasInactive}
+                />
+                <p className="text-center text-xs text-muted-foreground">{t('ui.screens.invite.joinHint')}</p>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <LinkButton href={`/register?redirect=/invite/${code}`} size="xl" className="w-full">
+                  {t('ui.screens.invite.createAccountToJoin')}
+                </LinkButton>
+                <p className="text-center text-sm text-muted-foreground">
+                  {t('auth.hasAccount')}{' '}
+                  <Link
+                    href={`/login?redirect=/invite/${code}`}
+                    className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                  >
+                    {t('auth.loginCta')}
+                  </Link>
+                </p>
+              </div>
+            )}
 
-          <JoinGroupButton
-            groupId={group.id}
-            groupSlug={group.slug}
-            playerId={playerProfile.id}
-            wasInactive={existingMembership !== null && !existingMembership.is_active}
-          />
-
-          <p className="text-xs text-center text-muted-foreground">
-            Al unirte, vas a poder ver los partidos del grupo e inscribirte.
-          </p>
-        </CardContent>
-      </Card>
-    </PublicFrame>
+            {match && (
+              <div className="space-y-1 border-t border-border pt-4 text-center">
+                <LinkButton href={`/m/${match.id}`} variant="link" className="text-foreground">
+                  {t('ui.screens.invite.guestPath')}
+                </LinkButton>
+                <p className="text-xs text-muted-foreground text-pretty">{t('ui.screens.invite.guestHint')}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </PublicFrame>
+    </LanguageProvider>
   )
 }

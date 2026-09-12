@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
 
 interface ProfileFormProps {
   profile: {
@@ -86,20 +87,12 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          Perfil actualizado correctamente
-        </div>
-      )}
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      {success && <FormNotice kind="success">Perfil actualizado correctamente</FormNotice>}
 
       {/* Basic Info */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="displayName">Nombre</Label>
           <Input
             id="displayName"
@@ -110,7 +103,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
             maxLength={50}
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="nickname">Apodo (opcional)</Label>
           <Input
             id="nickname"
@@ -124,25 +117,24 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       </div>
 
       {/* Position */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="mainPosition">Posición principal</Label>
-        <select
+        <NativeSelect
           id="mainPosition"
           value={mainPosition}
           onChange={(e) => setMainPosition(e.target.value)}
           disabled={loading}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {positions.map((pos) => (
             <option key={pos.value} value={pos.value}>
               {pos.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       {/* Preferred Positions */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label>Otras posiciones que jugarías (máx. 4)</Label>
         <div className="flex flex-wrap gap-2">
           {positions.map((pos) => (
@@ -151,10 +143,11 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
               type="button"
               onClick={() => handlePositionToggle(pos.value)}
               disabled={loading}
-              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+              aria-pressed={preferredPositions.includes(pos.value)}
+              className={`min-h-9 rounded-sm border px-2.5 py-1.5 font-mono text-xs uppercase tracking-[.08em] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card ${
                 preferredPositions.includes(pos.value)
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background hover:bg-muted border-input'
+                  ? 'border-foreground bg-accent text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-accent/60'
               }`}
             >
               {pos.value}
@@ -164,9 +157,9 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       </div>
 
       {/* Footedness */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label>Pie hábil</Label>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4 pt-1">
           {[
             { value: 'right', label: 'Diestro' },
             { value: 'left', label: 'Zurdo' },
@@ -180,7 +173,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
                 checked={footedness === option.value}
                 onChange={(e) => setFootedness(e.target.value as 'left' | 'right' | 'both')}
                 disabled={loading}
-                className="h-4 w-4"
+                className="h-4 w-4 accent-primary"
               />
               <span className="text-sm">{option.label}</span>
             </label>
@@ -189,7 +182,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       </div>
 
       {/* Goalkeeper willingness */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="goalkeeperWillingness">
           Disposición para atajar (0 = nunca, 3 = me encanta)
         </Label>
@@ -202,9 +195,9 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
             value={goalkeeperWillingness}
             onChange={(e) => setGoalkeeperWillingness(Number(e.target.value))}
             disabled={loading}
-            className="flex-1"
+            className="flex-1 accent-primary"
           />
-          <span className="text-sm font-medium w-8 text-center">
+          <span className="w-8 text-center font-mono text-sm tabular-nums">
             {goalkeeperWillingness}
           </span>
         </div>
@@ -217,9 +210,9 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       </div>
 
       {/* Fitness status */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label>Estado físico actual</Label>
-        <div className="flex gap-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           {[
             { value: 'ok', label: 'Bien', description: 'Al 100%' },
             { value: 'limited', label: 'Limitado', description: 'Puedo jugar pero con cuidado' },
@@ -227,10 +220,10 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
           ].map((option) => (
             <label
               key={option.value}
-              className={`flex-1 p-3 rounded-lg border cursor-pointer transition-colors ${
+              className={`flex-1 cursor-pointer rounded-md border p-3 transition-colors duration-100 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-card ${
                 fitnessStatus === option.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-input hover:bg-muted'
+                  ? 'border-foreground bg-accent'
+                  : 'border-border hover:bg-accent/60'
               }`}
             >
               <input
@@ -252,7 +245,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       </div>
 
       <Button type="submit" disabled={loading}>
-        {loading && <Spinner size="sm" className="mr-2" />}
+        {loading && <Spinner size="sm" />}
         Guardar cambios
       </Button>
     </form>
