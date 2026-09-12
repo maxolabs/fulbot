@@ -4,6 +4,7 @@ import { Calendar, Clock, MapPin, Users, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database'
+import { PublicFrame } from '@/components/layout/public-frame'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,8 +41,8 @@ interface PublicMatch {
 
 function NotFoundCard() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <PublicFrame className="justify-center">
+      <Card className="w-full">
         <CardContent className="flex flex-col items-center py-8">
           <XCircle className="h-12 w-12 text-destructive mb-4" />
           <h2 className="text-xl font-semibold mb-2">Partido no encontrado</h2>
@@ -53,7 +54,7 @@ function NotFoundCard() {
           </Link>
         </CardContent>
       </Card>
-    </div>
+    </PublicFrame>
   )
 }
 
@@ -83,8 +84,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
 
   if (!isSignupPhase) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <PublicFrame className="justify-center">
+        <Card className="w-full">
           <CardContent className="flex flex-col items-center py-8">
             <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
             <h2 className="text-xl font-semibold mb-2">{match.group_name}</h2>
@@ -98,7 +99,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
             )}
           </CardContent>
         </Card>
-      </div>
+      </PublicFrame>
     )
   }
 
@@ -201,8 +202,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <PublicFrame className="justify-center">
+      <Card className="w-full">
         <CardHeader className="text-center">
           <div className="mx-auto mb-2">
             <Badge variant={match.status === 'full' ? 'secondary' : match.status === 'signup_closed' ? 'outline' : 'default'}>
@@ -302,6 +303,6 @@ export default async function PublicMatchPage({ params }: PageProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PublicFrame>
   )
 }

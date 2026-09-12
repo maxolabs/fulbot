@@ -9,6 +9,7 @@ import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
 import { ProfileForm } from './profile-form'
+import { TopBarConfig } from '@/components/layout/top-bar'
 
 const POSITION_LABELS: Record<string, string> = {
   GK: 'Arquero',
@@ -114,6 +115,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <TopBarConfig title={t('ui.shell.profile')} />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Mi perfil</h1>
         <p className="text-muted-foreground">Administra tu información de jugador</p>

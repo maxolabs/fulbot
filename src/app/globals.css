@@ -68,8 +68,11 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
-  /* Chalk dust on the board (01-brand.md §3). Cards sit flat on top of it. */
-  .dark body {
+  /* Chalk dust on the board (01-brand.md §3). Cards sit flat on top of it.
+     `.chalk-dust` is the same texture for the PublicFrame, which is always
+     a board regardless of the theme. */
+  .dark body,
+  .chalk-dust {
     background-image: radial-gradient(hsl(var(--foreground) / 0.045) 1px, transparent 1px);
     background-size: 7px 7px;
   }

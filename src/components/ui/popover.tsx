@@ -4,7 +4,7 @@ import * as React from 'react'
 import { cn } from '@/lib/utils/cn'
 
 // Popover (docs/ui-rework/04-components.md §2): an anchored panel using the
-// same backdrop pattern as the user menu in layout/header.tsx (a `fixed
+// same backdrop pattern as the old header's user menu (a `fixed
 // inset-0` layer under the panel catches the outside click). Escape closes,
 // focus returns to the trigger. The trigger content is wrapped in the
 // popover's own <button>; style it through `triggerClassName` (for example

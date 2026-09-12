@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Users, Brain, BarChart3, ChevronRight } from 'lucide-react'
+import { PublicFrame } from '@/components/layout/public-frame'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -11,21 +12,11 @@ export default async function Home() {
   const t = getT(language)
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden">
-      {/* Background gradient effects */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-primary/3 blur-[100px]" />
-      </div>
-
-      <div className="relative max-w-lg w-full space-y-12">
-        {/* Brand */}
-        <div className="text-center space-y-4">
-          <h1 className="text-5xl sm:text-6xl font-black tracking-tight">
-            ful
-            <span className="text-primary">bot</span>
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-xs mx-auto">
+    <PublicFrame className="justify-center">
+      <div className="w-full space-y-12">
+        {/* Tagline */}
+        <div className="text-center">
+          <p className="mx-auto max-w-xs text-lg text-muted-foreground">
             {t('landing.tagline')}
           </p>
         </div>
@@ -86,6 +77,6 @@ export default async function Home() {
           {t('landing.footer')}
         </p>
       </div>
-    </main>
+    </PublicFrame>
   )
 }

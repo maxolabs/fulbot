@@ -10,6 +10,7 @@ import { SkillSummaryLine } from '@/components/player-skills'
 import { MemberScoreStars } from '@/components/member-score'
 import { summariesById, type RatingSummary } from '@/lib/ratings'
 import { getT } from '@/i18n/server'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
 
@@ -185,6 +186,7 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
 
   return (
     <div className="space-y-6">
+      <TopBarConfig title="Jugadores" back={`/groups/${groupSlug}`} />
       {/* Back button */}
       <Link
         href={`/groups/${groupSlug}`}

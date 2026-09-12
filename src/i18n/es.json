@@ -435,6 +435,31 @@
       "left": "{n} lugares",
       "leftOne": "1 lugar",
       "waiting": "{n} en espera"
+    },
+    "shell": {
+      "home": "Inicio",
+      "matches": "Partidos",
+      "players": "Jugadores",
+      "rate": "Puntuar",
+      "groupSettings": "Ajustes",
+      "notifications": "Avisos",
+      "groupNav": "Grupo",
+      "globalNav": "General",
+      "mainNav": "Principal",
+      "tabMatch": "Partido",
+      "tabGroup": "Grupo",
+      "tabMe": "Yo",
+      "back": "Volver",
+      "switchGroup": "Cambiar de grupo",
+      "myGroups": "Mis grupos",
+      "createGroup": "Crear grupo",
+      "joinWithCode": "Unirme con código",
+      "userMenu": "Menú de usuario",
+      "unread": "{n} sin leer",
+      "unreadDot": "Tenés avisos sin leer",
+      "pendingRatings": "{n} sin calificar",
+      "profile": "Perfil",
+      "preferences": "Preferencias"
     }
   }
 }

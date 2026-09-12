@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NotificationList } from './notification-list'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import type { NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
@@ -75,6 +76,7 @@ export default async function NotificationsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <TopBarConfig title="Notificaciones" />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Notificaciones</h1>
         <p className="text-muted-foreground">Novedades de tus grupos</p>
