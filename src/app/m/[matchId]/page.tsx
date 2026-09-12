@@ -231,7 +231,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
         <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance lg:text-4xl">
           {formatMatchDate(date, timeZone)}
         </h1>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <span className="font-mono tabular-nums text-foreground">{formatMatchTime(date, timeZone)}</span>
           {match.location && (
             <>
@@ -240,7 +240,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
             </>
           )}
           {statusBadge}
-        </p>
+        </div>
         <SpotsMeter
           confirmed={match.confirmed_count}
           max={match.max_players}
