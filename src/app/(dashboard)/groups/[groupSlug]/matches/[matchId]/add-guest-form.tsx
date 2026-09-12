@@ -145,9 +145,9 @@ export function AddGuestForm({
   }
 
   return (
-    <Card>
+    <Card variant="solid">
       <CardHeader>
-        <CardTitle className="text-base">Sumar un invitado</CardTitle>
+        <CardTitle>Sumar un invitado</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-2">
@@ -172,7 +172,7 @@ export function AddGuestForm({
         </div>
 
         {mode === 'link' && (
-          <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-3 rounded-md border border-border p-3">
             <p className="text-xs text-muted-foreground">
               El invitado se anota solo con su nombre, sin crear cuenta. {spotsHint}
             </p>
@@ -196,7 +196,7 @@ export function AddGuestForm({
         )}
 
         {mode === 'manual' && (
-          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border p-3">
+          <form onSubmit={handleSubmit} className="space-y-3 rounded-md border border-border p-3">
             {error && (
               <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
@@ -241,7 +241,7 @@ export function AddGuestForm({
                       className="rounded p-1 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Star
-                        className={`h-5 w-5 ${active ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`}
+                        className={`h-5 w-5 ${active ? 'fill-primary text-primary' : 'text-muted-foreground'}`}
                       />
                     </button>
                   )

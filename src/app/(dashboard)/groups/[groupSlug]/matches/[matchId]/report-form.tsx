@@ -333,7 +333,7 @@ export function ReportForm({
           )}
 
           {mvpName && (
-            <p className="flex items-center gap-1.5 text-sm text-yellow-600 dark:text-yellow-500">
+            <p className="flex items-center gap-1.5 text-sm text-warning">
               <Trophy className="h-4 w-4" />
               Tu MVP: {mvpName}
             </p>
@@ -448,14 +448,14 @@ export function ReportForm({
           </div>
           <span
             className={`text-xs tabular-nums ${
-              overScore ? 'text-destructive' : matchesScore ? 'text-green-600 dark:text-green-500' : 'text-muted-foreground'
+              overScore ? 'text-destructive' : matchesScore ? 'text-success' : 'text-muted-foreground'
             }`}
           >
             {targetScore !== null ? `${totals.goals} / ${targetScore} goles` : `${totals.goals} goles`}
           </span>
         </div>
 
-        <div className="divide-y rounded-lg border">
+        <div className="divide-y rounded-md border border-border">
           {players.map(player => {
             const value = counts[statKey(team.id, player.key)] || { goals: 0, assists: 0 }
             const foreign = !team.players.some(p => p.key === player.key)
@@ -520,7 +520,7 @@ export function ReportForm({
               <button
                 type="button"
                 onClick={() => setStep(i)}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border transition-colors ${
+                className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 border transition-colors ${
                   step === i ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:bg-muted/50'
                 }`}
               >
@@ -574,8 +574,8 @@ export function ReportForm({
                   key={player.id}
                   type="button"
                   onClick={() => setMvp(prev => (prev === player.id ? null : player.id))}
-                  className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                    mvp === player.id ? 'border-yellow-500 bg-yellow-500/10' : 'border-border hover:bg-muted/50'
+                  className={`flex items-center gap-3 rounded-md border p-3 text-left transition-colors ${
+                    mvp === player.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'
                   }`}
                 >
                   <Avatar fallback={player.display_name} size="sm" />
@@ -585,7 +585,7 @@ export function ReportForm({
                       <span className="text-xs text-muted-foreground ml-1">({player.nickname})</span>
                     )}
                   </div>
-                  {mvp === player.id && <Trophy className="h-4 w-4 text-yellow-500" />}
+                  {mvp === player.id && <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} />}
                 </button>
               ))}
             </div>

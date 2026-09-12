@@ -159,7 +159,7 @@ export function ResultConsensus({
         )}
 
         {mvpName && (
-          <p className="border-t pt-3 flex items-center gap-1.5 text-sm text-yellow-600 dark:text-yellow-500">
+          <p className="border-t pt-3 flex items-center gap-1.5 text-sm text-warning">
             <Trophy className="h-4 w-4" />
             MVP: {mvpName}
           </p>

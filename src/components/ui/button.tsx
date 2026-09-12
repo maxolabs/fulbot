@@ -45,7 +45,18 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    // `asChild` renders the single child element (typically a <Link>) with the
+    // button classes merged in, so server pages get link-styled buttons
+    // without calling `buttonVariants` from a client module.
+    if (asChild && React.isValidElement(props.children)) {
+      const { children, ...rest } = props
+      const child = children as React.ReactElement<{ className?: string }>
+      return React.cloneElement(child, {
+        ...rest,
+        className: cn(buttonVariants({ variant, size, className }), child.props.className),
+      })
+    }
     return (
       <button
         className={cn(buttonVariants({ variant, size, className }))}

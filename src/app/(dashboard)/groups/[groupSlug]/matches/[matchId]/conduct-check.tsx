@@ -232,9 +232,9 @@ export function ConductCheck({ matchId, groupId, role }: ConductCheckProps) {
                             aria-label={`${row.displayName}: ${t(f.labelKey)}`}
                             disabled={busy}
                             onClick={() => toggle(row, f.type)}
-                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60 ${
+                            className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60 ${
                               on
-                                ? 'border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                ? 'border-warning bg-warning/15 text-foreground'
                                 : 'border-border/50 bg-card/50 text-muted-foreground hover:border-border hover:text-foreground'
                             }`}
                           >

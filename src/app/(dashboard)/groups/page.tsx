@@ -1,13 +1,21 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Plus, Users, Calendar, ChevronRight, ClipboardList } from 'lucide-react'
+import { ChevronRight, ClipboardList, KeyRound, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
-import { DEFAULT_TIMEZONE, formatMatchDateNumeric, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import { CreateOrJoinButton } from './create-or-join-button'
+import {
+  DEFAULT_TIMEZONE,
+  formatMatchDateNumeric,
+  formatMatchDayMonth,
+  formatMatchTime,
+  weekdayIndexInTimezone,
+} from '@/lib/utils/datetime'
 
 type GroupWithRole = {
   id: string
@@ -82,6 +90,7 @@ export default async function GroupsPage() {
       ...m.groups,
       role: m.role,
     }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   // Single-group users land on their dashboard (docs/ui-rework/03-screens.md
   // §1, 06-principles.md §1.3); the list stays reachable from the switcher.
@@ -214,14 +223,20 @@ export default async function GroupsPage() {
     }
   }
 
+  const rowClassName =
+    'flex min-h-14 w-full items-center gap-3 border-b border-border py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
   return (
-    <div className="space-y-6">
-      {/* Result report nudge */}
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* Result report nudge: the one dashed card on this screen */}
       {resultNudge && (
-        <Link href={`/groups/${resultNudge.groupSlug}/matches/${resultNudge.matchId}#reportar`}>
-          <Card className="border-yellow-500/30 bg-yellow-500/5 transition-colors hover:bg-yellow-500/10">
-            <CardContent className="flex items-center gap-3 py-4">
-              <ClipboardList className="h-5 w-5 shrink-0 text-yellow-500" />
+        <Link
+          href={`/groups/${resultNudge.groupSlug}/matches/${resultNudge.matchId}#reportar`}
+          className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <Card className="hover:bg-accent/40">
+            <CardContent className="flex items-center gap-3 p-4 lg:p-4">
+              <ClipboardList className="h-5 w-5 shrink-0 text-primary" strokeWidth={1.75} aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {t('groups.resultNudgeTitle', {
@@ -231,119 +246,74 @@ export default async function GroupsPage() {
                 </p>
                 <p className="text-xs text-muted-foreground">{t('groups.resultNudgeSubtitle')}</p>
               </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
             </CardContent>
           </Card>
         </Link>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t('groups.title')}</h1>
-          <p className="text-muted-foreground">
-            {t('groups.subtitle')}
-          </p>
-        </div>
-        <Link href="/groups/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            {t('groups.create')}
-          </Button>
-        </Link>
-      </div>
-
-      {/* Groups Grid */}
-      {groups.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Users className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">{t('groups.noGroups')}</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              {t('groups.noGroupsDescription')}
-            </p>
-            <div className="flex gap-3">
-              <Link href="/groups/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t('groups.create')}
-                </Button>
-              </Link>
+      <PageHeader
+        title={t('groups.title')}
+        actions={
+          <>
+            <Button asChild variant="outline">
               <Link href="/invite">
-                <Button variant="outline">
-                  {t('groups.join')}
-                </Button>
+                <KeyRound className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('ui.shell.joinWithCode')}
               </Link>
-            </div>
-          </CardContent>
-        </Card>
+            </Button>
+            <Button asChild>
+              <Link href="/groups/new">
+                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('ui.shell.createGroup')}
+              </Link>
+            </Button>
+          </>
+        }
+      />
+
+      {groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-pretty">{t('ui.matchScreens.groups.empty')}</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <ul className="[&>li:last-child>a]:border-b-0">
           {groups.map((group) => {
             const nextMatch = nextMatchByGroup.get(group.id)
-            const matchDate = nextMatch ? new Date(nextMatch.date_time) : null
             const groupTimezone = group.timezone || DEFAULT_TIMEZONE
 
             return (
-              <Card key={group.id} className="h-full transition-shadow hover:shadow-md">
-                <Link href={`/groups/${group.slug}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">{group.name}</CardTitle>
-                      <Badge
-                        variant={
-                          group.role === 'admin'
-                            ? 'default'
-                            : group.role === 'captain'
-                            ? 'secondary'
-                            : 'outline'
-                        }
-                      >
-                        {group.role === 'admin'
-                          ? t('groups.roles.admin')
-                          : group.role === 'captain'
-                          ? t('groups.roles.captain')
-                          : t('groups.roles.member')}
+              <li key={group.id}>
+                <Link href={`/groups/${group.slug}`} className={rowClassName}>
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate font-display text-base font-bold leading-tight">{group.name}</span>
+                      <Badge variant={group.role === 'member' ? 'outline' : 'secondary'}>
+                        {t(`groups.roles.${group.role}`)}
                       </Badge>
-                    </div>
-                    {group.description && (
-                      <CardDescription className="line-clamp-2">
-                        {group.description}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                </Link>
-                <CardContent>
-                  {nextMatch && matchDate ? (
-                    <Link
-                      href={`/groups/${group.slug}/matches/${nextMatch.id}`}
-                      className="flex items-center justify-between gap-2 rounded-lg -mx-2 -my-1 px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <Calendar className="h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {t('groups.nextMatchSummary', {
-                            day: t(`days.${DAY_KEYS[weekdayIndexInTimezone(matchDate, groupTimezone)]}`),
-                            time: formatMatchTime(matchDate, groupTimezone),
+                    </span>
+                    <span className="block truncate font-mono text-xs tabular-nums text-muted-foreground">
+                      {nextMatch
+                        ? t('ui.matchScreens.groups.nextMatchLine', {
+                            day: t(`ui.matchScreens.daysShort.${DAY_KEYS[weekdayIndexInTimezone(nextMatch.date_time, groupTimezone)]}`),
+                            date: formatMatchDayMonth(nextMatch.date_time, groupTimezone),
+                            time: formatMatchTime(nextMatch.date_time, groupTimezone),
                             confirmed: nextMatch.confirmedCount,
                             max: nextMatch.max_players,
-                          })}
-                        </span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 shrink-0" />
-                    </Link>
-                  ) : (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground/70">
-                      <Calendar className="h-4 w-4" />
-                      <span>{t('groups.noUpcomingMatch')}</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                          })
+                        : t('ui.matchScreens.groups.noUpcoming')}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                </Link>
+              </li>
             )
           })}
-        </div>
+        </ul>
       )}
+
+      {/* Mobile: the two header actions collapse to one outline button after the list */}
+      <div className="lg:hidden">
+        <CreateOrJoinButton />
+      </div>
     </div>
   )
 }

@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { Spinner } from '@/components/ui/spinner'
 import { Star, X, UserX, RotateCcw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Database, WaitlistReason } from '@/types/database'
-import { useT } from '@/i18n/provider'
+import { useLanguage, useT } from '@/i18n/provider'
+import { cn } from '@/lib/utils/cn'
 
 interface Signup {
   id: string
@@ -43,44 +43,24 @@ interface SignupListProps {
   emptyMessage: string
   isAdminOrCaptain?: boolean
   matchStatus?: string
-  badgesByPlayer?: Record<string, string[]>
   // Overall score per player id; only provided to admins/captains
   ratingsById?: Record<string, number>
 }
 
-const POSITION_LABELS: Record<string, string> = {
-  GK: 'Arquero',
-  CB: 'Defensor',
-  LB: 'Lat. Izq.',
-  RB: 'Lat. Der.',
-  CDM: 'Vol. Def.',
-  CM: 'Mediocampista',
-  CAM: 'Enganche',
-  LM: 'Medio Izq.',
-  RM: 'Medio Der.',
-  LW: 'Extremo Izq.',
-  RW: 'Extremo Der.',
-  ST: 'Delantero',
-  CF: 'Centro Del.',
-}
-
-const BADGE_ICONS: Record<string, string> = {
-  hat_trick: '⚽',
-  playmaker: '🎯',
-  safe_hands: '🧤',
-  ironman: '💪',
-  mvp: '🏆',
-}
-
 // Why a waitlisted member is there (docs/member-scoring.md §10.4). Shown to
-// admins/captains only; the member gets the long form in SignupActions.
-const REASON_TAG_CLASS: Record<WaitlistReason, string> = {
-  priority_window: 'border-yellow-500/40 text-yellow-700 dark:text-yellow-500',
-  reserved: 'border-yellow-500/40 text-yellow-700 dark:text-yellow-500',
-  cooldown: 'border-destructive/40 text-destructive',
-  full: '',
+// admins/captains only; the member gets the long form through the signup hook.
+const REASON_BADGE_VARIANT: Record<WaitlistReason, 'warning' | 'destructive' | 'outline'> = {
+  priority_window: 'warning',
+  reserved: 'warning',
+  cooldown: 'destructive',
+  full: 'outline',
 }
 
+const iconButtonClassName =
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50'
+
+// Roster list (docs/ui-rework/03-screens.md §3): PlayerRow per signup with
+// index, avatar, name, position chip; admin controls in the trailing slot.
 export function SignupList({
   signups,
   currentPlayerId,
@@ -88,12 +68,12 @@ export function SignupList({
   emptyMessage,
   isAdminOrCaptain,
   matchStatus,
-  badgesByPlayer,
   ratingsById,
 }: SignupListProps) {
   const router = useRouter()
   const supabase = createClient()
   const t = useT()
+  const language = useLanguage()
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
@@ -147,15 +127,11 @@ export function SignupList({
   }
 
   if (signups.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-4">
-        {emptyMessage}
-      </p>
-    )
+    return <p className="py-2 text-sm text-muted-foreground">{emptyMessage}</p>
   }
 
   return (
-    <div className="space-y-2">
+    <ol className="[&>li:last-child>*]:border-b-0">
       {signups.map((signup, index) => {
         const player = signup.player_profiles
         const guest = signup.guest_players
@@ -166,127 +142,81 @@ export function SignupList({
         const displayName = player?.display_name || guest?.display_name || 'Desconocido'
         const isCurrentUser = !isGuest && player?.id === currentPlayerId
         const isNoShow = signup.status === 'did_not_show'
-        const badges = (player && badgesByPlayer?.[player.id]) || []
+        const position = player?.main_position || guest?.preferred_positions?.[0] || null
+        const rating = player ? ratingsById?.[player.id] : guest?.estimated_rating
+        const ratingTitle = player ? undefined : t('ui.matchScreens.match.estimatedLevel')
 
         return (
-          <div
-            key={signup.id}
-            className={`flex items-center gap-3 p-3 rounded-lg ${
-              isCurrentUser ? 'bg-primary/5 border border-primary/20' : 'hover:bg-muted/50'
-            } ${isNoShow ? 'opacity-60' : ''}`}
-          >
-            {showWaitlistPosition && (
-              <span className="w-6 text-center text-sm font-medium text-muted-foreground">
-                #{signup.waitlist_position || index + 1}
-              </span>
-            )}
-
-            <Avatar fallback={displayName} size="sm" />
-
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className={`text-sm font-medium truncate ${isCurrentUser ? 'text-primary' : ''}`}>
-                  {displayName}
-                  {player?.nickname && (
-                    <span className="text-muted-foreground ml-1">({player.nickname})</span>
+          <li key={signup.id}>
+            <PlayerRow
+              index={showWaitlistPosition ? signup.waitlist_position || index + 1 : index + 1}
+              name={displayName}
+              nickname={player?.nickname}
+              guest={isGuest}
+              language={language}
+              className={cn(isNoShow && 'opacity-50', isCurrentUser && 'font-semibold')}
+              trailing={
+                <>
+                  {isCurrentUser && <Badge variant="secondary">{t('ui.matchScreens.match.you')}</Badge>}
+                  {isNoShow && <Badge variant="outline">{t('ui.matchScreens.match.noShow')}</Badge>}
+                  {isAdminOrCaptain && signup.status === 'waitlist' && signup.waitlist_reason && (
+                    <Badge variant={REASON_BADGE_VARIANT[signup.waitlist_reason] ?? 'outline'}>
+                      {t(`signupPolicy.tag.${signup.waitlist_reason}`)}
+                    </Badge>
                   )}
-                </span>
-                {isCurrentUser && (
-                  <Badge variant="secondary" className="text-xs">Tú</Badge>
-                )}
-                {isGuest && (
-                  <Badge variant="outline" className="text-xs">Invitado</Badge>
-                )}
-                {isNoShow && (
-                  <Badge variant="outline" className="text-xs">No vino</Badge>
-                )}
-                {isAdminOrCaptain && signup.status === 'waitlist' && signup.waitlist_reason && (
-                  <Badge
-                    variant="outline"
-                    className={`text-xs shrink-0 whitespace-nowrap ${REASON_TAG_CLASS[signup.waitlist_reason] ?? ''}`}
-                  >
-                    {t(`signupPolicy.tag.${signup.waitlist_reason}`)}
-                  </Badge>
-                )}
-                {badges.length > 0 && (
-                  <span className="flex items-center gap-0.5 text-sm" title={badges.join(', ')}>
-                    {badges.slice(0, 3).map((badgeType, i) => (
-                      <span key={i}>{BADGE_ICONS[badgeType] || '🏅'}</span>
-                    ))}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {player ? (
-                  <>
-                    <span>{POSITION_LABELS[player.main_position] || player.main_position}</span>
-                    {ratingsById?.[player.id] !== undefined && (
-                      <span className="flex items-center gap-0.5">
-                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                        {ratingsById[player.id].toFixed(1)}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span>
-                      {guest?.preferred_positions?.[0]
-                        ? POSITION_LABELS[guest.preferred_positions[0]] || guest.preferred_positions[0]
-                        : 'Jugador invitado'}
+                  {signup.notes && (
+                    <span className="hidden max-w-[120px] truncate text-xs text-muted-foreground sm:inline">
+                      {signup.notes}
                     </span>
-                    {typeof guest?.estimated_rating === 'number' && (
-                      <span className="flex items-center gap-0.5" title="Nivel estimado">
-                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                        {guest.estimated_rating.toFixed(1)}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+                  )}
+                  {typeof rating === 'number' && (
+                    <span
+                      className="hidden items-center gap-0.5 font-mono text-xs tabular-nums text-muted-foreground sm:flex"
+                      title={ratingTitle}
+                    >
+                      <Star className="h-3 w-3 fill-primary text-primary" strokeWidth={1.75} aria-hidden="true" />
+                      {rating.toFixed(1)}
+                    </span>
+                  )}
+                  {position && <PositionChip position={position} />}
 
-            {signup.notes && (
-              <span className="text-xs text-muted-foreground max-w-[100px] truncate">
-                {signup.notes}
-              </span>
-            )}
+                  {canToggleNoShow && (
+                    <button
+                      type="button"
+                      className={iconButtonClassName}
+                      onClick={() => handleToggleNoShow(signup.id, signup.status)}
+                      disabled={togglingId === signup.id}
+                      aria-label={isNoShow ? t('ui.matchScreens.match.markPresent') : t('ui.matchScreens.match.markNoShow')}
+                      title={isNoShow ? t('ui.matchScreens.match.markPresent') : t('ui.matchScreens.match.markNoShow')}
+                    >
+                      {togglingId === signup.id ? (
+                        <Spinner size="sm" />
+                      ) : isNoShow ? (
+                        <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
+                      ) : (
+                        <UserX className="h-4 w-4" strokeWidth={1.75} />
+                      )}
+                    </button>
+                  )}
 
-            {canToggleNoShow && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
-                onClick={() => handleToggleNoShow(signup.id, signup.status)}
-                disabled={togglingId === signup.id}
-                title={isNoShow ? 'Marcar como presente' : 'Marcar que no vino'}
-              >
-                {togglingId === signup.id ? (
-                  <Spinner size="sm" />
-                ) : isNoShow ? (
-                  <RotateCcw className="h-4 w-4" />
-                ) : (
-                  <UserX className="h-4 w-4" />
-                )}
-              </Button>
-            )}
-
-            {isAdminOrCaptain && !isNoShow && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                onClick={() => handleRemove(signup.id, displayName)}
-                disabled={removingId === signup.id}
-                title="Sacar del partido"
-              >
-                {removingId === signup.id ? <Spinner size="sm" /> : <X className="h-4 w-4" />}
-              </Button>
-            )}
-          </div>
+                  {isAdminOrCaptain && !isNoShow && (
+                    <button
+                      type="button"
+                      className={cn(iconButtonClassName, 'hover:text-destructive')}
+                      onClick={() => handleRemove(signup.id, displayName)}
+                      disabled={removingId === signup.id}
+                      aria-label={t('ui.matchScreens.match.removeFromMatch')}
+                      title={t('ui.matchScreens.match.removeFromMatch')}
+                    >
+                      {removingId === signup.id ? <Spinner size="sm" /> : <X className="h-4 w-4" strokeWidth={1.75} />}
+                    </button>
+                  )}
+                </>
+              }
+            />
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }

@@ -393,7 +393,7 @@ export function MatchResults({
           <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
         )}
         {savedMessage && (
-          <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">{savedMessage}</div>
+          <div className="rounded-md bg-success/15 px-4 py-3 text-sm text-foreground">{savedMessage}</div>
         )}
 
         {isLocked && (
