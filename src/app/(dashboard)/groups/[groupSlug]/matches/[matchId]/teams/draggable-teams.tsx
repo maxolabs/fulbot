@@ -21,7 +21,13 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
+import { useT } from '@/i18n/provider'
 import type { Json } from '@/types/database'
+
+// Pizarra pass (docs/ui-rework/05-plan.md §4): tokens only, no redesign. Team
+// identity lives in the card headers (fixed team colours from brand.ts); the
+// rows themselves are plain surfaces so the controls keep their token styles.
 
 // Standard position abbreviations used across the app (AI prompt, fallback balancer, lineup field)
 export const POSITION_OPTIONS = [
@@ -74,26 +80,23 @@ function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: Sor
   }
 
   const isDark = teamColor === 'dark'
+  const t = useT()
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex flex-wrap items-center gap-2 sm:gap-3 p-3 rounded-lg border ${
-        isDragging ? 'shadow-lg z-50' : ''
-      } ${
-        isDark
-          ? 'bg-gray-800 text-white border-gray-700'
-          : 'bg-white text-gray-800 border-gray-200'
+      className={`flex flex-wrap items-center gap-2 sm:gap-3 p-3 rounded-md border border-border bg-card text-card-foreground ${
+        isDragging ? 'z-50' : ''
       }`}
     >
       <button
-        className="cursor-grab touch-none shrink-0"
+        className="cursor-grab touch-none shrink-0 rounded-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         {...attributes}
         {...listeners}
         aria-label="Arrastrar jugador"
       >
-        <GripVertical className={`h-4 w-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+        <GripVertical className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
       </button>
 
       <Avatar fallback={player.displayName} size="sm" />
@@ -102,13 +105,13 @@ function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: Sor
         <p className="text-sm font-medium truncate">
           {player.displayName}
           {player.nickname && (
-            <span className={`ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <span className="ml-1 text-muted-foreground">
               ({player.nickname})
             </span>
           )}
         </p>
-        <p className={`text-xs flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+        <p className="text-xs flex items-center gap-1 font-mono tabular-nums text-muted-foreground">
+          <Star className="h-3 w-3 text-primary fill-primary" strokeWidth={1.75} />
           {player.overallRating.toFixed(1)}
         </p>
       </div>
@@ -117,11 +120,7 @@ function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: Sor
         value={player.position}
         onChange={(e) => onPositionChange(e.target.value)}
         aria-label="Posición"
-        className={`h-9 rounded-md border px-2 text-xs font-mono ${
-          isDark
-            ? 'bg-gray-900 border-gray-600 text-white'
-            : 'bg-white border-gray-300 text-gray-900'
-        }`}
+        className="h-9 rounded-[3px] border border-border bg-background px-2 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {POSITION_OPTIONS.map((pos) => (
           <option key={pos} value={pos}>{pos}</option>
@@ -133,10 +132,10 @@ function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: Sor
         variant="outline"
         size="sm"
         onClick={onMoveTeam}
-        className={`h-9 text-xs shrink-0 ${isDark ? 'text-white border-gray-600 hover:bg-gray-700' : ''}`}
+        className="h-9 text-xs shrink-0"
       >
-        <ArrowLeftRight className="mr-1 h-3 w-3" />
-        {isDark ? '→ Claro' : '→ Oscuro'}
+        <ArrowLeftRight className="h-3 w-3" strokeWidth={1.75} />
+        {isDark ? `→ ${t('ui.teamsScreen.light')}` : `→ ${t('ui.teamsScreen.dark')}`}
       </Button>
     </div>
   )
@@ -144,8 +143,8 @@ function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: Sor
 
 function PlayerOverlay({ player }: { player: Player }) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border bg-white shadow-xl border-primary">
-      <GripVertical className="h-4 w-4 text-gray-500" />
+    <div className="flex items-center gap-3 p-3 rounded-md border border-primary bg-card text-card-foreground shadow-lg shadow-black/40">
+      <GripVertical className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
       <Badge variant="outline" className="font-mono text-xs">
         {player.position}
       </Badge>
@@ -166,6 +165,7 @@ export function DraggableTeams({
 }: DraggableTeamsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const [darkPlayers, setDarkPlayers] = useState(initialDarkPlayers)
   const [lightPlayers, setLightPlayers] = useState(initialLightPlayers)
@@ -296,25 +296,39 @@ export function DraggableTeams({
     return null
   }
 
+  const teamHeader = (team: 'dark' | 'light', count: number, avg: number) => (
+    <CardHeader
+      className="flex-row items-baseline justify-between space-y-0 rounded-t-md py-3 lg:py-3"
+      style={
+        team === 'dark'
+          ? { backgroundColor: TEAM_DARK, color: TEAM_LIGHT }
+          : { backgroundColor: TEAM_LIGHT, color: TEAM_LIGHT_INK }
+      }
+    >
+      <CardTitle className="text-base">{t(`ui.teamsScreen.${team}`)}</CardTitle>
+      <span className="font-mono text-xs tabular-nums">
+        {t('ui.teamsScreen.level', { n: avg.toFixed(1) })} · {count}
+      </span>
+    </CardHeader>
+  )
+
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
+        <p className="text-sm text-destructive">{error}</p>
       )}
 
       {/* Save button */}
       {hasChanges && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardContent className="py-3">
+        <Card variant="solid" className="border-primary">
+          <CardContent className="py-3 lg:py-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <p className="text-sm">Hay cambios sin guardar</p>
               <Button onClick={handleSave} disabled={saving} size="sm">
                 {saving ? (
-                  <Spinner size="sm" className="mr-2" />
+                  <Spinner size="sm" />
                 ) : (
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="h-4 w-4" strokeWidth={1.75} />
                 )}
                 Guardar cambios
               </Button>
@@ -331,16 +345,9 @@ export function DraggableTeams({
       >
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Dark Team */}
-          <Card className="border-2 border-gray-800">
-            <CardHeader className="bg-gray-800 text-white py-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Equipo Oscuro</span>
-                <Badge variant="secondary" className="bg-white/20">
-                  {darkPlayers.length} · {darkAvg.toFixed(1)} avg
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4" id="dark-team">
+          <Card variant="solid">
+            {teamHeader('dark', darkPlayers.length, darkAvg)}
+            <CardContent className="pt-4 lg:pt-4" id="dark-team">
               <SortableContext
                 items={darkPlayers.map((p) => p.id)}
                 strategy={verticalListSortingStrategy}
@@ -366,16 +373,9 @@ export function DraggableTeams({
           </Card>
 
           {/* Light Team */}
-          <Card className="border-2 border-gray-400/50">
-            <CardHeader className="bg-gray-300 dark:bg-gray-600 py-3">
-              <CardTitle className="text-base flex items-center justify-between text-gray-900 dark:text-white">
-                <span>Equipo Claro</span>
-                <Badge variant="outline" className="border-gray-500 text-gray-900 dark:text-white dark:border-gray-300">
-                  {lightPlayers.length} · {lightAvg.toFixed(1)} avg
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4" id="light-team">
+          <Card variant="solid">
+            {teamHeader('light', lightPlayers.length, lightAvg)}
+            <CardContent className="pt-4 lg:pt-4" id="light-team">
               <SortableContext
                 items={lightPlayers.map((p) => p.id)}
                 strategy={verticalListSortingStrategy}

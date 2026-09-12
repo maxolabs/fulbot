@@ -1,8 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100">
-  <!-- fulbot mark (docs/ui-rework/01-brand.md §4): board-green rounded square,
-       inset dashed chalk border, the two chalk glyphs "X O" as paths (a tactics
-       board, not letters). Colours = src/lib/brand.ts BOARD / CHALK / TEAM_LIGHT.
-       Maskable: everything sits inside the inner 80%. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Favicon: the fulbot mark (docs/ui-rework/01-brand.md §4). Same geometry
+       as public/icons/icon-*.svg and the Mark in components/layout/wordmark.tsx. -->
   <defs>
     <clipPath id="x">
       <rect x="22" y="37" width="24" height="26"/>

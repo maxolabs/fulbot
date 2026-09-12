@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { TopBarConfig } from '@/components/layout/top-bar'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 import { TeamsView } from './teams-view'
-import { DEFAULT_TIMEZONE, formatMatchDate } from '@/lib/utils/datetime'
+import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string; matchId: string }>
@@ -26,6 +27,14 @@ export default async function TeamsPage({ params }: PageProps) {
     .single() as { data: { id: string } | null }
 
   if (!playerProfile) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const language: Language = userData?.preferred_language ?? 'es'
+  const t = getT(language)
 
   // Get group
   const { data: group } = await supabase
@@ -195,31 +204,20 @@ export default async function TeamsPage({ params }: PageProps) {
     }
   }
 
-  const date = new Date(match.date_time)
+  // Dates are formatted here, in the group's timezone, so the client never
+  // touches the visitor's clock (src/lib/utils/datetime.ts).
+  const dateLabel = `${formatMatchDateShort(match.date_time, timeZone)} · ${formatMatchTime(match.date_time, timeZone)}`
+  const shareDateLabel = `${formatMatchDateShort(match.date_time, timeZone)} - ${formatMatchTime(match.date_time, timeZone)}`
+  const matchHref = `/groups/${groupSlug}/matches/${matchId}`
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}/matches/${matchId}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver al partido
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Armar equipos</h1>
-        <p className="text-muted-foreground">
-          {formatMatchDate(date, timeZone)} · {players.length} jugadores
-        </p>
-      </div>
-
+    <>
+      <TopBarConfig title={t('ui.teamsScreen.title')} back={matchHref} />
       <TeamsView
         matchId={matchId}
-        groupSlug={groupSlug}
         groupName={group.name}
-        matchDate={date}
+        dateLabel={dateLabel}
+        shareDateLabel={shareDateLabel}
         players={players}
         darkTeam={{
           id: teams?.find((t) => t.name === 'dark')?.id || null,
@@ -237,6 +235,6 @@ export default async function TeamsPage({ params }: PageProps) {
         hasTeams={teams !== null && teams.length > 0}
         matchStatus={match.status}
       />
-    </div>
+    </>
   )
 }
