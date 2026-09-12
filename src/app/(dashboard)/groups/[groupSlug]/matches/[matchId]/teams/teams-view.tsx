@@ -291,7 +291,7 @@ export function TeamsView({
                 </span>
               </div>
               <div
-                className="flex h-14 flex-col justify-center rounded-md px-3"
+                className="flex h-14 flex-col justify-center rounded-md border border-border px-3"
                 style={{ backgroundColor: TEAM_LIGHT, color: TEAM_LIGHT_INK }}
               >
                 <span className="font-display text-sm font-bold leading-tight">{teamNames.light}</span>

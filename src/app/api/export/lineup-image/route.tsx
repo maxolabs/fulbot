@@ -56,79 +56,75 @@ function initialsOf(name: string): string {
   return name.trim().slice(0, 2).toUpperCase()
 }
 
-const dashed = {
-  borderWidth: '2px',
-  borderStyle: 'dashed',
-  borderColor: CHALK,
-} as const
+// Satori only dashes a border drawn on ONE side of a box (a four-sided
+// dashed border comes out solid), so every straight marking is a zero-size
+// div with a single dashed edge, and the centre circle is an inline SVG.
+function HLine({ x, y, w }: { x: number; y: number; w: number }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y - 1,
+        width: w,
+        height: 0,
+        borderTopWidth: '2px',
+        borderTopStyle: 'dashed',
+        borderTopColor: CHALK,
+      }}
+    />
+  )
+}
+
+function VLine({ x, y, h }: { x: number; y: number; h: number }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x - 1,
+        top: y,
+        width: 0,
+        height: h,
+        borderLeftWidth: '2px',
+        borderLeftStyle: 'dashed',
+        borderLeftColor: CHALK,
+      }}
+    />
+  )
+}
 
 function Markings() {
   const inset = 8
   const boxW = FIELD_W * 0.5
   const boxH = FIELD_H * 0.16
+  const bx = (FIELD_W - boxW) / 2
+  const r = 46
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
       {/* Outline */}
-      <div
-        style={{
-          position: 'absolute',
-          left: inset,
-          top: inset,
-          width: FIELD_W - inset * 2,
-          height: FIELD_H - inset * 2,
-          borderRadius: '2px',
-          ...dashed,
-        }}
-      />
+      <HLine x={inset} y={inset} w={FIELD_W - inset * 2} />
+      <HLine x={inset} y={FIELD_H - inset} w={FIELD_W - inset * 2} />
+      <VLine x={inset} y={inset} h={FIELD_H - inset * 2} />
+      <VLine x={FIELD_W - inset} y={inset} h={FIELD_H - inset * 2} />
       {/* Halfway line */}
-      <div
-        style={{
-          position: 'absolute',
-          left: inset,
-          top: FIELD_H / 2 - 1,
-          width: FIELD_W - inset * 2,
-          height: 0,
-          borderTopWidth: '2px',
-          borderTopStyle: 'dashed',
-          borderTopColor: CHALK,
-        }}
-      />
-      {/* Centre circle */}
-      <div
-        style={{
-          position: 'absolute',
-          left: FIELD_W / 2 - 46,
-          top: FIELD_H / 2 - 46,
-          width: 92,
-          height: 92,
-          borderRadius: '50%',
-          ...dashed,
-        }}
-      />
-      {/* Top box (no top edge: it shares the outline) */}
-      <div
-        style={{
-          position: 'absolute',
-          left: (FIELD_W - boxW) / 2,
-          top: inset,
-          width: boxW,
-          height: boxH,
-          ...dashed,
-          borderTopWidth: '0px',
-        }}
-      />
+      <HLine x={inset} y={FIELD_H / 2} w={FIELD_W - inset * 2} />
+      {/* Top box (shares its top edge with the outline) */}
+      <HLine x={bx} y={inset + boxH} w={boxW} />
+      <VLine x={bx} y={inset} h={boxH} />
+      <VLine x={bx + boxW} y={inset} h={boxH} />
       {/* Bottom box */}
-      <div
-        style={{
-          position: 'absolute',
-          left: (FIELD_W - boxW) / 2,
-          top: FIELD_H - inset - boxH,
-          width: boxW,
-          height: boxH,
-          ...dashed,
-          borderBottomWidth: '0px',
-        }}
-      />
+      <HLine x={bx} y={FIELD_H - inset - boxH} w={boxW} />
+      <VLine x={bx} y={FIELD_H - inset - boxH} h={boxH} />
+      <VLine x={bx + boxW} y={FIELD_H - inset - boxH} h={boxH} />
+      {/* Centre circle */}
+      <svg
+        width={r * 2 + 4}
+        height={r * 2 + 4}
+        viewBox={`0 0 ${r * 2 + 4} ${r * 2 + 4}`}
+        style={{ position: 'absolute', left: FIELD_W / 2 - r - 2, top: FIELD_H / 2 - r - 2 }}
+      >
+        <circle cx={r + 2} cy={r + 2} r={r} fill="none" stroke={CHALK} strokeWidth="2" strokeDasharray="6 4" />
+      </svg>
     </div>
   )
 }
