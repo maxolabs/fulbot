@@ -1,12 +1,10 @@
-import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Users, Brain, BarChart3 } from 'lucide-react'
 import { PublicFrame } from '@/components/layout/public-frame'
 import { Card, CardContent } from '@/components/ui/card'
-import { buttonVariants } from '@/components/ui/button'
+import { LinkButton } from '@/components/link-button'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
-import { cn } from '@/lib/utils/cn'
 
 // Landing (docs/ui-rework/03-screens.md §11, 06-principles.md §1.5): on the
 // board, tagline in the display face, the three feature blocks as three
@@ -51,12 +49,12 @@ export default async function Home() {
         </ul>
 
         <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-3">
-          <Link href="/register" className={cn(buttonVariants({ size: 'xl' }), 'w-full')}>
+          <LinkButton href="/register" size="xl" className="w-full">
             {t('auth.createAccount')}
-          </Link>
-          <Link href="/login" className={buttonVariants({ variant: 'link' })}>
+          </LinkButton>
+          <LinkButton href="/login" variant="link">
             {t('auth.login')}
-          </Link>
+          </LinkButton>
         </div>
 
         <p className="text-center font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">

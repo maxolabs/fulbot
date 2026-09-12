@@ -1,10 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
-import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { TopBarConfig } from '@/components/layout/top-bar'
 import { PageHeader } from '@/components/layout/page-header'
-import { buttonVariants } from '@/components/ui/button'
+import { LinkButton } from '@/components/link-button'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GroupSettingsForm } from './settings-form'
@@ -205,13 +204,10 @@ export default async function GroupSettingsPage({ params }: PageProps) {
               <CardTitle>{t('ui.screens.groupSettings.members', { n: members.length })}</CardTitle>
               <CardDescription>{t('ui.screens.groupSettings.membersHint')}</CardDescription>
             </div>
-            <Link
-              href={`/groups/${groupSlug}/rate?mode=baseline`}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
+            <LinkButton href={`/groups/${groupSlug}/rate?mode=baseline`} variant="outline" size="sm">
               <ClipboardList className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               {t('ui.screens.players.baselineCta')}
-            </Link>
+            </LinkButton>
           </div>
         </CardHeader>
         <CardContent>

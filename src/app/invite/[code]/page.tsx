@@ -3,14 +3,13 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { PublicFrame } from '@/components/layout/public-frame'
-import { buttonVariants } from '@/components/ui/button'
+import { LinkButton } from '@/components/link-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { LanguageProvider } from '@/i18n/provider'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
-import { cn } from '@/lib/utils/cn'
 import { JoinGroupButton } from './join-button'
 
 interface PageProps {
@@ -50,9 +49,9 @@ function Message({ title, body, cta }: { title: string; body: string; cta: { hre
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance">{title}</h1>
         <p className="text-sm text-muted-foreground text-pretty">{body}</p>
         <div className="pt-2">
-          <Link href={cta.href} className={buttonVariants({ variant: 'outline' })}>
+          <LinkButton href={cta.href} variant="outline">
             {cta.label}
-          </Link>
+          </LinkButton>
         </div>
       </div>
     </PublicFrame>
@@ -178,12 +177,9 @@ export default async function InvitePage({ params }: PageProps) {
               </>
             ) : (
               <div className="space-y-3">
-                <Link
-                  href={`/register?redirect=/invite/${code}`}
-                  className={cn(buttonVariants({ size: 'xl' }), 'w-full')}
-                >
+                <LinkButton href={`/register?redirect=/invite/${code}`} size="xl" className="w-full">
                   {t('ui.screens.invite.createAccountToJoin')}
-                </Link>
+                </LinkButton>
                 <p className="text-center text-sm text-muted-foreground">
                   {t('auth.hasAccount')}{' '}
                   <Link
@@ -198,9 +194,9 @@ export default async function InvitePage({ params }: PageProps) {
 
             {match && (
               <div className="space-y-1 border-t border-border pt-4 text-center">
-                <Link href={`/m/${match.id}`} className={buttonVariants({ variant: 'link' })}>
+                <LinkButton href={`/m/${match.id}`} variant="link">
                   {t('ui.screens.invite.guestPath')}
-                </Link>
+                </LinkButton>
                 <p className="text-xs text-muted-foreground text-pretty">{t('ui.screens.invite.guestHint')}</p>
               </div>
             )}

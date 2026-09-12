@@ -1,10 +1,9 @@
 import { cookies } from 'next/headers'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database'
 import { PublicFrame } from '@/components/layout/public-frame'
-import { buttonVariants } from '@/components/ui/button'
+import { LinkButton } from '@/components/link-button'
 import { Badge } from '@/components/ui/badge'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { PlayerRow } from '@/components/ui/player-row'
@@ -59,9 +58,9 @@ function Message({
         <p className="text-sm text-muted-foreground text-pretty">{body}</p>
         {cta && (
           <div className="pt-2">
-            <Link href={cta.href} className={buttonVariants({ variant: 'outline' })}>
+            <LinkButton href={cta.href} variant="outline">
               {cta.label}
-            </Link>
+            </LinkButton>
           </div>
         )}
       </div>
