@@ -194,7 +194,7 @@ export default async function InvitePage({ params }: PageProps) {
 
             {match && (
               <div className="space-y-1 border-t border-border pt-4 text-center">
-                <LinkButton href={`/m/${match.id}`} variant="link">
+                <LinkButton href={`/m/${match.id}`} variant="link" className="text-foreground">
                   {t('ui.screens.invite.guestPath')}
                 </LinkButton>
                 <p className="text-xs text-muted-foreground text-pretty">{t('ui.screens.invite.guestHint')}</p>

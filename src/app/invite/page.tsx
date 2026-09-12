@@ -52,7 +52,7 @@ export default function InviteCodePage() {
               {t('common.next')}
             </Button>
             <div className="text-center">
-              <Link href="/groups" className={buttonVariants({ variant: 'link' })}>
+              <Link href="/groups" className={buttonVariants({ variant: 'link', className: 'text-muted-foreground hover:text-foreground' })}>
                 {t('ui.shell.myGroups')}
               </Link>
             </div>

@@ -52,7 +52,7 @@ export default async function Home() {
           <LinkButton href="/register" size="xl" className="w-full">
             {t('auth.createAccount')}
           </LinkButton>
-          <LinkButton href="/login" variant="link">
+          <LinkButton href="/login" variant="link" className="text-foreground">
             {t('auth.login')}
           </LinkButton>
         </div>
