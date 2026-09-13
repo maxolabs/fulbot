@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation'
 import { ClipboardList, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
-import { LinkButton } from '@/components/link-button'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
@@ -150,15 +151,19 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
 
   const links = (
     <>
-      <LinkButton href={`/groups/${groupSlug}/rate`} variant="outline" size="sm">
-        <Star className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-        {t('ui.screens.players.rateCta')}
-      </LinkButton>
+      <Button asChild variant="outline" size="sm">
+        <Link href={`/groups/${groupSlug}/rate`}>
+          <Star className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {t('ui.screens.players.rateCta')}
+        </Link>
+      </Button>
       {isAdmin && (
-        <LinkButton href={`/groups/${groupSlug}/rate?mode=baseline`} variant="outline" size="sm">
-          <ClipboardList className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          {t('ui.screens.players.baselineCta')}
-        </LinkButton>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/groups/${groupSlug}/rate?mode=baseline`}>
+            <ClipboardList className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {t('ui.screens.players.baselineCta')}
+          </Link>
+        </Button>
       )}
     </>
   )

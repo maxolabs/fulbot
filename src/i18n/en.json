@@ -180,7 +180,8 @@
     "rateTeammates": "Rate teammates",
     "voteMVP": "Vote MVP",
     "yourVote": "Your vote",
-    "results": "Results"
+    "results": "Results",
+    "noRatingsYet": "No ratings yet"
   },
   "rules": {
     "title": "Rules",

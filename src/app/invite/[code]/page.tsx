@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { PublicFrame } from '@/components/layout/public-frame'
-import { LinkButton } from '@/components/link-button'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { LanguageProvider } from '@/i18n/provider'
@@ -49,9 +49,9 @@ function Message({ title, body, cta }: { title: string; body: string; cta: { hre
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance">{title}</h1>
         <p className="text-sm text-muted-foreground text-pretty">{body}</p>
         <div className="pt-2">
-          <LinkButton href={cta.href} variant="outline">
-            {cta.label}
-          </LinkButton>
+          <Button asChild variant="outline">
+            <Link href={cta.href}>{cta.label}</Link>
+          </Button>
         </div>
       </div>
     </PublicFrame>
@@ -177,9 +177,9 @@ export default async function InvitePage({ params }: PageProps) {
               </>
             ) : (
               <div className="space-y-3">
-                <LinkButton href={`/register?redirect=/invite/${code}`} size="xl" className="w-full">
-                  {t('ui.screens.invite.createAccountToJoin')}
-                </LinkButton>
+                <Button asChild size="xl" className="w-full">
+                  <Link href={`/register?redirect=/invite/${code}`}>{t('ui.screens.invite.createAccountToJoin')}</Link>
+                </Button>
                 <p className="text-center text-sm text-muted-foreground">
                   {t('auth.hasAccount')}{' '}
                   <Link
@@ -194,9 +194,9 @@ export default async function InvitePage({ params }: PageProps) {
 
             {match && (
               <div className="space-y-1 border-t border-border pt-4 text-center">
-                <LinkButton href={`/m/${match.id}`} variant="link" className="text-foreground">
-                  {t('ui.screens.invite.guestPath')}
-                </LinkButton>
+                <Button asChild variant="link" className="text-foreground">
+                  <Link href={`/m/${match.id}`}>{t('ui.screens.invite.guestPath')}</Link>
+                </Button>
                 <p className="text-xs text-muted-foreground text-pretty">{t('ui.screens.invite.guestHint')}</p>
               </div>
             )}

@@ -21,7 +21,9 @@ Implemented as the spec assumes, so no track has to ask:
   competes with it.
 - One primary action per screen, in cone. On mobile it lives in the `ActionBar` when the
   screen has one; otherwise it is the last element of the form. Everything else is a chalk
-  outline or a text button.
+  outline or a text button. Exception: long multi-form settings pages
+  (`/groups/[slug]/settings`, `/settings`) keep one primary per form card, because each
+  card submits independently; toggles' on-state is cone.
 - Status is a `Badge`, never coloured text on its own. Success/warning tokens appear only in
   badges, the `SpotsMeter` bar and inline notices, never on buttons.
 

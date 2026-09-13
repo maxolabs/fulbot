@@ -512,7 +512,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                 <CardTitle>{t('ui.screens.player.groupRating')}</CardTitle>
               </CardHeader>
               <CardContent>
-                <SkillSummaryCard summary={ratingSummary} />
+                <SkillSummaryCard summary={ratingSummary} language={language} />
               </CardContent>
             </Card>
           )}

@@ -2,7 +2,8 @@ import { cookies } from 'next/headers'
 import { Users, Brain, BarChart3 } from 'lucide-react'
 import { PublicFrame } from '@/components/layout/public-frame'
 import { Card, CardContent } from '@/components/ui/card'
-import { LinkButton } from '@/components/link-button'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -49,12 +50,12 @@ export default async function Home() {
         </ul>
 
         <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-3">
-          <LinkButton href="/register" size="xl" className="w-full">
-            {t('auth.createAccount')}
-          </LinkButton>
-          <LinkButton href="/login" variant="link" className="text-foreground">
-            {t('auth.login')}
-          </LinkButton>
+          <Button asChild size="xl" className="w-full">
+            <Link href="/register">{t('auth.createAccount')}</Link>
+          </Button>
+          <Button asChild variant="link" className="text-foreground">
+            <Link href="/login">{t('auth.login')}</Link>
+          </Button>
         </div>
 
         <p className="text-center font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">

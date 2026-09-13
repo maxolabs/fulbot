@@ -2,8 +2,9 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database'
+import Link from 'next/link'
 import { PublicFrame } from '@/components/layout/public-frame'
-import { LinkButton } from '@/components/link-button'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { PlayerRow } from '@/components/ui/player-row'
@@ -11,6 +12,7 @@ import { SpotsMeter } from '@/components/ui/spots-meter'
 import { PublicMatchActions } from './public-match-actions'
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
+import { formatRowDate } from '@/app/(dashboard)/groups/[groupSlug]/matches/match-format'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -58,9 +60,9 @@ function Message({
         <p className="text-sm text-muted-foreground text-pretty">{body}</p>
         {cta && (
           <div className="pt-2">
-            <LinkButton href={cta.href} variant="outline">
-              {cta.label}
-            </LinkButton>
+            <Button asChild variant="outline">
+              <Link href={cta.href}>{cta.label}</Link>
+            </Button>
           </div>
         )}
       </div>
@@ -227,8 +229,11 @@ export default async function PublicMatchPage({ params }: PageProps) {
       {/* Hero */}
       <header className="space-y-3">
         <Eyebrow>{match.group_name}</Eyebrow>
+        {/* Same short hero as the match screen on phones ("Jueves 17 sep", then
+            the mono time · location line), in the group timezone, so the title
+            stays on one line at 390px inside the 448px frame. */}
         <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance lg:text-4xl">
-          {formatMatchDate(date, timeZone)}
+          {formatRowDate(t, date, timeZone)}
         </h1>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <span className="font-mono tabular-nums text-foreground">{formatMatchTime(date, timeZone)}</span>

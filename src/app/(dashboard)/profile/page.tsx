@@ -4,7 +4,7 @@ import { ChevronRight, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
-import { LinkButton } from '@/components/link-button'
+import { Button } from '@/components/ui/button'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
@@ -105,10 +105,12 @@ export default async function ProfilePage() {
   ]
 
   const editLink = (
-    <LinkButton href="#informacion" variant="outline" size="sm">
-      <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-      {t('common.edit')}
-    </LinkButton>
+    <Button asChild variant="outline" size="sm">
+      <Link href="#informacion">
+        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        {t('common.edit')}
+      </Link>
+    </Button>
   )
 
   return (
