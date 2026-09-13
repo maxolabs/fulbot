@@ -24,8 +24,8 @@ solid colour; chalk transparency is baked in (mixed over the surface it sits on)
 | `--primary` | `24 100% 62%` | `#FF8A3D` | cone orange |
 | `--primary-foreground` | `0 0% 10%` | `#1A1A1A` | text on orange, **never white** |
 | `--ring` | `24 100% 62%` | | focus ring = cone |
-| `--destructive` | `4 72% 55%` | `#E24B3B` | |
-| `--destructive-foreground` | `46 35% 93%` | | |
+| `--destructive` | `4 85% 70%` | `#F47A71` | raised from `4 72% 55%` for the 4.5:1 floor |
+| `--destructive-foreground` | `0 0% 10%` | `#1A1A1A` | ink on destructive, **never chalk** |
 
 ### Light · "Papel"
 

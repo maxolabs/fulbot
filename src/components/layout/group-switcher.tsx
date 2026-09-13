@@ -57,7 +57,7 @@ function GroupList({
                 <span className="min-w-0 flex-1 truncate">{g.name}</span>
                 <Badge variant={roleVariant(g.role)}>{t(`groups.roles.${g.role}`)}</Badge>
                 <span className="flex w-4 shrink-0 justify-end" aria-hidden="true">
-                  {isCurrent && <Check className="h-4 w-4 text-primary" strokeWidth={2} />}
+                  {isCurrent && <Check className="h-4 w-4 text-foreground" strokeWidth={2} />}
                 </span>
               </Link>
             </li>

@@ -181,7 +181,11 @@
     "voteMVP": "Vote MVP",
     "yourVote": "Your vote",
     "results": "Results",
-    "noRatingsYet": "No ratings yet"
+    "noRatingsYet": "No ratings yet",
+    "peerVotes": "{n} teammate votes",
+    "peerVotesOne": "1 teammate vote",
+    "matchesRated": "{n} matches rated",
+    "matchesRatedOne": "1 match rated"
   },
   "rules": {
     "title": "Rules",
@@ -592,6 +596,8 @@
         "shareCopied": "Link copied",
         "manage": "Manage",
         "manageTitle": "Manage match",
+        "viewTeams": "View teams",
+        "editTeams": "View / edit teams",
         "confirmed": "Confirmed",
         "waitlist": "Waitlist",
         "nobodyYet": "Nobody signed up yet.",
@@ -629,6 +635,7 @@
         "legend": "MP = matches played · number = group rating"
       },
       "player": {
+        "topBar": "Player",
         "leftFooted": "Left-footed",
         "rightFooted": "Right-footed",
         "bothFooted": "Two-footed",

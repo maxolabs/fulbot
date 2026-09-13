@@ -78,6 +78,7 @@ export function ManagePopover({ children }: { children: React.ReactNode }) {
   return (
     <Popover
       align="right"
+      aria-label={t('ui.matchScreens.match.manageTitle')}
       className="w-72 p-3"
       triggerClassName={buttonVariants({ variant: 'outline' })}
       trigger={

@@ -7,6 +7,7 @@ import { Play, Pause, RotateCcw, Users, CheckCircle, XCircle, Trash2, Pencil } f
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 import type { Database } from '@/types/database'
 
 type MatchStatus = Database['public']['Enums']['match_status']
@@ -36,6 +37,7 @@ export function MatchAdminActions({
 }: MatchAdminActionsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
   const [loading, setLoading] = useState<string | null>(null)
 
   const updateStatus = async (newStatus: MatchStatus) => {
@@ -163,14 +165,25 @@ export function MatchAdminActions({
         </Button>
       )}
 
-      {/* Generate teams */}
-      {(currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && hasEnoughPlayers && (
-        <Button asChild variant="outline" className="w-full justify-start">
-          <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
-            <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            Armar equipos
-          </Link>
-        </Button>
+      {/* Generate teams — or, once they exist, go and edit them */}
+      {hasTeams ? (
+        currentStatus !== 'cancelled' && (
+          <Button asChild variant="outline" className="w-full justify-start">
+            <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {t('ui.matchScreens.match.editTeams')}
+            </Link>
+          </Button>
+        )
+      ) : (
+        (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && hasEnoughPlayers && (
+          <Button asChild variant="outline" className="w-full justify-start">
+            <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {t('ui.matchScreens.dashboard.buildTeams')}
+            </Link>
+          </Button>
+        )
       )}
 
       {/* Mark as finished */}

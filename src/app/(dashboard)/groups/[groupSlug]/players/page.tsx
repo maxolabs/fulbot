@@ -13,7 +13,6 @@ import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
-import { cn } from '@/lib/utils/cn'
 import { PlayersSortControl, type PlayersSort } from './players-sort'
 
 interface PageProps {
@@ -233,18 +232,17 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
                         ))}
                       </span>
                       <PositionChip position={player.main_position} className="sm:hidden" />
+                      {/* Matches played at every width (03-screens §7); the skill
+                          number is the one that yields room on phones. */}
                       <span
-                        className={cn(
-                          'w-12 text-right font-mono text-xs tabular-nums text-muted-foreground',
-                          showSkill && 'hidden sm:inline'
-                        )}
+                        className="w-12 text-right font-mono text-xs tabular-nums text-muted-foreground"
                         title={t('players.matchesPlayed')}
                       >
                         {player.matches_played} {t('ui.screens.players.matchesShort')}
                       </span>
                       {showSkill && (
                         <span
-                          className="w-8 text-right font-mono text-xs tabular-nums text-foreground"
+                          className="hidden w-8 text-right font-mono text-xs tabular-nums text-foreground sm:inline"
                           title={t('players.rating')}
                         >
                           {overallOf(summary).toFixed(1)}

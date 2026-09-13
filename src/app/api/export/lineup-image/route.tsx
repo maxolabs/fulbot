@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import { placePlayersInFormation } from '@/lib/formations'
 import { CHALK, CONE, PITCH, TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { getTranslation, type Language } from '@/i18n/core'
+import { initials as initialsOf } from '@/lib/utils/initials'
 
 export const runtime = 'edge'
 
@@ -52,8 +53,13 @@ async function loadFonts() {
   ]
 }
 
-function initialsOf(name: string): string {
-  return name.trim().slice(0, 2).toUpperCase()
+// Satori clips overflowing text without an ellipsis, so the name is cut here:
+// 12 mono glyphs at 13px are what fits under a dot (maxWidth 96px).
+const NAME_MAX = 12
+
+function shortName(name: string): string {
+  const clean = name.trim()
+  return clean.length > NAME_MAX ? `${clean.slice(0, NAME_MAX - 1)}…` : clean
 }
 
 // Satori only dashes a border drawn on ONE side of a box (a four-sided
@@ -169,12 +175,10 @@ function Dot({ player, x, y, dark }: { player: Player; x: number; y: number; dar
           fontSize: '13px',
           color: TEAM_LIGHT,
           whiteSpace: 'nowrap',
-          maxWidth: '96px',
-          overflow: 'hidden',
           textShadow: '0 1px 2px rgba(0,0,0,0.7)',
         }}
       >
-        {player.name}
+        {shortName(player.name)}
       </div>
     </div>
   )

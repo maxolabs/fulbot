@@ -15,7 +15,7 @@ export const STATUS_BADGE_VARIANT: Record<string, NonNullable<BadgeProps['varian
   draft: 'outline',
   signup_open: 'success',
   signup_closed: 'secondary',
-  full: 'warning',
+  full: 'success', // a full match is a good state, like the SpotsMeter's (01-brand §1)
   teams_created: 'secondary',
   finished: 'outline',
   cancelled: 'destructive',

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
 import { PageHeader } from '@/components/layout/page-header'
@@ -98,8 +98,9 @@ export default function NewGroupPage() {
       <PageHeader title={t('groups.create')} subtitle={t('ui.screens.newGroup.subtitle')} />
 
       <Card>
+        {/* Mobile: the top bar already says "Crear grupo" (02-shell §2), so the
+            card only repeats the subtitle. */}
         <CardHeader className="lg:hidden">
-          <CardTitle>{t('groups.create')}</CardTitle>
           <CardDescription>{t('ui.screens.newGroup.subtitle')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

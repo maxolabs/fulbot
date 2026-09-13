@@ -105,13 +105,26 @@ export interface MatchActionBarProps {
   /** Admin extra: "Armar equipos" as primary, the signup action as secondary. */
   buildTeamsHref?: string
   buildTeamsLabel?: string
+  /**
+   * Once the teams exist: "Ver equipos" as primary for everyone (03-screens
+   * §4), with the signup action as secondary when there is still one.
+   */
+  viewTeamsHref?: string
+  viewTeamsLabel?: string
   /** Finished match: "Reportar resultado" until the viewer has reported. */
   reportHref?: string
   reportLabel?: string
 }
 
 /** The mobile action bar, placed as the last element of the page content. */
-export function MatchActionBar({ buildTeamsHref, buildTeamsLabel, reportHref, reportLabel }: MatchActionBarProps) {
+export function MatchActionBar({
+  buildTeamsHref,
+  buildTeamsLabel,
+  viewTeamsHref,
+  viewTeamsLabel,
+  reportHref,
+  reportLabel,
+}: MatchActionBarProps) {
   const action = useSignup()
 
   if (reportHref) {
@@ -130,13 +143,18 @@ export function MatchActionBar({ buildTeamsHref, buildTeamsLabel, reportHref, re
   // The signup action as a secondary: whichever of the two is actionable.
   const signupAsSecondary = secondary ?? (primary.tone === 'action' ? primary : null)
 
-  if (buildTeamsHref) {
+  // "Armar equipos" (no teams yet, admin) and "Ver equipos" (teams exist,
+  // everyone) are mutually exclusive and take the same slot: the primary.
+  const teamsHref = buildTeamsHref ?? viewTeamsHref
+  const teamsLabel = buildTeamsHref ? buildTeamsLabel : viewTeamsLabel
+
+  if (teamsHref) {
     return (
       <ActionBar>
         <Button asChild size="xl">
-          <Link href={buildTeamsHref}>
+          <Link href={teamsHref}>
             <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {buildTeamsLabel}
+            {teamsLabel}
           </Link>
         </Button>
         {signupAsSecondary && (

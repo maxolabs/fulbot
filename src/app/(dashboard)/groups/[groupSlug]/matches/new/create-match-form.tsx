@@ -203,7 +203,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           checked={openSignup}
           onChange={(e) => setOpenSignup(e.target.checked)}
           disabled={loading}
-          className="h-4 w-4 rounded-sm border-input accent-primary"
+          className="h-4 w-4 rounded-sm border-input accent-chalk"
         />
         <div>
           <p className="text-sm font-medium">Abrir inscripciones inmediatamente</p>

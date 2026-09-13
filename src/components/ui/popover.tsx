@@ -22,8 +22,11 @@ export interface PopoverProps {
   triggerClassName?: string
   /** Extra classes for the panel (width, padding). */
   className?: string
-  /** Accessible name for the trigger when its content is not text. */
-  'aria-label'?: string
+  /**
+   * Accessible name, required: it names the trigger when its content is not
+   * text and it is also the panel's name (`role="dialog"` needs one, 06 §9).
+   */
+  'aria-label': string
 }
 
 export function Popover({
@@ -104,6 +107,7 @@ export function Popover({
             ref={panelRef}
             id={panelId}
             role="dialog"
+            aria-label={ariaLabel}
             className={cn(
               'absolute z-20 mt-2 min-w-56 rounded-md border border-border bg-popover text-popover-foreground shadow-lg shadow-black/40',
               align === 'right' ? 'right-0' : 'left-0',

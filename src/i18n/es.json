@@ -181,7 +181,11 @@
     "voteMVP": "Votar MVP",
     "yourVote": "Tu voto",
     "results": "Resultados",
-    "noRatingsYet": "Sin calificaciones todavía"
+    "noRatingsYet": "Sin calificaciones todavía",
+    "peerVotes": "{n} votos de compañeros",
+    "peerVotesOne": "1 voto de compañeros",
+    "matchesRated": "{n} partidos calificados",
+    "matchesRatedOne": "1 partido calificado"
   },
   "rules": {
     "title": "Reglas",
@@ -592,6 +596,8 @@
         "shareCopied": "Link copiado",
         "manage": "Gestionar",
         "manageTitle": "Gestionar partido",
+        "viewTeams": "Ver equipos",
+        "editTeams": "Ver / editar equipos",
         "confirmed": "Confirmados",
         "waitlist": "Lista de espera",
         "nobodyYet": "Nadie se anotó todavía.",
@@ -629,6 +635,7 @@
         "legend": "PJ = partidos jugados · número = calificación del grupo"
       },
       "player": {
+        "topBar": "Jugador",
         "leftFooted": "Zurdo",
         "rightFooted": "Diestro",
         "bothFooted": "Ambidiestro",

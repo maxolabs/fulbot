@@ -13,6 +13,8 @@ Implemented as the spec assumes, so no track has to ask:
 3. `/groups` redirects to the dashboard when the user has exactly one active membership.
 4. Ratings are hidden on the combined mobile pitch, visible in the browser view.
 5. Landing `/` stays, restyled.
+6. `01-brand §4` (wordmark alone on the mobile group dashboard) is superseded by
+   `02-shell §2` / `03-screens §2`: the top bar shows the group-switcher title there.
 
 ## 2. Hierarchy: one hero, one action, one orange
 
@@ -97,7 +99,8 @@ Implemented as the spec assumes, so no track has to ask:
   focus-visible:ring-offset-background` on every interactive element, including rows.
 - `Sheet` and `Popover` are `<dialog>`-based, close on `Escape` and on backdrop click, return
   focus to the trigger on close. The sheet's title is the dialog's `aria-labelledby`.
-- Colour is never the only carrier of meaning: the active tab is orange **and** bold, an
+- Colour is never the only carrier of meaning: the active tab's icon is orange **and** its
+  label is bold (the label itself stays chalk — cone text on paper is 2.5:1), an
   unread notification has the dot **and** a bold title, a full match has the success bar
   **and** the word "Completo".
 - Contrast is checked against `05-plan.md` §3 in both themes.

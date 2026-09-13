@@ -49,8 +49,11 @@
     --muted-foreground: 146 12% 66%;
     --accent: 158 32% 22%;
     --accent-foreground: 46 35% 93%;
-    --destructive: 4 72% 55%;
-    --destructive-foreground: 46 35% 93%;
+    /* Raised from 4 72% 55% (01-brand §1): the original failed the 4.5:1 floor
+       both as text on the board (3.35) and under chalk on the button (3.65).
+       #F47A71 → text/board 5.22, text/card 4.63, ink/destructive 6.52. */
+    --destructive: 4 85% 70%;
+    --destructive-foreground: 0 0% 10%;
     --success: 152 45% 52%;
     --success-foreground: 0 0% 10%;
     --warning: 40 90% 55%;
@@ -75,6 +78,11 @@
   .chalk-dust {
     background-image: radial-gradient(hsl(var(--foreground) / 0.045) 1px, transparent 1px);
     background-size: 7px 7px;
+  }
+  /* Native checkboxes / radios / ranges in chalk instead of cone: the one
+     orange on a screen belongs to its primary action (06-principles §2). */
+  .accent-chalk {
+    accent-color: hsl(var(--foreground));
   }
 }
 

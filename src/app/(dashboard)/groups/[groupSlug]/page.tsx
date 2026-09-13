@@ -199,13 +199,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
       .filter(s => s.status === 'waitlist')
       .sort((a, b) => (a.waitlist_position || 0) - (b.waitlist_position || 0))
 
-    if (isAdminOrCaptain) {
-      const { count } = await supabase
-        .from('teams')
-        .select('id', { count: 'exact', head: true })
-        .eq('match_id', nextMatch.id)
-      nextHasTeams = (count ?? 0) > 0
-    }
+    // Read for every viewer, not only admins: once the teams exist the card
+    // links members to them too (03-screens §4).
+    const { count } = await supabase
+      .from('teams')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', nextMatch.id)
+    nextHasTeams = (count ?? 0) > 0
   }
 
   // Last 10 finished matches: recent rows, "Último resultado" and the table.
@@ -365,6 +365,8 @@ export default async function GroupDetailPage({ params }: PageProps) {
     !nextHasTeams &&
     (nextMatch.status === 'signup_open' || nextMatch.status === 'full' || nextMatch.status === 'signup_closed') &&
     confirmed.length >= 4
+  // Teams already armed: everyone gets "Ver equipos" in the same slot.
+  const showViewTeams = !!nextMatch && nextHasTeams
   const createIsPrimary = !teamsPending
 
   const matchHref = (id: string) => `/groups/${groupSlug}/matches/${id}`
@@ -531,11 +533,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 )}
 
                 <div className="flex flex-wrap gap-2">
-                  {showBuildTeams && (
+                  {(showBuildTeams || showViewTeams) && (
                     <Button asChild variant={teamsPending ? 'default' : 'outline'}>
                       <Link href={`${matchHref(nextMatch.id)}/teams`}>
                         <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                        {t('ui.matchScreens.dashboard.buildTeams')}
+                        {showViewTeams
+                          ? t('ui.matchScreens.match.viewTeams')
+                          : t('ui.matchScreens.dashboard.buildTeams')}
                       </Link>
                     </Button>
                   )}

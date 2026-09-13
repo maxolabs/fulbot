@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils/cn'
 import { useT } from '@/i18n/provider'
 
 // Invite code entry (docs/ui-rework/03-screens.md §12): a dashed card with
@@ -52,7 +53,7 @@ export default function InviteCodePage() {
               {t('common.next')}
             </Button>
             <div className="text-center">
-              <Link href="/groups" className={buttonVariants({ variant: 'link', className: 'text-muted-foreground hover:text-foreground' })}>
+              <Link href="/groups" className={cn(buttonVariants({ variant: 'link' }), 'text-muted-foreground hover:text-foreground')}>
                 {t('ui.shell.myGroups')}
               </Link>
             </div>

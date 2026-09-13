@@ -35,8 +35,8 @@ const fontMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'fulbot — Organiza tus partidos',
-  description: 'Organiza partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más.',
+  title: 'fulbot — Organizá tus partidos',
+  description: 'Organizá partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

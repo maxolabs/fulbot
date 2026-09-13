@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
-import { Trophy } from 'lucide-react'
+import Link from 'next/link'
+import { Trophy, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
 import { SpotsMeter } from '@/components/ui/spots-meter'
@@ -433,10 +435,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
   }))
 
   // Whether teams exist (only fetched above for finished matches): the admin
-  // actions explain that a match without teams can't be finished (§5.1), and
-  // the action bar offers "Armar equipos" while they are missing.
+  // actions explain that a match without teams can't be finished (§5.1), the
+  // action bar offers "Armar equipos" while they are missing and "Ver equipos"
+  // once they exist — for members too (03-screens §4), so the count is read
+  // for every viewer, not only admins.
   let hasTeams = matchTeams.length > 0
-  if (!hasTeams && isAdminOrCaptain && match.status !== 'finished') {
+  if (!hasTeams && match.status !== 'finished') {
     const { count } = await supabase
       .from('teams')
       .select('id', { count: 'exact', head: true })
@@ -492,6 +496,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
     (match.status === 'full' || match.status === 'signup_closed')
       ? `${matchHref}/teams`
       : undefined
+  // Once the teams exist, the teams screen is where everyone goes (03-screens
+  // §4: "the screenshot people send"), members included.
+  const viewTeamsHref = hasTeams && match.status !== 'cancelled' ? `${matchHref}/teams` : undefined
   const reportHref = isFinished && viewerCanReport && !ownReport && reportTeams.length > 0 ? '#reportar' : undefined
   const showActionBar = (isLive && match.status !== 'draft') || !!reportHref
 
@@ -597,6 +604,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
             }
             actions={
               <>
+                {viewTeamsHref && (
+                  <Button asChild variant="outline">
+                    <Link href={viewTeamsHref}>
+                      <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      {t('ui.matchScreens.match.viewTeams')}
+                    </Link>
+                  </Button>
+                )}
                 <ShareMatchButton shareUrl={shareUrl} />
                 {adminActions && <ManagePopover>{adminActions}</ManagePopover>}
               </>
@@ -840,6 +855,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <MatchActionBar
               buildTeamsHref={buildTeamsHref}
               buildTeamsLabel={t('ui.matchScreens.dashboard.buildTeams')}
+              viewTeamsHref={viewTeamsHref}
+              viewTeamsLabel={t('ui.matchScreens.match.viewTeams')}
               reportHref={reportHref}
               reportLabel={t('ui.matchScreens.match.reportResult')}
             />

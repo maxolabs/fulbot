@@ -71,9 +71,16 @@ export function SkillSummaryCard({
             t('ratings.noRatingsYet')
           ) : (
             <>
-              {summary!.peer_votes} {summary!.peer_votes === 1 ? 'voto' : 'votos'} de compañeros
+              {summary!.peer_votes === 1
+                ? t('ratings.peerVotesOne')
+                : t('ratings.peerVotes', { n: summary!.peer_votes })}
               {summary!.matches_rated > 0 && (
-                <> · {summary!.matches_rated} {summary!.matches_rated === 1 ? 'partido' : 'partidos'} calificados</>
+                <>
+                  {' · '}
+                  {summary!.matches_rated === 1
+                    ? t('ratings.matchesRatedOne')
+                    : t('ratings.matchesRated', { n: summary!.matches_rated })}
+                </>
               )}
             </>
           )}

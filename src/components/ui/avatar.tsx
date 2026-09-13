@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { cn } from '@/lib/utils/cn'
+import { initials as initialsOf } from '@/lib/utils/initials'
 
 // Pizarra avatar (docs/ui-rework/04-components.md §1). Initials in the display
 // face on a raised surface; the circle is the one shape that is not squared.
@@ -33,13 +34,7 @@ export function Avatar({
 }: AvatarProps) {
   const [imageError, setImageError] = React.useState(false)
 
-  const initials = fallback
-    .split(' ')
-    .filter(Boolean)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  const initials = initialsOf(fallback)
 
   if (src && !imageError) {
     return (

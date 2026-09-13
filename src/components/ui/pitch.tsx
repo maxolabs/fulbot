@@ -3,6 +3,7 @@ import { Star } from 'lucide-react'
 import type { PlacedPlayer } from '@/lib/formations'
 import { CHALK, PITCH, TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { cn } from '@/lib/utils/cn'
+import { initials as initialsOf } from '@/lib/utils/initials'
 
 // Pitch (docs/ui-rework/04-components.md §2, 03-screens.md §4): the coach's
 // board. Replaces LineupField's green gradient with the board ground, dashed
@@ -45,9 +46,6 @@ export interface PitchProps extends Omit<React.HTMLAttributes<HTMLDivElement>, '
   className?: string
 }
 
-export function initialsOf(name: string): string {
-  return name.trim().slice(0, 2).toUpperCase()
-}
 
 // Map a half-pitch slot (y 14..86, GK at 86) into the bottom or top half of
 // the combined board, leaving room for the dot and its label at both ends.

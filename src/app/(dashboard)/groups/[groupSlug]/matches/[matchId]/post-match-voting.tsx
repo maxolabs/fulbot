@@ -170,7 +170,7 @@ export function PostMatchVoting({
                       className={`h-5 w-5 transition-colors ${
                         (ratings[player.id] || 0) >= star
                           ? 'fill-primary text-primary'
-                          : 'text-muted-foreground/30'
+                          : 'text-muted-foreground'
                       }`}
                     />
                   </button>

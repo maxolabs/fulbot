@@ -10,7 +10,8 @@ import { useShell } from './shell-context'
 import type { ShellCurrentGroup } from './types'
 
 // Mobile tab bar (docs/ui-rework/02-shell.md §2): Partido / Grupo / Yo. The
-// active tab is the one orange element of the chrome, and bold. Hidden on
+// active tab's icon is the one orange element of the chrome and its label is
+// bold chalk (cone text on paper is 2.5:1, below the 4.5:1 floor). Hidden on
 // routes that end in /new or /edit (full-height forms). `currentGroup` comes
 // from the fulbot_group cookie; without one, both group tabs go to /groups.
 
@@ -70,10 +71,10 @@ export function TabBar({ currentGroup, unread: unreadProp, className }: TabBarPr
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'flex h-full flex-col items-center justify-center gap-1 text-[10px] leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
-                active ? 'font-semibold text-primary' : 'text-muted-foreground'
+                active ? 'font-semibold text-foreground' : 'text-muted-foreground'
               )}
             >
-              <span className="relative">
+              <span className={cn('relative', active && 'text-primary')}>
                 <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                 {dot && (
                   <span

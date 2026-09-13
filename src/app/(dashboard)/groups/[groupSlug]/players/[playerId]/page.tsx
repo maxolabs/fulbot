@@ -370,7 +370,9 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <TopBarConfig title={player.display_name} back={`/groups/${groupSlug}/players`} />
+      {/* The hero below already carries the name, so the top bar stays generic
+          (02-shell §2: one title per screen). */}
+      <TopBarConfig title={t('ui.screens.player.topBar')} back={`/groups/${groupSlug}/players`} />
 
       {/* Hero: same block at every width (the avatar is part of the header, so PageHeader's text-only row is not used). */}
       <header className="flex items-start gap-4">

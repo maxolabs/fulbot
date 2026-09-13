@@ -299,7 +299,7 @@ export function PublicMatchActions({
 
   return (
     <>
-      <div className="space-y-6 pb-10">
+      <div className="space-y-6 pb-28">
         {(inline || error) && (
           <div className="space-y-3">
             {error && <FormNotice kind="error">{error}</FormNotice>}
