@@ -480,6 +480,7 @@ DECLARE
     v_settings public.notification_settings;
     v_should_emit BOOLEAN := TRUE;
     v_recipient_player_id UUID;
+    v_claims JSONB;
 BEGIN
     IF p_group_id IS NULL OR p_type IS NULL THEN
         RETURN;
@@ -496,8 +497,11 @@ BEGIN
     -- A direct database session (seed, migrations, pg_cron) carries no JWT
     -- claims at all and is trusted like the service role. API callers always
     -- have a role claim ('anon', 'authenticated' or 'service_role').
-    IF COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') <> 'service_role'
-       AND COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ? 'role'
+    -- (The setting reads as '' rather than NULL once any earlier transaction in
+    -- the session set it locally, hence the NULLIF.)
+    v_claims := COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
+    IF COALESCE(v_claims->>'role', '') <> 'service_role'
+       AND v_claims ? 'role'
        AND NOT is_group_member(p_group_id) THEN
         RAISE EXCEPTION 'No sos miembro de este grupo';
     END IF;
