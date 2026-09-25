@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 import type { Database } from '@/types/database'
 
@@ -55,7 +56,7 @@ export function buildGuestInviteText({
   matchId,
   timeZone = DEFAULT_TIMEZONE,
 }: Pick<AddGuestFormProps, 'groupName' | 'dateTime' | 'location' | 'matchId' | 'timeZone'>) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl = getAppBaseUrl()
   const signupUrl = `${appUrl}/m/${matchId}`
   const when = `${formatMatchDateShort(dateTime, timeZone)} a las ${formatMatchTime(dateTime, timeZone)}`
 
@@ -94,7 +95,7 @@ export function AddGuestForm({
   const [error, setError] = useState<string | null>(null)
 
   const inviteText = buildGuestInviteText({ groupName, dateTime, location, matchId, timeZone })
-  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
+  const inviteUrl = `${getAppBaseUrl()}/m/${matchId}`
   const waUrl = `https://wa.me/?text=${encodeURIComponent(inviteText)}`
 
   const spotsHint = isFull
