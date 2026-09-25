@@ -7,8 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Sheet } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 import type { RuleSet, Json } from '@/types/database'
 
 interface Player {
@@ -36,27 +39,12 @@ interface RulesManagerProps {
   players: Player[]
 }
 
-const RULE_LABELS: Record<RuleType, { label: string; icon: React.ReactNode; description: string }> = {
-  avoid_pair: {
-    label: 'Separar jugadores',
-    icon: <Ban className="h-4 w-4" />,
-    description: 'Estos jugadores no pueden estar en el mismo equipo',
-  },
-  force_pair: {
-    label: 'Juntar jugadores',
-    icon: <Handshake className="h-4 w-4" />,
-    description: 'Estos jugadores deben estar en el mismo equipo',
-  },
-  min_defenders: {
-    label: 'Mín. defensores',
-    icon: <Shield className="h-4 w-4" />,
-    description: 'Mínimo de defensores por equipo',
-  },
-  min_goalkeepers: {
-    label: 'Mín. arqueros',
-    icon: <Users className="h-4 w-4" />,
-    description: 'Mínimo de arqueros por equipo',
-  },
+// Label and description are ui.rulesEditor.{key} and ui.rulesEditor.{key}Body.
+const RULE_LABELS: Record<RuleType, { key: string; icon: React.ReactNode }> = {
+  avoid_pair: { key: 'avoidPair', icon: <Ban className="h-4 w-4" /> },
+  force_pair: { key: 'forcePair', icon: <Handshake className="h-4 w-4" /> },
+  min_defenders: { key: 'minDefenders', icon: <Shield className="h-4 w-4" /> },
+  min_goalkeepers: { key: 'minGoalkeepers', icon: <Users className="h-4 w-4" /> },
 }
 
 function isPairRule(type: string): type is 'avoid_pair' | 'force_pair' {
@@ -68,12 +56,17 @@ function isMinCountRule(type: string): type is 'min_defenders' | 'min_goalkeeper
 }
 
 export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
   const [rules, setRules] = useState<RuleSet[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [addingType, setAddingType] = useState<RuleType | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  // A group-level rule about to be removed from a match: needs confirmation,
+  // because turning it off affects every match of the group.
+  const [confirmingGroupRule, setConfirmingGroupRule] = useState<RuleSet | null>(null)
 
   // Form state for pair rules
   const [playerA, setPlayerA] = useState('')
@@ -102,13 +95,14 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
   const addRule = async () => {
     if (!addingType) return
     setSaving(true)
+    setError(null)
 
     try {
       let data: PairRuleData | MinCountRuleData
 
       if (isPairRule(addingType)) {
         if (!playerA || !playerB || playerA === playerB) {
-          alert('Seleccioná dos jugadores diferentes')
+          setError(t('ui.rulesEditor.pickTwo'))
           setSaving(false)
           return
         }
@@ -143,30 +137,42 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
       router.refresh()
     } catch (err) {
       console.error('Error adding rule:', err)
-      alert('No se pudo agregar la regla. Intentá de nuevo.')
+      setError(t('ui.rulesEditor.addError'))
     } finally {
       setSaving(false)
     }
   }
 
+  // Group-level rules (group_id set) apply to every match; rules added here
+  // are scoped to this match (match_id set).
+  const isGroupRule = (rule: RuleSet) => rule.group_id !== null
+
   const removeRule = async (ruleId: string) => {
-    const { error } = await supabase
+    setError(null)
+    const { error: removeError } = await supabase
       .from('rule_sets')
       .update({ is_active: false })
       .eq('id', ruleId)
 
-    if (!error) {
-      setRules((prev) => prev.filter((r) => r.id !== ruleId))
-      router.refresh()
+    if (removeError) {
+      setError(t('ui.rulesEditor.removeError'))
+      return
     }
+    setRules((prev) => prev.filter((r) => r.id !== ruleId))
+    router.refresh()
+  }
+
+  const requestRemove = (rule: RuleSet) => {
+    if (matchId && isGroupRule(rule)) setConfirmingGroupRule(rule)
+    else void removeRule(rule.id)
   }
 
   const playerLabel = (p: Player) =>
-    p.is_guest ? `${p.display_name} (invitado)` : p.display_name
+    p.is_guest ? `${p.display_name} (${t('ui.guest')})` : p.display_name
 
   const getPlayerName = (id: string | undefined) => {
     const p = players.find((x) => x.id === id)
-    return p ? playerLabel(p) : 'Desconocido'
+    return p ? playerLabel(p) : t('ui.rulesEditor.unknownPlayer')
   }
 
   const renderRuleDescription = (rule: RuleSet) => {
@@ -177,7 +183,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
     }
     if (isMinCountRule(rule.rule_type)) {
       const d = rule.data as unknown as MinCountRuleData
-      return `Mínimo: ${d.min_count} por equipo`
+      return t('ui.rulesEditor.minPerTeam', { n: d.min_count })
     }
     return JSON.stringify(rule.data)
   }
@@ -195,13 +201,15 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
   return (
     <Card variant="solid">
       <CardHeader>
-        <CardTitle>Reglas para armar equipos</CardTitle>
+        <CardTitle>{t('ui.rulesEditor.title')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
         {/* Existing rules */}
         {rules.length === 0 && !addingType && (
           <p className="text-sm text-muted-foreground">
-            No hay reglas configuradas. La IA armará equipos balanceados por rating.
+            {t('ui.rulesEditor.empty')}
           </p>
         )}
 
@@ -211,14 +219,19 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
             <div key={rule.id} className="flex items-center gap-3 rounded-md border border-border p-3">
               <span className="text-muted-foreground shrink-0">{config?.icon}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{config?.label || rule.rule_type}</p>
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {config ? t(`ui.rulesEditor.${config.key}`) : rule.rule_type}
+                  <Badge variant={isGroupRule(rule) ? 'secondary' : 'outline'}>
+                    {isGroupRule(rule) ? t('ui.rulesEditor.scopeGroup') : t('ui.rulesEditor.scopeMatch')}
+                  </Badge>
+                </p>
                 <p className="text-xs text-muted-foreground truncate">{renderRuleDescription(rule)}</p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => removeRule(rule.id)}
-                aria-label="Quitar regla"
+                onClick={() => requestRemove(rule)}
+                aria-label={t('ui.rulesEditor.remove')}
                 className="shrink-0"
               >
                 <X className="h-4 w-4" />
@@ -230,33 +243,38 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
         {/* Add rule form */}
         {addingType && (
           <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-sm font-medium">
-              {RULE_LABELS[addingType]?.label}
-            </p>
+            <div>
+              <p className="text-sm font-medium">
+                {t(`ui.rulesEditor.${RULE_LABELS[addingType].key}`)}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t(`ui.rulesEditor.${RULE_LABELS[addingType].key}Body`)}
+              </p>
+            </div>
 
             {isPairRule(addingType) && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Jugador A</Label>
+                  <Label className="text-xs">{t('ui.rulesEditor.playerA')}</Label>
                   <select
                     value={playerA}
                     onChange={(e) => setPlayerA(e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    <option value="">Seleccionar...</option>
+                    <option value="">{t('ui.rulesEditor.choose')}</option>
                     {players.map((p) => (
                       <option key={p.id} value={p.id}>{playerLabel(p)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <Label className="text-xs">Jugador B</Label>
+                  <Label className="text-xs">{t('ui.rulesEditor.playerB')}</Label>
                   <select
                     value={playerB}
                     onChange={(e) => setPlayerB(e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    <option value="">Seleccionar...</option>
+                    <option value="">{t('ui.rulesEditor.choose')}</option>
                     {players.filter((p) => p.id !== playerA).map((p) => (
                       <option key={p.id} value={p.id}>{playerLabel(p)}</option>
                     ))}
@@ -267,7 +285,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
 
             {isMinCountRule(addingType) && (
               <div>
-                <Label className="text-xs">Cantidad mínima por equipo</Label>
+                <Label className="text-xs">{t('ui.rulesEditor.minCount')}</Label>
                 <Input
                   type="number"
                   min="1"
@@ -281,10 +299,10 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
             <div className="flex flex-wrap gap-2">
               <Button size="sm" onClick={addRule} disabled={saving} className="flex-1 sm:flex-none">
                 {saving && <Spinner size="sm" className="mr-2" />}
-                Guardar
+                {t('common.save')}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAddingType(null)} className="flex-1 sm:flex-none">
-                Cancelar
+              <Button size="sm" variant="ghost" onClick={() => { setAddingType(null); setError(null) }} className="flex-1 sm:flex-none">
+                {t('common.cancel')}
               </Button>
             </div>
           </div>
@@ -301,12 +319,36 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
                 onClick={() => setAddingType(type)}
               >
                 <Plus className="mr-1 h-3 w-3" />
-                {config.label}
+                {t(`ui.rulesEditor.${config.key}`)}
               </Button>
             ))}
           </div>
         )}
       </CardContent>
+
+      <Sheet
+        open={confirmingGroupRule !== null}
+        onOpenChange={(open) => { if (!open) setConfirmingGroupRule(null) }}
+        title={t('ui.rulesEditor.removeGroupTitle')}
+        description={t('ui.rulesEditor.removeGroupBody')}
+      >
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              const rule = confirmingGroupRule
+              setConfirmingGroupRule(null)
+              if (rule) void removeRule(rule.id)
+            }}
+          >
+            {t('ui.rulesEditor.removeGroupConfirm')}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setConfirmingGroupRule(null)}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </Sheet>
     </Card>
   )
 }

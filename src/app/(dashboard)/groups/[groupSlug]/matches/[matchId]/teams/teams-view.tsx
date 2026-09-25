@@ -89,9 +89,9 @@ function formationShape(placed: PlacedPlayer<PitchPlayer>[]): string {
     .join('-')
 }
 
-function toPitchPlayers(list: TeamPlayer[]): PlacedPlayer<PitchPlayer>[] {
+function toPitchPlayers(list: TeamPlayer[], guestTag: string): PlacedPlayer<PitchPlayer>[] {
   return placePlayersInFormation(
-    list.map((p) => ({ id: p.id, name: shareName(p), position: p.position, rating: p.overallRating }))
+    list.map((p) => ({ id: p.id, name: shareName(p), position: p.position, rating: p.overallRating, tag: p.isGuest ? guestTag : undefined }))
   )
 }
 
@@ -135,8 +135,12 @@ export function TeamsView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(t('ui.teamsScreen.generateError'))
+      // The route answers with an already translated { error } message.
+      const data = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) {
+        setError(data?.error || t('ui.teamsScreen.generateError'))
+        return
+      }
       startRefresh(() => { setEditing(false); router.refresh() })
     } catch (err) {
       console.error('Error generating teams:', err)
@@ -167,8 +171,8 @@ export function TeamsView({
 
   const darkPlayers = resolve(darkTeam.assignments)
   const lightPlayers = resolve(lightTeam.assignments)
-  const darkPlaced = toPitchPlayers(darkPlayers)
-  const lightPlaced = toPitchPlayers(lightPlayers)
+  const darkPlaced = toPitchPlayers(darkPlayers, t('ui.teamsAi.guestTag'))
+  const lightPlaced = toPitchPlayers(lightPlayers, t('ui.teamsAi.guestTag'))
 
   const assignedIds = new Set([
     ...darkTeam.assignments.map((a) => a.player_id || a.guest_player_id),
@@ -185,7 +189,7 @@ export function TeamsView({
   const levelLabel = (list: TeamPlayer[]) => t('ui.teamsScreen.level', { n: average(list).toFixed(1) })
 
   const shareInput = { matchUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
-    copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing') } }
+    copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing'), guest: t('ui.teamsAi.guestTag') } }
 
   const copySimple = async () => {
     try {

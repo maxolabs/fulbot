@@ -7,12 +7,24 @@ import {
   PlayerInput,
   RuleInput,
   MatchHistoryEntry,
+  PreviousLineup,
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
+import { getT, type Language } from '@/i18n/server'
 import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
+}
+
+// publish_match_teams raises Spanish messages meant for logs; the client gets
+// a translated key instead (never the raw database error).
+function publishErrorKey(message: string): string {
+  if (message.includes('La lista de confirmados cambió') || message.includes('Asignaciones inválidas')) return 'rosterChanged'
+  if (message.includes('No tenés permiso')) return 'forbidden'
+  if (message.includes('no permite modificar')) return 'notAllowed'
+  if (message.includes('al menos 4')) return 'needPlayers'
+  return 'saveFailed'
 }
 
 const KNOWN_RULE_TYPES = new Set<RuleInput['type']>([
@@ -23,6 +35,10 @@ const KNOWN_RULE_TYPES = new Set<RuleInput['type']>([
 ])
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  // Spanish until we know who is asking (the app's default language)
+  let t = getT('es')
+  const fail = (key: string, status: number) =>
+    NextResponse.json({ error: t(`ui.teamsAi.errors.${key}`) }, { status })
   try {
     const { matchId } = await context.params
     const supabase = await createClient()
@@ -30,8 +46,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      return fail('unauthorized', 401)
     }
+
+    // Errors and the AI's reasoning/warnings come back in the caller's language
+    const { data: userData } = await supabase
+      .from('users')
+      .select('preferred_language')
+      .eq('id', user.id)
+      .single() as { data: { preferred_language: Language } | null }
+    const language: Language = userData?.preferred_language === 'en' ? 'en' : 'es'
+    t = getT(language)
 
     // Get user's player profile
     const { data: playerProfile } = await supabase
@@ -41,7 +66,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!playerProfile) {
-      return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 400 })
+      return fail('profileNotFound', 400)
     }
 
     // Get match with group info
@@ -52,7 +77,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!match) {
-      return NextResponse.json({ error: 'Partido no encontrado' }, { status: 404 })
+      return fail('matchNotFound', 404)
     }
 
     // Check if user is admin or captain of the group
@@ -65,11 +90,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
-      return NextResponse.json({ error: 'No tenés permiso para armar equipos en este grupo' }, { status: 403 })
+      return fail('forbidden', 403)
     }
 
     if (!['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
-      return NextResponse.json({ error: 'Este partido no permite modificar equipos' }, { status: 409 })
+      return fail('notAllowed', 409)
     }
 
     // Get confirmed signups with player profiles and guest players.
@@ -135,14 +160,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (signupsError) {
       console.error('Error fetching signups:', signupsError)
-      return NextResponse.json({ error: 'No se pudieron obtener los jugadores anotados' }, { status: 500 })
+      return fail('signupsFailed', 500)
     }
 
     if (!signups || signups.length < 4) {
-      return NextResponse.json(
-        { error: 'Se necesitan al menos 4 jugadores confirmados para armar equipos' },
-        { status: 400 }
-      )
+      return fail('needPlayers', 400)
     }
 
     // Scores come from player_rating_summary (peer ratings blended with post-match
@@ -241,10 +263,38 @@ export async function POST(request: NextRequest, context: RouteContext) {
       lightTeamPlayers: (row.light_team_players as { player_id: string; name: string }[] | null) ?? null,
     }))
 
+    // "Regenerar": the lineup already published, so the new proposal can differ
+    // from it (the model is told to, the fallback draws a varied candidate).
+    const { data: currentTeams } = await supabase
+      .from('teams')
+      .select('id, name')
+      .eq('match_id', matchId) as { data: { id: string; name: 'dark' | 'light' }[] | null }
+    let previous: PreviousLineup | null = null
+    if (currentTeams && currentTeams.length > 0) {
+      const { data: currentAssignments } = await supabase
+        .from('team_assignments')
+        .select('team_id, player_id, guest_player_id')
+        .in('team_id', currentTeams.map((team) => team.id)) as {
+          data: { team_id: string; player_id: string | null; guest_player_id: string | null }[] | null
+        }
+      const idsOf = (name: 'dark' | 'light') => {
+        const teamId = currentTeams.find((team) => team.name === name)?.id
+        return (currentAssignments || [])
+          .filter((a) => a.team_id === teamId)
+          .map((a) => a.player_id ?? a.guest_player_id)
+          .filter((id): id is string => !!id)
+      }
+      previous = { dark: idsOf('dark'), light: idsOf('light') }
+    }
+
     // Generate teams (OpenAI with hard-constraint validation, falls back to the
-    // deterministic balancer when the key is missing or the AI keeps failing)
+    // rule-based balancer when the key is missing or the AI keeps failing)
     const teamSize = Math.ceil(players.length / 2)
-    const generatedTeams = await generateTeams(players, ruleInputs, teamSize, historyEntries)
+    const generatedTeams = await generateTeams(players, ruleInputs, teamSize, historyEntries, {
+      language,
+      previous,
+      seed: previous ? Math.floor(Math.random() * 2 ** 31) : undefined,
+    })
 
     // Persist teams + assignments atomically through the shared RPC (also used by
     // manual drag/drop edits), then update match status + AI snapshot.
@@ -267,6 +317,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })),
     ]
 
+    // Full input for debugging (docs/rework-plan.md §2.3): the prompt sent to
+    // the model (null when it never was) and the teammate-pair history it saw.
+    // A manual publish (draggable-teams) stores a NULL snapshot on purpose: this
+    // one describes the AI lineup and its analysis, which no longer apply once
+    // someone rearranges the teams by hand.
     const generatedAt = new Date().toISOString()
     const snapshot = {
       input: {
@@ -279,6 +334,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         })),
         rules: ruleInputs,
         recentMatchesConsidered: historyEntries.length,
+        pairHistory: generatedTeams.pairHistory,
+        previousLineup: previous,
+        language,
+        prompt: generatedTeams.prompt,
       },
       output: {
         dark: generatedTeams.dark,
@@ -298,7 +357,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       p_snapshot: snapshot,
     })
     if (saveError) {
-      return NextResponse.json({ error: saveError.message }, { status: 409 })
+      console.error('publish_match_teams failed:', saveError)
+      return fail(publishErrorKey(saveError.message), 409)
     }
     const { data: teams } = await supabase.from('teams').select('id, name').eq('match_id', matchId)
     const darkTeamId = teams?.find((team) => team.name === 'dark')?.id ?? null
@@ -323,9 +383,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
   } catch (error) {
     console.error('Team generation error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al generar equipos. Probá de nuevo en un momento.' },
-      { status: 500 }
-    )
+    return fail('generic', 500)
   }
 }

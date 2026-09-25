@@ -1,5 +1,8 @@
 import { ImageResponse } from '@vercel/og'
 import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { createClient } from '@/lib/supabase/server'
+import { POSITIONS } from '@/lib/teams/manual'
 import { placePlayersInFormation } from '@/lib/formations'
 import { CHALK, CONE, PITCH, TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { getTranslation, type Language } from '@/i18n/core'
@@ -24,18 +27,27 @@ const FIELD_W = 380
 const FIELD_H = 500
 const DOT = 44
 
-interface Player {
-  name: string
-  position: string
-}
+// The payload comes from the teams screen (whatsapp-share.tsx). It is
+// validated so the route only ever draws a plausible lineup: known positions,
+// short strings and at most MAX_TEAM players a side.
+const MAX_DATA_LENGTH = 16000
+const MAX_TEAM = 20
 
-interface LineupData {
-  groupName: string
-  matchDate: string
-  darkTeam: Player[]
-  lightTeam: Player[]
-  lang?: Language
-}
+const PlayerSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  position: z.enum(POSITIONS),
+  guest: z.boolean().optional(),
+})
+
+const LineupSchema = z.object({
+  groupName: z.string().trim().min(1).max(80),
+  matchDate: z.string().trim().max(60),
+  darkTeam: z.array(PlayerSchema).max(MAX_TEAM).default([]),
+  lightTeam: z.array(PlayerSchema).max(MAX_TEAM).default([]),
+  lang: z.enum(['es', 'en']).optional(),
+})
+
+type Player = z.infer<typeof PlayerSchema>
 
 const fontFiles = {
   syne: new URL('../../../../assets/fonts/Syne-ExtraBold.ttf', import.meta.url),
@@ -135,7 +147,7 @@ function Markings() {
   )
 }
 
-function Dot({ player, x, y, dark }: { player: Player; x: number; y: number; dark: boolean }) {
+function Dot({ player, x, y, dark, guestTag }: { player: Player; x: number; y: number; dark: boolean; guestTag?: string }) {
   return (
     <div
       style={{
@@ -180,6 +192,11 @@ function Dot({ player, x, y, dark }: { player: Player; x: number; y: number; dar
       >
         {shortName(player.name)}
       </div>
+      {guestTag && (
+        <div style={{ fontFamily: 'IBM Plex Mono', fontWeight: 500, fontSize: '11px', color: CHALK }}>
+          {guestTag}
+        </div>
+      )}
     </div>
   )
 }
@@ -190,12 +207,14 @@ function Field({
   teamName,
   countLabel,
   emptyLabel,
+  guestTag,
 }: {
   players: Player[]
   dark: boolean
   teamName: string
   countLabel: string
   emptyLabel: string
+  guestTag: string
 }) {
   const placed = placePlayersInFormation(players)
 
@@ -234,7 +253,7 @@ function Field({
       >
         <Markings />
         {placed.map(({ player, slot }, i) => (
-          <Dot key={i} player={player} x={slot.x} y={slot.y} dark={dark} />
+          <Dot key={i} player={player} x={slot.x} y={slot.y} dark={dark} guestTag={player.guest ? guestTag : undefined} />
         ))}
         {players.length === 0 && (
           <div
@@ -258,22 +277,37 @@ function Field({
 }
 
 export async function GET(request: NextRequest) {
+  // Signed-in users only: the image carries the fulbot brand, so it must not
+  // be an open renderer for arbitrary text.
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
   const searchParams = request.nextUrl.searchParams
   const dataParam = searchParams.get('data')
 
   if (!dataParam) {
     return new Response('Missing data parameter', { status: 400 })
   }
+  if (dataParam.length > MAX_DATA_LENGTH) {
+    return new Response('Data parameter too long', { status: 400 })
+  }
 
-  let data: LineupData
+  let raw: unknown
   try {
-    data = JSON.parse(decodeURIComponent(dataParam))
+    raw = JSON.parse(decodeURIComponent(dataParam))
   } catch {
     return new Response('Invalid data parameter', { status: 400 })
   }
+  const parsed = LineupSchema.safeParse(raw)
+  if (!parsed.success) {
+    return new Response('Invalid lineup data', { status: 400 })
+  }
 
-  const { groupName, matchDate, darkTeam = [], lightTeam = [] } = data
-  const t = getTranslation(data.lang === 'en' ? 'en' : 'es')
+  const { groupName, matchDate, darkTeam, lightTeam } = parsed.data
+  const t = getTranslation((parsed.data.lang ?? 'es') as Language)
   const countLabel = (n: number) =>
     n === 1 ? t('ui.teamsScreen.playersOne') : t('ui.teamsScreen.players', { n })
   const fonts = await loadFonts()
@@ -333,6 +367,7 @@ export async function GET(request: NextRequest) {
             teamName={t('ui.teamsScreen.dark')}
             countLabel={countLabel(darkTeam.length)}
             emptyLabel={t('ui.teamsScreen.empty')}
+            guestTag={t('ui.teamsAi.guestTag')}
           />
           <Field
             players={lightTeam}
@@ -340,6 +375,7 @@ export async function GET(request: NextRequest) {
             teamName={t('ui.teamsScreen.light')}
             countLabel={countLabel(lightTeam.length)}
             emptyLabel={t('ui.teamsScreen.empty')}
+            guestTag={t('ui.teamsAi.guestTag')}
           />
         </div>
       </div>
