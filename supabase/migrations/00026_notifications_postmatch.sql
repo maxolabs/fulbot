@@ -24,6 +24,8 @@
 --     and the match badges (E#6).
 --   * The report/rating window runs from finished_at (fallback: start + duration),
 --     not from the start time (E#10).
+--   * emit_notification accepts direct database sessions (no JWT claims) again,
+--     so the seed and SQL jobs can insert signup_open matches.
 
 -- ============================================
 -- 1. SETTINGS CONSTRAINTS
@@ -458,3 +460,83 @@ REVOKE ALL ON FUNCTION public.list_my_notifications(INTEGER) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.list_my_notifications(INTEGER) TO authenticated;
 REVOKE ALL ON FUNCTION public.mark_all_notifications_read() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mark_all_notifications_read() TO authenticated;
+
+-- ============================================
+-- 9. EMIT_NOTIFICATION FROM A DIRECT DB SESSION (00022 body)
+-- ============================================
+-- 00022's membership check also rejected callers with no JWT at all, so a
+-- signup_open match inserted by the seed (or any SQL job running as postgres)
+-- failed in notify_signup_opened with 'No sos miembro de este grupo'. Only the
+-- authorization check changes: a session without request.jwt.claims passes.
+
+CREATE OR REPLACE FUNCTION emit_notification(
+    p_group_id UUID,
+    p_match_id UUID,
+    p_type TEXT,
+    p_payload JSONB
+)
+RETURNS void AS $$
+DECLARE
+    v_settings public.notification_settings;
+    v_should_emit BOOLEAN := TRUE;
+    v_recipient_player_id UUID;
+BEGIN
+    IF p_group_id IS NULL OR p_type IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Authorization: the caller must be a member of the target group, or be
+    -- the service role (cron/recurring, cron/reminders and the match-created
+    -- helper all emit via the admin/service-role client on behalf of the
+    -- whole system, not a single acting member). Without this, any
+    -- authenticated user could call this SECURITY DEFINER RPC directly with
+    -- an arbitrary p_group_id and forge notifications/webhook sends into a
+    -- group they don't belong to. Mirrors the same-shaped check in
+    -- generate_recurring_matches (00010_recurring_matches.sql).
+    -- A direct database session (seed, migrations, pg_cron) carries no JWT
+    -- claims at all and is trusted like the service role. API callers always
+    -- have a role claim ('anon', 'authenticated' or 'service_role').
+    IF COALESCE(current_setting('request.jwt.claims', true)::jsonb->>'role', '') <> 'service_role'
+       AND COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ? 'role'
+       AND NOT is_group_member(p_group_id) THEN
+        RAISE EXCEPTION 'No sos miembro de este grupo';
+    END IF;
+
+    -- The ticker, daily cron and page loads may race. Serialize events which
+    -- should only happen once per match; repeated results/team events remain valid.
+    IF p_type IN ('match_created', 'match_reminder') AND p_match_id IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended(p_match_id::TEXT || p_type, 0));
+        IF EXISTS (SELECT 1 FROM public.notifications WHERE match_id = p_match_id AND type = p_type) THEN
+            RETURN;
+        END IF;
+    END IF;
+
+    SELECT * INTO v_settings FROM public.notification_settings WHERE group_id = p_group_id;
+
+    -- Toggle mapping (§2.6): reminders and results_posted always fire.
+    CASE p_type
+        WHEN 'waitlist_promoted' THEN
+            v_should_emit := COALESCE(v_settings.notify_on_waitlist_promotion, TRUE);
+        WHEN 'teams_created' THEN
+            v_should_emit := COALESCE(v_settings.notify_on_teams_created, TRUE);
+        WHEN 'match_created' THEN
+            v_should_emit := COALESCE(v_settings.send_signup_link_on_create, TRUE);
+        ELSE
+            v_should_emit := TRUE;
+    END CASE;
+
+    IF NOT v_should_emit THEN
+        RETURN;
+    END IF;
+
+    v_recipient_player_id := NULLIF(p_payload->>'recipient_player_id', '')::UUID;
+
+    INSERT INTO public.notifications (group_id, match_id, recipient_player_id, type, payload)
+    VALUES (p_group_id, p_match_id, v_recipient_player_id, p_type, COALESCE(p_payload, '{}'::jsonb));
+
+    IF v_settings.whatsapp_webhook_url IS NOT NULL AND btrim(v_settings.whatsapp_webhook_url) <> '' THEN
+        INSERT INTO public.notification_outbox (group_id, match_id, type, payload, channel)
+        VALUES (p_group_id, p_match_id, p_type, COALESCE(p_payload, '{}'::jsonb), 'whatsapp_webhook');
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

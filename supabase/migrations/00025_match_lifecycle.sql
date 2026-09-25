@@ -416,9 +416,10 @@ REVOKE ALL ON FUNCTION public_guest_signup(UUID, TEXT, UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public_guest_signup(UUID, TEXT, UUID) TO anon, authenticated;
 
 -- ============================================
--- 5. INVITE PAGE NEXT MATCH (00016 body)
+-- 5. INVITE PAGE NEXT MATCH (00024 body)
 -- ============================================
--- Same upcoming statuses as the dashboard layout (UPCOMING_STATUSES).
+-- Same upcoming statuses as the dashboard layout (UPCOMING_STATUSES). Keeps
+-- 00024's viewer_membership field and search_path.
 
 CREATE OR REPLACE FUNCTION get_public_group_by_invite(p_invite_code TEXT)
 RETURNS JSONB AS $$
@@ -443,6 +444,13 @@ BEGIN
             SELECT COUNT(*) FROM public.group_memberships gm
             WHERE gm.group_id = v_group.id AND gm.is_active = TRUE
         ),
+        'viewer_membership', (
+            SELECT CASE WHEN gm.is_active THEN 'active' ELSE 'inactive' END
+            FROM public.group_memberships gm
+            JOIN public.player_profiles pp ON pp.id = gm.player_id
+            WHERE gm.group_id = v_group.id AND auth.uid() IS NOT NULL AND pp.user_id = auth.uid()
+            LIMIT 1
+        ),
         'next_match', (
             SELECT jsonb_build_object(
                 'id', m.id,
@@ -466,7 +474,7 @@ BEGIN
 
     RETURN v_result;
 END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION get_public_group_by_invite(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION get_public_group_by_invite(TEXT) TO anon, authenticated, service_role;
