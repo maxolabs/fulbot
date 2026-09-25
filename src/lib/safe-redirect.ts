@@ -1,7 +1,7 @@
 // Post-auth redirect targets (?redirect= on /login and /register, ?next= on
 // /api/auth/callback) come from the URL, so anyone can craft them. Only
 // same-origin relative paths are allowed: a single leading slash, no
-// protocol-relative `//host`, no backslashes (browsers read `/\host` as
+// protocol-relative `//host` (also after dot segments resolve), no backslashes (browsers read `/\host` as
 // `//host`), no schemes, no control characters, including when
 // percent-encoded. Anything else falls back.
 //
@@ -38,10 +38,14 @@ export function safeRedirect(
   }
   if (isUnsafe(decoded)) return fallback
 
-  // Final check with the URL parser: the target must stay on our origin.
+  // Final check with the URL parser: the target must stay on our origin, and
+  // dot segments must not resolve to a protocol-relative path (`/.//host`,
+  // `/a/..//host`).
   try {
-    const url = new URL(value, PROBE_ORIGIN)
-    if (url.origin !== PROBE_ORIGIN) return fallback
+    for (const candidate of [value, decoded]) {
+      const url = new URL(candidate, PROBE_ORIGIN)
+      if (url.origin !== PROBE_ORIGIN || url.pathname.startsWith('//')) return fallback
+    }
   } catch {
     return fallback
   }
