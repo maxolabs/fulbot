@@ -17,6 +17,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types/database'
 import type { MatchCreatedPayload } from './types'
+import { getAppBaseUrl } from '@/lib/app-url'
 
 type PendingMatch = {
   id: string
@@ -54,7 +55,7 @@ export async function emitPendingMatchCreatedNotifications(
     .in('match_id', matches.map((m) => m.id))
 
   const alreadyNotified = new Set((existing ?? []).map((n) => n.match_id))
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl = getAppBaseUrl()
   let emitted = 0
 
   for (const match of matches) {

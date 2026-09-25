@@ -92,7 +92,10 @@ export default async function InvitePage({ params }: PageProps) {
   const nextMatchLine = match
     ? `${formatMatchDateShort(match.date_time, tz)} · ${formatMatchTime(match.date_time, tz)}${match.location ? ` · ${match.location}` : ''}`
     : null
-  const isFull = match ? match.confirmed_count >= match.max_players : false
+  // next_match can also be signup_closed or teams_created; only an open list
+  // takes guests or has a waitlist to join.
+  const signupOpen = match ? match.status === 'signup_open' || match.status === 'full' : false
+  const isFull = match && signupOpen ? match.confirmed_count >= match.max_players : false
 
   let hasProfile = false
   const wasInactive = group.viewer_membership === 'inactive'
@@ -185,7 +188,7 @@ export default async function InvitePage({ params }: PageProps) {
               </div>
             )}
 
-            {match && (
+            {match && signupOpen && (
               <div className="space-y-1 border-t border-border pt-4 text-center">
                 <Button asChild variant="link" className="text-foreground">
                   <Link href={`/m/${match.id}`}>{t('ui.screens.invite.guestPath')}</Link>

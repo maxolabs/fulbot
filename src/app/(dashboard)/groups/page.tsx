@@ -179,18 +179,23 @@ export default async function GroupsPage() {
 
     const { data: finishedRows } = await supabase
       .from('matches')
-      .select('id, group_id, date_time, result_status')
+      .select('id, group_id, date_time, result_status, finished_at, duration_minutes')
       .in('group_id', groupIds)
       .eq('status', 'finished')
       .neq('result_status', 'locked')
-      .gte('date_time', earliest.toISOString())
+      .or(`date_time.gte.${earliest.toISOString()},finished_at.gte.${earliest.toISOString()}`)
       .order('date_time', { ascending: false }) as {
-        data: { id: string; group_id: string; date_time: string; result_status: string }[] | null
+        data: { id: string; group_id: string; date_time: string; result_status: string; finished_at: string | null; duration_minutes: number | null }[] | null
       }
 
-    const finishedMatches = (finishedRows || []).filter(
-      (m) => now.getTime() - new Date(m.date_time).getTime() < windowDaysFor(m.group_id) * 24 * 60 * 60 * 1000
-    )
+    // Same anchor as match_report_window_open (00026): finished_at, or else
+    // start + duration.
+    const finishedMatches = (finishedRows || []).filter((m) => {
+      const endMs = m.finished_at
+        ? new Date(m.finished_at).getTime()
+        : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000
+      return now.getTime() - endMs < windowDaysFor(m.group_id) * 24 * 60 * 60 * 1000
+    })
 
     if (finishedMatches.length > 0) {
       const matchIds = finishedMatches.map((m) => m.id)

@@ -307,13 +307,18 @@ export default async function GroupDetailPage({ params }: PageProps) {
       .maybeSingle() as { data: { results_window_days: number | null } | null }
     const windowMs = (settingsRow?.results_window_days ?? 7) * 24 * 60 * 60 * 1000
     const now = new Date().getTime()
-    type NudgeCandidate = { id: string; date_time: string; result_status: string }
+    type NudgeCandidate = { id: string; date_time: string; result_status: string; finished_at: string | null; duration_minutes: number | null }
     const { data: candidateRows } = await supabase
       .from('matches')
-      .select('id, date_time, result_status')
+      .select('id, date_time, result_status, finished_at, duration_minutes')
       .in('id', finished.map(m => m.id))
       .neq('result_status', 'locked') as { data: NudgeCandidate[] | null }
-    const candidates = (candidateRows || []).filter(m => now - new Date(m.date_time).getTime() < windowMs)
+    // Same anchor as match_report_window_open (00026): finished_at, or else
+    // start + duration.
+    const endMs = (m: NudgeCandidate) => m.finished_at
+      ? new Date(m.finished_at).getTime()
+      : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000
+    const candidates = (candidateRows || []).filter(m => now - endMs(m) < windowMs)
     if (candidates.length > 0) {
       const ids = candidates.map(m => m.id)
       const [{ data: mySignups }, { data: myReports }] = await Promise.all([

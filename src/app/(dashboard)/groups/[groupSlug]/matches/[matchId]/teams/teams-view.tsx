@@ -15,6 +15,7 @@ import { placePlayersInFormation, type PlacedPlayer } from '@/lib/formations'
 import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { useLanguage, useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { Sheet } from '@/components/ui/sheet'
 import { DraggableTeams } from './draggable-teams'
 import { normalizePosition } from '@/lib/teams/manual'
@@ -188,7 +189,7 @@ export function TeamsView({
     n === 1 ? t('ui.teamsScreen.playersOne') : t('ui.teamsScreen.players', { n })
   const levelLabel = (list: TeamPlayer[]) => t('ui.teamsScreen.level', { n: average(list).toFixed(1) })
 
-  const shareInput = { matchUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
+  const shareInput = { matchUrl: `${getAppBaseUrl()}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
     copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing'), guest: t('ui.teamsAi.guestTag') } }
 
   const copySimple = async () => {
