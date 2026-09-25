@@ -23,7 +23,7 @@ import { MeLinks } from './me-links'
 // `Yo` tab) the aside comes first, under the Avisos / Preferencias rows, and
 // "Salir" closes the page.
 
-const POSITION_CODES = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LW', 'RW', 'ST'] as const
+const POSITION_CODES = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'] as const
 
 export default async function ProfilePage() {
   const supabase = await createClient()

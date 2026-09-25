@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       // only shows up as the unique violation on insert.
       if (groupError.code === '23505') {
         return NextResponse.json(
-          { error: 'Este URL ya está en uso. Elige otro.' },
+          { error: 'Esta URL ya está en uso. Elegí otra.' },
           { status: 400 }
         )
       }

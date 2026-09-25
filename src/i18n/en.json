@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "FUTBOT",
+    "appName": "fulbot",
     "loading": "Loading...",
     "save": "Save",
     "cancel": "Cancel",
@@ -444,7 +444,8 @@
       "rateTitle": "Rate the players",
       "ratedOne": "You rated 1 player. Only you can see your ratings.",
       "ratedMany": "You rated {count} players. Only you can see your ratings.",
-      "editResult": "Edit and lock the result"
+      "editResult": "Edit and lock the result",
+      "removeConfirmTitle": "Remove {name} from the match?"
     },
     "notify": {
       "reminderHint": "0 = no reminder. Only confirmed players get it.",
@@ -454,7 +455,31 @@
       "webhookCredentials": "The webhook URL can't include a username or password.",
       "prefMatchCancelledTitle": "Match cancelled",
       "prefMatchCancelledDesc": "When a match you signed up for is cancelled",
-      "webhookHost": "The webhook URL can't point to a local or private network."
+      "webhookHost": "The webhook URL can't point to a local or private network.",
+      "saveError": "Couldn't save the settings. Try again.",
+      "saved": "Settings saved",
+      "reminderTitle": "Reminder before the match",
+      "reminderDesc": "Hours before the match to send the reminder",
+      "hours": "hours",
+      "waitlistTitle": "Notify waitlist promotions",
+      "waitlistDesc": "When a player moves from the waitlist to confirmed",
+      "teamsTitle": "Notify when teams are built",
+      "teamsDesc": "Tell the group when the teams for a match are generated",
+      "resultsTitle": "Result after the match",
+      "resultsDesc": "When to ask players for the score, goals and MVP. New matches copy these values; each match can change them.",
+      "durationLabel": "Match length",
+      "minutes": "minutes",
+      "durationHint": "The match is marked as finished on its own once this time has passed.",
+      "requestLabel": "Ask for the result",
+      "minutesAfterEnd": "minutes after the end",
+      "resultsReminderLabel": "Reminder to those who haven't reported",
+      "hoursAfterRequest": "hours after the request",
+      "noReminder": "0 = no reminder.",
+      "windowLabel": "Reporting window",
+      "daysAfterMatch": "days after the match",
+      "windowHint": "After that the result locks with whatever was reported, and admins are told if nobody reported.",
+      "saving": "Saving…",
+      "save": "Save changes"
     },
     "guest": "guest",
     "close": "Close",
@@ -693,8 +718,6 @@
           "ironman": "Ironman",
           "safe_hands": "Safe hands",
           "mvp": "MVP",
-          "mvp_streak": "MVP streak",
-          "first_match": "First match",
           "ejemplar": "Role model"
         },
         "groupRating": "Group rating"
@@ -741,8 +764,8 @@
         "makeMember": "Make member",
         "remove": "Remove from group",
         "removeConfirm": "Remove {name} from the group?",
-        "roleError": "Error changing role",
-        "removeError": "Error removing member",
+        "roleError": "Couldn't change the role. Try again.",
+        "removeError": "Couldn't remove the member. Try again.",
         "adminHint": "Manages the group, members and matches",
         "captainHint": "Creates matches and builds teams",
         "memberHint": "Signs up and votes"
@@ -1004,6 +1027,102 @@
         "signupFailed": "We couldn't sign you up. Try again.",
         "cancelFailed": "We couldn't cancel your signup. Try again."
       }
+    },
+    "profileForm": {
+      "saveError": "Couldn't save your changes. Try again.",
+      "saved": "Profile updated",
+      "name": "Name",
+      "nickname": "Nickname (optional)",
+      "nicknamePlaceholder": "What people call you",
+      "otherPositions": "Other positions you'd play (max. 4)",
+      "gkLabel": "Willingness to play in goal (0 = never, 3 = love it)",
+      "fitnessLabel": "Current fitness",
+      "fitnessOkDesc": "Fully fit",
+      "fitnessLimitedDesc": "Can play, but carefully",
+      "fitnessInjuredDesc": "Can't play",
+      "save": "Save changes"
+    },
+    "ratingsCard": {
+      "title": "Ratings",
+      "saveError": "Couldn't save your ratings. Try again.",
+      "none": "You didn't rate anyone in this match.",
+      "rate": "Rate",
+      "closed": "The rating window is closed",
+      "privateHint": "Optional and private: nobody else sees your ratings.",
+      "starOne": "1 star for {name}",
+      "starMany": "{n} stars for {name}",
+      "save": "Save ratings"
+    },
+    "result": {
+      "title": "Result",
+      "badge": {
+        "pending": "No result",
+        "provisional": "Provisional",
+        "consensus": "Consensus",
+        "locked": "Locked"
+      },
+      "reporters": "{n} of {total} reported",
+      "lockedReporters": "Locked by an admin · {n} of {total} reported",
+      "noGoals": "No goals",
+      "assists": "{n} ast.",
+      "unattributedOne": "1 goal with no scorer",
+      "unattributedMany": "{n} goals with no scorer",
+      "mvp": "MVP: {name}",
+      "player": "Player",
+      "status": {
+        "pending": "No result yet",
+        "provisional": "Provisional consensus",
+        "consensus": "Consensus reached",
+        "locked": "Result locked"
+      },
+      "scorerRequired": "Every goal in the list needs a scorer. If you don't know who scored, delete the row: the score already counts it.",
+      "overAttributedError": "There are more goals listed than the score. Raise the score or delete goals.",
+      "savedLocked": "Result saved and locked. Player reports won't change it anymore.",
+      "saveError": "Couldn't save the result. Try again.",
+      "unlockConfirmTitle": "Reopen the result?",
+      "unlockConfirmBody": "The result is recalculated from player reports and what you entered by hand is discarded.",
+      "unlocked": "Result reopened: it follows the consensus of the reports again.",
+      "unlockError": "Couldn't reopen the result. Try again.",
+      "minusGoal": "Remove a goal from {team}",
+      "plusGoal": "Add a goal to {team}",
+      "goalsOf": "{team} goals",
+      "scorer": "Scorer",
+      "selectScorer": "Choose the scorer…",
+      "assist": "Assist",
+      "assistOptional": "Assist (optional)",
+      "removeGoal": "Remove goal",
+      "overOne": "There is 1 goal more than the score",
+      "overMany": "There are {n} goals more than the score",
+      "lockedTitle": "Result locked",
+      "enterTitle": "Enter the result",
+      "lockedPlain": "Locked",
+      "lockedBy": "Locked by {name}",
+      "lockedOn": " on {date}",
+      "lockedNote": "reports sent from now on are saved but don't change the result.",
+      "correct": "Correct the result",
+      "reopen": "Reopen (back to consensus)",
+      "intro": "{status}. What you see below is what the reports say so far; when you save, your version becomes final and locks.",
+      "mvpKeep": "Keep the most voted",
+      "saveLock": "Save and lock the result"
+    },
+    "dangerZone": {
+      "title": "Delete group",
+      "description": "Permanently deletes the group and all its data",
+      "warning": "This can't be undone. All the group's matches, signups, teams and stats will be deleted.",
+      "typeToConfirm": "To confirm, type the group name:",
+      "confirm": "Confirm deletion",
+      "mismatch": "The name doesn't match",
+      "error": "Couldn't delete the group. Try again."
+    },
+    "adminActions": {
+      "noTeamsHint": "Without teams the match can't be finished: build the teams first.",
+      "edit": "Edit match",
+      "markFinished": "Mark as finished",
+      "cancel": "Cancel match",
+      "delete": "Delete match",
+      "deleteConfirm": "Delete this match? This can't be undone.",
+      "confirmCancel": "Yes, cancel it",
+      "confirmDelete": "Yes, delete it"
     }
   },
   "devicePush": {

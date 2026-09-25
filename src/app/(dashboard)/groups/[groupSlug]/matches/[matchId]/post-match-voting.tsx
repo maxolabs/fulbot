@@ -99,7 +99,7 @@ export function PostMatchVoting({
       await loadExisting()
     } catch (err) {
       console.error('Error saving ratings:', err)
-      setError(err instanceof Error ? err.message : 'No se pudieron guardar las calificaciones')
+      setError(t('ui.ratingsCard.saveError'))
     } finally {
       setLoading(false)
     }
@@ -115,7 +115,7 @@ export function PostMatchVoting({
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
-            Calificaciones
+            {t('ui.ratingsCard.title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -124,17 +124,17 @@ export function PostMatchVoting({
               ? savedCount === 1
                 ? t('ui.postMatch.ratedOne')
                 : t('ui.postMatch.ratedMany', { count: savedCount })
-              : 'No calificaste a nadie en este partido.'}
+              : t('ui.ratingsCard.none')}
           </p>
           {windowOpen ? (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil className="mr-2 h-4 w-4" />
-              {savedCount > 0 ? 'Editar' : 'Calificar'}
+              {savedCount > 0 ? t('common.edit') : t('ui.ratingsCard.rate')}
             </Button>
           ) : (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              La ventana para calificar cerró
+              {t('ui.ratingsCard.closed')}
             </p>
           )}
         </CardContent>
@@ -149,7 +149,7 @@ export function PostMatchVoting({
           <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
           {t('ui.postMatch.rateTitle')}
         </CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">Opcional y privado: nadie más ve tus calificaciones.</p>
+        <p className="text-sm text-muted-foreground mt-1">{t('ui.ratingsCard.privateHint')}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3">
@@ -168,7 +168,7 @@ export function PostMatchVoting({
                       }))
                     }}
                     className="p-0.5"
-                    aria-label={`${star} ${star === 1 ? 'estrella' : 'estrellas'} para ${player.display_name}`}
+                    aria-label={star === 1 ? t('ui.ratingsCard.starOne', { name: player.display_name }) : t('ui.ratingsCard.starMany', { n: star, name: player.display_name })}
                   >
                     <Star
                       className={`h-5 w-5 transition-colors ${
@@ -189,11 +189,11 @@ export function PostMatchVoting({
         <div className="flex gap-2">
           <Button onClick={handleSubmit} disabled={loading} className="flex-1">
             {loading ? <Spinner size="sm" className="mr-2" /> : <Check className="mr-2 h-4 w-4" />}
-            Guardar calificaciones
+            {t('ui.ratingsCard.save')}
           </Button>
           {savedCount > 0 && (
             <Button variant="ghost" onClick={() => { setRatings(saved); setEditing(false) }} disabled={loading}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
           )}
         </div>

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
+import { useT } from '@/i18n/provider'
 
 interface ProfileFormProps {
   profile: {
@@ -26,6 +27,7 @@ interface ProfileFormProps {
 export function ProfileForm({ profile, positions }: ProfileFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -79,7 +81,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error updating profile:', err)
-      setError('Error al guardar los cambios')
+      setError(t('ui.profileForm.saveError'))
     } finally {
       setLoading(false)
     }
@@ -88,12 +90,12 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <FormNotice kind="error">{error}</FormNotice>}
-      {success && <FormNotice kind="success">Perfil actualizado correctamente</FormNotice>}
+      {success && <FormNotice kind="success">{t('ui.profileForm.saved')}</FormNotice>}
 
       {/* Basic Info */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="displayName">Nombre</Label>
+          <Label htmlFor="displayName">{t('ui.profileForm.name')}</Label>
           <Input
             id="displayName"
             value={displayName}
@@ -104,21 +106,21 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="nickname">Apodo (opcional)</Label>
+          <Label htmlFor="nickname">{t('ui.profileForm.nickname')}</Label>
           <Input
             id="nickname"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             disabled={loading}
             maxLength={20}
-            placeholder="Cómo te dicen"
+            placeholder={t('ui.profileForm.nicknamePlaceholder')}
           />
         </div>
       </div>
 
       {/* Position */}
       <div className="space-y-1.5">
-        <Label htmlFor="mainPosition">Posición principal</Label>
+        <Label htmlFor="mainPosition">{t('players.mainPosition')}</Label>
         <NativeSelect
           id="mainPosition"
           value={mainPosition}
@@ -135,7 +137,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
 
       {/* Preferred Positions */}
       <div className="space-y-1.5">
-        <Label>Otras posiciones que jugarías (máx. 4)</Label>
+        <Label>{t('ui.profileForm.otherPositions')}</Label>
         <div className="flex flex-wrap gap-2">
           {positions.map((pos) => (
             <button
@@ -158,12 +160,12 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
 
       {/* Footedness */}
       <div className="space-y-1.5">
-        <Label>Pie hábil</Label>
+        <Label>{t('players.footedness')}</Label>
         <div className="flex flex-wrap gap-4 pt-1">
           {[
-            { value: 'right', label: 'Diestro' },
-            { value: 'left', label: 'Zurdo' },
-            { value: 'both', label: 'Ambidiestro' },
+            { value: 'right', label: t('ui.screens.player.rightFooted') },
+            { value: 'left', label: t('ui.screens.player.leftFooted') },
+            { value: 'both', label: t('ui.screens.player.bothFooted') },
           ].map((option) => (
             <label key={option.value} className="flex items-center gap-2 cursor-pointer">
               <input
@@ -184,7 +186,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       {/* Goalkeeper willingness */}
       <div className="space-y-1.5">
         <Label htmlFor="goalkeeperWillingness">
-          Disposición para atajar (0 = nunca, 3 = me encanta)
+          {t('ui.profileForm.gkLabel')}
         </Label>
         <div className="flex items-center gap-4">
           <input
@@ -202,21 +204,18 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {goalkeeperWillingness === 0 && 'No atajo ni loco'}
-          {goalkeeperWillingness === 1 && 'Solo si no hay otra opción'}
-          {goalkeeperWillingness === 2 && 'Puedo atajar si hace falta'}
-          {goalkeeperWillingness === 3 && 'Me gusta atajar'}
+          {t(['ui.screens.player.gkNever', 'ui.screens.player.gkIfNeeded', 'ui.screens.player.gkOk', 'ui.screens.player.gkLoves'][goalkeeperWillingness] ?? 'ui.screens.player.gkOk')}
         </p>
       </div>
 
       {/* Fitness status */}
       <div className="space-y-1.5">
-        <Label>Estado físico actual</Label>
+        <Label>{t('ui.profileForm.fitnessLabel')}</Label>
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           {[
-            { value: 'ok', label: 'Bien', description: 'Al 100%' },
-            { value: 'limited', label: 'Limitado', description: 'Puedo jugar pero con cuidado' },
-            { value: 'injured', label: 'Lesionado', description: 'No puedo jugar' },
+            { value: 'ok', label: t('players.ok'), description: t('ui.profileForm.fitnessOkDesc') },
+            { value: 'limited', label: t('players.limited'), description: t('ui.profileForm.fitnessLimitedDesc') },
+            { value: 'injured', label: t('players.injured'), description: t('ui.profileForm.fitnessInjuredDesc') },
           ].map((option) => (
             <label
               key={option.value}
@@ -246,7 +245,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
 
       <Button type="submit" disabled={loading}>
         {loading && <Spinner size="sm" />}
-        Guardar cambios
+        {t('ui.profileForm.save')}
       </Button>
     </form>
   )

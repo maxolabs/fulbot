@@ -6,6 +6,8 @@ import { Plus, Minus, Save, Trash2, Goal, Lock, Unlock, Pencil } from 'lucide-re
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import { Sheet } from '@/components/ui/sheet'
+import { useLanguage, useT } from '@/i18n/provider'
 import { createClient } from '@/lib/supabase/client'
 import type { AdminMatchEventInput, Json, MatchResultStatus } from '@/types/database'
 
@@ -48,13 +50,6 @@ interface MatchResultsProps {
   mvpPlayerId: string | null
   /** Registered confirmed players of the match (MVP candidates). */
   mvpCandidates: { id: string; display_name: string }[]
-}
-
-const STATUS_LABEL: Record<MatchResultStatus, string> = {
-  pending: 'Sin resultado todavía',
-  provisional: 'Consenso provisional',
-  consensus: 'Consenso alcanzado',
-  locked: 'Resultado cerrado',
 }
 
 // supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
@@ -102,9 +97,11 @@ export function MatchResults({
 }: MatchResultsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
+  const language = useLanguage()
 
-  const darkTeam = teams.find(t => t.name === 'dark')
-  const lightTeam = teams.find(t => t.name === 'light')
+  const darkTeam = teams.find(team => team.name === 'dark')
+  const lightTeam = teams.find(team => team.name === 'light')
 
   const [darkScore, setDarkScore] = useState(darkTeam?.score ?? 0)
   const [lightScore, setLightScore] = useState(lightTeam?.score ?? 0)
@@ -119,6 +116,7 @@ export function MatchResults({
   // Formatted on the client only: toLocaleString differs between server and browser
   // (timezone/locale data), which would otherwise be a hydration mismatch.
   const [lockedAtLabel, setLockedAtLabel] = useState<string | null>(null)
+  const [unlockOpen, setUnlockOpen] = useState(false)
 
   const isLocked = resultStatus === 'locked'
 
@@ -133,9 +131,9 @@ export function MatchResults({
 
   useEffect(() => {
     setLockedAtLabel(
-      lockedAt ? new Date(lockedAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+      lockedAt ? new Date(lockedAt).toLocaleString(language === 'en' ? 'en-US' : 'es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
     )
-  }, [lockedAt])
+  }, [lockedAt, language])
 
   useEffect(() => {
     if (!isLocked || !lockedBy) {
@@ -170,12 +168,12 @@ export function MatchResults({
     else setLightScore(clamped)
   }
   const unattributedFor = (team: TeamData) => scoreFor(team) - getTeamGoals(team.id).length
-  const overAttributed = teams.some(t => unattributedFor(t) < 0)
+  const overAttributed = teams.some(team => unattributedFor(team) < 0)
 
   const addGoal = (teamId: string) => {
     setGoals(prev => [...prev, { team_id: teamId, scorer_id: '', assister_id: null }])
     // A newly listed goal is a goal: bump the score if the list would exceed it.
-    const team = teams.find(t => t.id === teamId)
+    const team = teams.find(candidate => candidate.id === teamId)
     if (team && unattributedFor(team) <= 0) setScoreFor(team, scoreFor(team) + 1)
   }
 
@@ -196,11 +194,11 @@ export function MatchResults({
 
   const handleSave = async () => {
     if (goals.some(g => !g.scorer_id)) {
-      setError('Cada gol de la lista necesita un goleador. Si no sabés quién lo hizo, borrá la fila: el resultado ya lo cuenta.')
+      setError(t('ui.result.scorerRequired'))
       return
     }
     if (overAttributed) {
-      setError('Hay más goles cargados que los del resultado. Subí el resultado o borrá goles.')
+      setError(t('ui.result.overAttributedError'))
       return
     }
 
@@ -232,32 +230,31 @@ export function MatchResults({
       })
       if (rpcError) throw rpcError
 
-      setSavedMessage('Resultado guardado y cerrado. Los reportes de los jugadores ya no lo modifican.')
+      setSavedMessage(t('ui.result.savedLocked'))
       setEditingLocked(false)
       router.refresh()
     } catch (err) {
       console.error('Error saving results:', err)
-      setError(errorMessage(err, 'Error al guardar el resultado'))
+      setError(errorMessage(err, t('ui.result.saveError')))
     } finally {
       setSaving(false)
     }
   }
 
   const handleUnlock = async () => {
-    if (!confirm('Al reabrir, el resultado vuelve a calcularse con los reportes de los jugadores y lo que cargaste a mano se descarta. ¿Continuar?')) {
-      return
-    }
     setSaving(true)
     setError(null)
     setSavedMessage(null)
     try {
       const { error: rpcError } = await supabase.rpc('admin_unlock_match_result', { p_match_id: matchId })
       if (rpcError) throw rpcError
-      setSavedMessage('Resultado reabierto: vuelve a seguir el consenso de los reportes.')
+      setSavedMessage(t('ui.result.unlocked'))
+      setUnlockOpen(false)
       router.refresh()
     } catch (err) {
       console.error('Error unlocking result:', err)
-      setError(errorMessage(err, 'Error al reabrir el resultado'))
+      setUnlockOpen(false)
+      setError(errorMessage(err, t('ui.result.unlockError')))
     } finally {
       setSaving(false)
     }
@@ -265,7 +262,7 @@ export function MatchResults({
 
   const renderTeamSection = (team: TeamData) => {
     const teamGoals = getTeamGoals(team.id)
-    const teamLabel = team.name === 'dark' ? 'Oscuro' : 'Claro'
+    const teamLabel = t(`ui.matchScreens.dashboard.${team.name}`)
     const unattributed = unattributedFor(team)
 
     return (
@@ -279,7 +276,7 @@ export function MatchResults({
                 type="button"
                 variant="outline"
                 size="sm"
-                aria-label={`Restar gol a ${teamLabel}`}
+                aria-label={t('ui.result.minusGoal', { team: teamLabel })}
                 onClick={() => setScoreFor(team, scoreFor(team) - 1)}
                 disabled={saving || scoreFor(team) <= 0}
               >
@@ -291,7 +288,7 @@ export function MatchResults({
                 max={99}
                 value={scoreFor(team)}
                 onChange={e => setScoreFor(team, Number(e.target.value))}
-                aria-label={`Goles de ${teamLabel}`}
+                aria-label={t('ui.result.goalsOf', { team: teamLabel })}
                 className="w-14 text-center text-2xl font-bold rounded-md border border-input bg-background py-1"
                 disabled={saving}
               />
@@ -299,7 +296,7 @@ export function MatchResults({
                 type="button"
                 variant="outline"
                 size="sm"
-                aria-label={`Sumar gol a ${teamLabel}`}
+                aria-label={t('ui.result.plusGoal', { team: teamLabel })}
                 onClick={() => setScoreFor(team, scoreFor(team) + 1)}
                 disabled={saving}
               >
@@ -309,18 +306,18 @@ export function MatchResults({
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => addGoal(team.id)} disabled={saving}>
             <Plus className="h-4 w-4 mr-1" />
-            Goleador
+            {t('ui.result.scorer')}
           </Button>
         </div>
 
         {unattributed > 0 && (
           <p className="text-xs text-muted-foreground pl-6">
-            {unattributed === 1 ? '1 gol sin autor' : `${unattributed} goles sin autor`}
+            {unattributed === 1 ? t('ui.result.unattributedOne') : t('ui.result.unattributedMany', { n: unattributed })}
           </p>
         )}
         {unattributed < 0 && (
           <p className="text-xs text-destructive pl-6">
-            Hay {-unattributed} {-unattributed === 1 ? 'gol cargado de más' : 'goles cargados de más'} respecto al resultado
+            {unattributed === -1 ? t('ui.result.overOne') : t('ui.result.overMany', { n: -unattributed })}
           </p>
         )}
 
@@ -332,11 +329,11 @@ export function MatchResults({
                 <select
                   value={goal.scorer_id}
                   onChange={e => updateGoal(globalIndex, { scorer_id: e.target.value })}
-                  aria-label="Goleador"
+                  aria-label={t('ui.result.scorer')}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   disabled={saving}
                 >
-                  <option value="">Seleccionar goleador...</option>
+                  <option value="">{t('ui.result.selectScorer')}</option>
                   {team.players.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.display_name}
@@ -346,11 +343,11 @@ export function MatchResults({
                 <select
                   value={goal.assister_id || ''}
                   onChange={e => updateGoal(globalIndex, { assister_id: e.target.value || null })}
-                  aria-label="Asistencia"
+                  aria-label={t('ui.result.assist')}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   disabled={saving}
                 >
-                  <option value="">Asistencia (opcional)</option>
+                  <option value="">{t('ui.result.assistOptional')}</option>
                   {team.players
                     .filter(p => p.id !== goal.scorer_id)
                     .map(p => (
@@ -364,7 +361,7 @@ export function MatchResults({
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label="Quitar gol"
+                aria-label={t('ui.result.removeGoal')}
                 onClick={() => removeGoal(globalIndex)}
                 className="text-destructive hover:text-destructive mt-1"
                 disabled={saving}
@@ -385,7 +382,7 @@ export function MatchResults({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           {isLocked ? <Lock className="h-5 w-5" /> : <Goal className="h-5 w-5" />}
-          {isLocked ? 'Resultado cerrado' : 'Cargar resultado'}
+          {isLocked ? t('ui.result.lockedTitle') : t('ui.result.enterTitle')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -399,19 +396,20 @@ export function MatchResults({
         {isLocked && (
           <div className="rounded-md border px-4 py-3 text-sm space-y-3">
             <p>
-              Cerrado{lockedByName ? ` por ${lockedByName}` : ''}{lockedAtLabel ? ` el ${lockedAtLabel}` : ''}
-              {' — '}los reportes que lleguen ahora se guardan pero no cambian el resultado.
+              {lockedByName ? t('ui.result.lockedBy', { name: lockedByName }) : t('ui.result.lockedPlain')}
+              {lockedAtLabel ? t('ui.result.lockedOn', { date: lockedAtLabel }) : ''}
+              {' — '}{t('ui.result.lockedNote')}
             </p>
             <div className="flex flex-wrap gap-2">
               {!editingLocked && (
                 <Button type="button" variant="outline" size="sm" onClick={() => setEditingLocked(true)} disabled={saving}>
                   <Pencil className="h-4 w-4 mr-1" />
-                  Corregir resultado
+                  {t('ui.result.correct')}
                 </Button>
               )}
-              <Button type="button" variant="outline" size="sm" onClick={handleUnlock} disabled={saving}>
-                {saving ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
-                Reabrir (volver al consenso)
+              <Button type="button" variant="outline" size="sm" onClick={() => setUnlockOpen(true)} disabled={saving}>
+                <Unlock className="h-4 w-4 mr-1" />
+                {t('ui.result.reopen')}
               </Button>
             </div>
           </div>
@@ -419,8 +417,7 @@ export function MatchResults({
 
         {!isLocked && (
           <p className="text-sm text-muted-foreground">
-            {STATUS_LABEL[resultStatus]}. Lo que ves abajo es lo que dicen los reportes hasta ahora; al guardar,
-            tu versión pasa a ser la definitiva y se cierra.
+            {t('ui.result.intro', { status: t(`ui.result.status.${resultStatus}`) })}
           </p>
         )}
 
@@ -442,7 +439,7 @@ export function MatchResults({
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 disabled={saving}
               >
-                <option value="">Mantener el más votado</option>
+                <option value="">{t('ui.result.mvpKeep')}</option>
                 {mvpCandidates.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.display_name}
@@ -453,11 +450,29 @@ export function MatchResults({
 
             <Button onClick={handleSave} disabled={saving} className="w-full">
               {saving ? <Spinner size="sm" className="mr-2" /> : <Save className="mr-2 h-4 w-4" />}
-              Guardar y cerrar resultado
+              {t('ui.result.saveLock')}
             </Button>
           </>
         )}
       </CardContent>
+      {isLocked && (
+        <Sheet
+          open={unlockOpen}
+          onOpenChange={setUnlockOpen}
+          title={t('ui.result.unlockConfirmTitle')}
+          description={t('ui.result.unlockConfirmBody')}
+        >
+          <div className="flex flex-wrap gap-3 pt-4">
+            <Button disabled={saving} onClick={handleUnlock}>
+              {saving ? <Spinner size="sm" /> : <Unlock className="h-4 w-4" />}
+              {t('ui.result.reopen')}
+            </Button>
+            <Button variant="outline" disabled={saving} onClick={() => setUnlockOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+          </div>
+        </Sheet>
+      )}
     </Card>
   )
 }

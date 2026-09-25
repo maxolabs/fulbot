@@ -193,7 +193,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       <div className="flex items-center gap-2">
         <Repeat className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
-          Crea automáticamente el próximo partido cada semana, con inscripciones que abren solas.
+          El próximo partido se crea solo cada semana, con inscripciones que abren solas.
         </p>
         {patternId && (
           <Badge variant={isActive ? 'success' : 'outline'} className="ml-auto">

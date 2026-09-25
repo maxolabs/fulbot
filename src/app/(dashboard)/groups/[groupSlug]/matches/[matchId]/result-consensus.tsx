@@ -2,6 +2,8 @@ import { Goal, Trophy, Lock, Users } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { MatchResultStatus } from '@/types/database'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 
 // Result block shown to every member of a finished match. It renders the
 // consensus (or admin-locked) result that lives in teams.score / match_events /
@@ -32,13 +34,14 @@ interface ResultConsensusProps {
   reportersCount: number
   playersCount: number
   mvpName: string | null
+  language: Language
 }
 
-const STATUS_LABEL: Record<MatchResultStatus, { label: string; variant: 'outline' | 'success' | 'secondary' | 'warning' }> = {
-  pending: { label: 'Sin resultado', variant: 'outline' },
-  provisional: { label: 'Provisional', variant: 'warning' },
-  consensus: { label: 'Consenso', variant: 'success' },
-  locked: { label: 'Cerrado', variant: 'secondary' },
+const STATUS_VARIANT: Record<MatchResultStatus, 'outline' | 'success' | 'secondary' | 'warning'> = {
+  pending: 'outline',
+  provisional: 'warning',
+  consensus: 'success',
+  locked: 'secondary',
 }
 
 interface PlayerLine {
@@ -48,7 +51,7 @@ interface PlayerLine {
   assists: number
 }
 
-function groupTeamEvents(events: ConsensusEvent[], teamId: string) {
+function groupTeamEvents(events: ConsensusEvent[], teamId: string, fallbackName: string) {
   const byPlayer = new Map<string, PlayerLine>()
   let unattributed = 0
 
@@ -60,7 +63,7 @@ function groupTeamEvents(events: ConsensusEvent[], teamId: string) {
       if (e.event_type === 'goal') unattributed += 1
       continue
     }
-    const line = byPlayer.get(key) || { key, name: e.player_name || 'Jugador', goals: 0, assists: 0 }
+    const line = byPlayer.get(key) || { key, name: e.player_name || fallbackName, goals: 0, assists: 0 }
     if (e.event_type === 'goal') line.goals += 1
     else line.assists += 1
     byPlayer.set(key, line)
@@ -79,15 +82,17 @@ export function ResultConsensus({
   reportersCount,
   playersCount,
   mvpName,
+  language,
 }: ResultConsensusProps) {
+  const tr = getT(language)
   const darkTeam = teams.find(t => t.name === 'dark')
   const lightTeam = teams.find(t => t.name === 'light')
 
   if (!darkTeam || !lightTeam) return null
   if (resultStatus === 'pending') return null
 
-  const status = STATUS_LABEL[resultStatus]
-  const grouped = [darkTeam, lightTeam].map(team => ({ team, ...groupTeamEvents(events, team.id) }))
+  const teamLabel = (name: ConsensusTeam['name']) => tr(`ui.matchScreens.dashboard.${name}`)
+  const grouped = [darkTeam, lightTeam].map(team => ({ team, ...groupTeamEvents(events, team.id, tr('ui.result.player')) }))
   const hasDetails = grouped.some(g => g.lines.length > 0 || g.unattributed > 0)
 
   return (
@@ -96,31 +101,31 @@ export function ResultConsensus({
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <Goal className="h-5 w-5" />
-            Resultado
+            {tr('ui.result.title')}
           </CardTitle>
-          <Badge variant={status.variant} className="flex items-center gap-1">
+          <Badge variant={STATUS_VARIANT[resultStatus]} className="flex items-center gap-1">
             {resultStatus === 'locked' && <Lock className="h-3 w-3" />}
-            {status.label}
+            {tr(`ui.result.badge.${resultStatus}`)}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
           <Users className="h-3.5 w-3.5" />
           {resultStatus === 'locked'
-            ? `Cerrado por un admin · ${reportersCount} de ${playersCount} reportaron`
-            : `${reportersCount} de ${playersCount} reportaron`}
+            ? tr('ui.result.lockedReporters', { n: reportersCount, total: playersCount })
+            : tr('ui.result.reporters', { n: reportersCount, total: playersCount })}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-center gap-6 text-center">
           <div>
             <div className="w-6 h-6 rounded-full border mx-auto mb-1" style={{ backgroundColor: darkTeam.color_hex }} />
-            <span className="text-sm text-muted-foreground">Oscuro</span>
+            <span className="text-sm text-muted-foreground">{teamLabel('dark')}</span>
             <p className="text-3xl font-bold">{darkTeam.score}</p>
           </div>
           <span className="text-2xl text-muted-foreground font-light">—</span>
           <div>
             <div className="w-6 h-6 rounded-full border mx-auto mb-1" style={{ backgroundColor: lightTeam.color_hex }} />
-            <span className="text-sm text-muted-foreground">Claro</span>
+            <span className="text-sm text-muted-foreground">{teamLabel('light')}</span>
             <p className="text-3xl font-bold">{lightTeam.score}</p>
           </div>
         </div>
@@ -132,11 +137,11 @@ export function ResultConsensus({
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-3 h-3 rounded-full border" style={{ backgroundColor: team.color_hex }} />
                   <span className="text-sm font-medium text-muted-foreground">
-                    {team.name === 'dark' ? 'Oscuro' : 'Claro'}
+                    {teamLabel(team.name)}
                   </span>
                 </div>
                 {lines.length === 0 && unattributed === 0 && (
-                  <p className="text-sm text-muted-foreground pl-5">Sin goles</p>
+                  <p className="text-sm text-muted-foreground pl-5">{tr('ui.result.noGoals')}</p>
                 )}
                 {lines.map(line => (
                   <div key={line.key} className="flex items-center gap-2 pl-5 text-sm">
@@ -144,13 +149,13 @@ export function ResultConsensus({
                     <span className="text-muted-foreground">
                       {line.goals > 0 && `${'⚽'.repeat(Math.min(line.goals, 5))}${line.goals > 5 ? ` ×${line.goals}` : ''}`}
                       {line.goals > 0 && line.assists > 0 && ' · '}
-                      {line.assists > 0 && `${line.assists} asist.`}
+                      {line.assists > 0 && tr('ui.result.assists', { n: line.assists })}
                     </span>
                   </div>
                 ))}
                 {unattributed > 0 && (
                   <p className="text-sm text-muted-foreground pl-5 italic">
-                    {unattributed === 1 ? '1 gol sin autor' : `${unattributed} goles sin autor`}
+                    {unattributed === 1 ? tr('ui.result.unattributedOne') : tr('ui.result.unattributedMany', { n: unattributed })}
                   </p>
                 )}
               </div>
@@ -161,7 +166,7 @@ export function ResultConsensus({
         {mvpName && (
           <p className="border-t pt-3 flex items-center gap-1.5 text-sm text-warning">
             <Trophy className="h-4 w-4" />
-            MVP: {mvpName}
+            {tr('ui.result.mvp', { name: mvpName })}
           </p>
         )}
       </CardContent>

@@ -809,6 +809,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   reportersCount={reports.filter(r => !r.submitted_after_lock).length}
                   playersCount={confirmedSignups.filter(s => s.player_profiles !== null).length}
                   mvpName={mvpPlayerName}
+                  language={language}
                 />
               )}
 
