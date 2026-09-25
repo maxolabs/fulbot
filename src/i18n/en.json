@@ -887,6 +887,25 @@
       "attentionBody": "These dates have passed. Review the teams and finish or cancel each match.",
       "closedBody": "Registration is closed. Balance teams automatically or assign confirmed players yourself.",
       "closedShortBody": "Signups are closed and {n} more confirmed players are needed. Reopen signups or add guests to build the teams."
+    },
+    "lifecycle": {
+      "maxPlayersBelowConfirmed": "The player limit can't be lower than the number of confirmed players.",
+      "timezoneRequired": "Enter a time zone.",
+      "invalidTimezone": "That time zone doesn't exist. Use a name like America/Argentina/Cordoba.",
+      "waitlistSuffix": " · +{n} waitlisted",
+      "guestErrors": {
+        "invalidRequest": "Invalid request.",
+        "nameRequired": "Enter your name.",
+        "nameTooLong": "Your name can be up to 60 characters.",
+        "matchNotFound": "Match not found.",
+        "closed": "This match isn't taking signups.",
+        "alreadySignedUp": "You're already signed up for this match.",
+        "rateLimited": "Too many guest signups for this match. Try again in a while.",
+        "noGuestSignup": "There's no guest signup to cancel.",
+        "signupNotFound": "We couldn't find your signup.",
+        "signupFailed": "We couldn't sign you up. Try again.",
+        "cancelFailed": "We couldn't cancel your signup. Try again."
+      }
     }
   },
   "devicePush": {
