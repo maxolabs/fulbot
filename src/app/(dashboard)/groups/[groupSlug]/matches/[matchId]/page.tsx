@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Trophy, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -482,7 +483,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const heroDate = formatHeroDate(t, match.date_time, timeZone)
   const groupHref = `/groups/${groupSlug}`
   const matchHref = `${groupHref}/matches/${matchId}`
-  const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
+  const shareUrl = `${getAppBaseUrl()}/m/${matchId}`
 
   const shareText = `${group.name} · ${heroDate}\n${match.location || ''}\n${shareUrl}`
 
@@ -518,6 +519,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
     <MatchAdminActions
       secondaryOnly
       hasTeams={hasTeams}
+      canDelete={membership.role === 'admin'}
       matchId={match.id}
       groupSlug={groupSlug}
       currentStatus={match.status}

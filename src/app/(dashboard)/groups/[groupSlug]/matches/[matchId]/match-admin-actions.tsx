@@ -20,6 +20,8 @@ interface MatchAdminActionsProps {
   /** Teams exist for this match; without them the status can never reach 'finished'. */
   secondaryOnly?: boolean
   hasTeams?: boolean
+  /** Deleting is admin-only (matches DELETE policy); captains don't get the button. */
+  canDelete?: boolean
   /** Called after a navigation so the popover / sheet can close. */
   onNavigate?: () => void
 }
@@ -34,6 +36,7 @@ export function MatchAdminActions({
   currentStatus,
   hasEnoughPlayers,
   hasTeams = true,
+  canDelete = false,
   secondaryOnly = false,
   onNavigate,
 }: MatchAdminActionsProps) {
@@ -223,7 +226,7 @@ export function MatchAdminActions({
       )}
 
       {/* Delete match */}
-      {(currentStatus === 'draft' || currentStatus === 'cancelled') && (
+      {canDelete && (currentStatus === 'draft' || currentStatus === 'cancelled') && (
         <Button
           variant="ghost"
           className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
