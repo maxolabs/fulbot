@@ -468,7 +468,9 @@
       "pendingRatings": "{n} sin calificar",
       "profile": "Perfil",
       "preferences": "Preferencias",
-      "skipToContent": "Saltar al contenido"
+      "skipToContent": "Saltar al contenido",
+      "metaTitle": "fulbot — Organizá tus partidos",
+      "metaDescription": "Organizá partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más."
     },
     "teamsScreen": {
       "title": "Equipos",
@@ -751,7 +753,29 @@
       "auth": {
         "namePlaceholder": "Tu nombre",
         "passwordPlaceholder": "Mínimo 6 caracteres",
-        "confirmPlaceholder": "Repetí tu contraseña"
+        "confirmPlaceholder": "Repetí tu contraseña",
+        "emailPlaceholder": "tu@email.com",
+        "checkInboxTitle": "Revisá tu correo",
+        "checkInboxBody": "Te mandamos un enlace a {email} para confirmar tu cuenta. Abrilo en este mismo dispositivo para entrar.",
+        "backToLogin": "Volver a iniciar sesión",
+        "forgotTitle": "Recuperar contraseña",
+        "forgotSubtitle": "Ingresá tu email y te mandamos un enlace para elegir una contraseña nueva.",
+        "sendResetLink": "Enviar enlace",
+        "resetSent": "Si hay una cuenta con {email}, te llega un enlace en unos minutos. Abrilo en este mismo dispositivo.",
+        "updateTitle": "Nueva contraseña",
+        "updateSubtitle": "Elegí una contraseña nueva para tu cuenta.",
+        "newPassword": "Contraseña nueva",
+        "savePassword": "Guardar contraseña",
+        "errorEmailNotConfirmed": "Todavía no confirmaste tu email. Revisá tu correo.",
+        "errorWeakPassword": "La contraseña es muy débil. Probá con una más larga.",
+        "errorSamePassword": "La contraseña nueva tiene que ser distinta de la anterior.",
+        "errorInvalidEmail": "El email no es válido.",
+        "errorRateLimit": "Demasiados intentos. Esperá unos minutos y probá de nuevo.",
+        "errorSignupDisabled": "El registro no está disponible por ahora.",
+        "errorSessionExpired": "Tu sesión expiró. Iniciá sesión de nuevo.",
+        "errorNetwork": "Error de conexión. Probá de nuevo.",
+        "errorGeneric": "Algo salió mal. Probá de nuevo.",
+        "errorLinkInvalid": "El enlace expiró o ya se usó. Pedí uno nuevo."
       },
       "publicMatch": {
         "notFoundTitle": "Partido no encontrado",

@@ -468,7 +468,9 @@
       "pendingRatings": "{n} to rate",
       "profile": "Profile",
       "preferences": "Preferences",
-      "skipToContent": "Skip to content"
+      "skipToContent": "Skip to content",
+      "metaTitle": "fulbot — Organize your matches",
+      "metaDescription": "Organize amateur football matches with your friends. Signups, AI-balanced teams, and more."
     },
     "teamsScreen": {
       "title": "Teams",
@@ -751,7 +753,29 @@
       "auth": {
         "namePlaceholder": "Your name",
         "passwordPlaceholder": "At least 6 characters",
-        "confirmPlaceholder": "Repeat your password"
+        "confirmPlaceholder": "Repeat your password",
+        "emailPlaceholder": "you@email.com",
+        "checkInboxTitle": "Check your inbox",
+        "checkInboxBody": "We sent a link to {email} to confirm your account. Open it on this same device to sign in.",
+        "backToLogin": "Back to log in",
+        "forgotTitle": "Reset your password",
+        "forgotSubtitle": "Enter your email and we'll send you a link to choose a new password.",
+        "sendResetLink": "Send link",
+        "resetSent": "If there is an account for {email}, a link is on its way. Open it on this same device.",
+        "updateTitle": "New password",
+        "updateSubtitle": "Choose a new password for your account.",
+        "newPassword": "New password",
+        "savePassword": "Save password",
+        "errorEmailNotConfirmed": "You haven't confirmed your email yet. Check your inbox.",
+        "errorWeakPassword": "That password is too weak. Try a longer one.",
+        "errorSamePassword": "The new password must be different from the old one.",
+        "errorInvalidEmail": "That email isn't valid.",
+        "errorRateLimit": "Too many attempts. Wait a few minutes and try again.",
+        "errorSignupDisabled": "Sign-up isn't available right now.",
+        "errorSessionExpired": "Your session expired. Log in again.",
+        "errorNetwork": "Connection error. Try again.",
+        "errorGeneric": "Something went wrong. Try again.",
+        "errorLinkInvalid": "The link expired or was already used. Request a new one."
       },
       "publicMatch": {
         "notFoundTitle": "Match not found",

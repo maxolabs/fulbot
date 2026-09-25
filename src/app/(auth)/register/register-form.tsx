@@ -12,19 +12,19 @@ import { Spinner } from '@/components/ui/spinner'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
 import type { Language } from '@/i18n/use-translations'
+import { authErrorKey } from '@/lib/auth-errors'
+import { safeRedirect } from '@/lib/safe-redirect'
+import { setLanguageCookie } from '../language-cookie'
 
 // Register (docs/ui-rework/03-screens.md §11): same frame as login.
 
 interface RegisterFormProps {
   initialLanguage: Language
+  /** Raw ?redirect= from the URL (e.g. the invite page); validated here. */
+  redirectParam?: string
 }
 
-function setLanguageCookie(language: Language) {
-  if (typeof document === 'undefined') return
-  document.cookie = `fulbot_lang=${language}; path=/; max-age=31536000; samesite=lax`
-}
-
-export function RegisterForm({ initialLanguage }: RegisterFormProps) {
+export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormProps) {
   const t = useT()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -34,10 +34,14 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [passwordError, setPasswordError] = useState(false)
+  // Set when sign-up needs email confirmation (no session yet).
+  const [sentTo, setSentTo] = useState<string | null>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
 
   const router = useRouter()
   const supabase = createClient()
+  const redirectTo = safeRedirect(redirectParam)
+  const redirectQuery = redirectParam && redirectTo === redirectParam ? `?redirect=${encodeURIComponent(redirectTo)}` : ''
 
   const handleLanguageChange = (value: Language) => {
     setLanguage(value)
@@ -64,10 +68,11 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`,
           data: {
             name,
             preferred_language: language,
@@ -76,22 +81,45 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
       })
 
       if (error) {
-        if (error.message.includes('already registered')) {
-          setError(t('auth.emailInUse'))
-        } else {
-          setError(error.message)
-        }
+        setError(t(authErrorKey(error, 'auth.registerGenericError')))
         return
       }
 
       setLanguageCookie(language)
-      router.push('/groups')
+
+      // Email confirmation is on: the link lands on /api/auth/callback.
+      if (!data.session) {
+        setSentTo(email)
+        return
+      }
+
+      router.push(redirectTo)
       router.refresh()
     } catch {
       setError(t('auth.registerGenericError'))
     } finally {
       setLoading(false)
     }
+  }
+
+  if (sentTo) {
+    return (
+      <div className="w-full max-w-sm space-y-8">
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance lg:text-3xl">
+            {t('ui.screens.auth.checkInboxTitle')}
+          </h1>
+          <p role="status" className="text-sm text-muted-foreground text-pretty">
+            {t('ui.screens.auth.checkInboxBody', { email: sentTo })}
+          </p>
+        </div>
+        <p className="text-center text-sm">
+          <Link href={`/login${redirectQuery}`} className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+            {t('ui.screens.auth.backToLogin')}
+          </Link>
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -128,7 +156,7 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
             autoCapitalize="none"
             type="email"
             autoComplete="email"
-            placeholder="tu@email.com"
+            placeholder={t('ui.screens.auth.emailPlaceholder')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -196,7 +224,7 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
 
       <p className="text-center text-sm text-muted-foreground">
         {t('auth.hasAccount')}{' '}
-        <Link href="/login" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+        <Link href={`/login${redirectQuery}`} className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
           {t('auth.loginCta')}
         </Link>
       </p>

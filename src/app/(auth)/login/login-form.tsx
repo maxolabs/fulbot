@@ -11,6 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { FormNotice } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
+import { authErrorKey } from '@/lib/auth-errors'
+import { safeRedirect } from '@/lib/safe-redirect'
+import { setLanguageCookie } from '../language-cookie'
 
 // Login (docs/ui-rework/03-screens.md §11): max-w-sm form on the board,
 // mono eyebrow labels, 44px inputs, one cone button.
@@ -19,12 +22,19 @@ function LoginFormFields() {
   const t = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/groups'
+  const rawRedirect = searchParams.get('redirect')
+  const redirectTo = safeRedirect(rawRedirect)
+  // Carried to the register and forgot-password links so the target survives.
+  const redirectQuery = rawRedirect && redirectTo === rawRedirect ? `?redirect=${encodeURIComponent(redirectTo)}` : ''
+
+  // /api/auth/callback sends ?error=auth_failed when a confirmation or reset
+  // link could not be exchanged for a session.
+  const [error, setError] = useState<string | null>(
+    searchParams.get('error') === 'auth_failed' ? t('ui.screens.auth.errorLinkInvalid') : null
+  )
+  const [loading, setLoading] = useState(false)
 
   const supabase = createClient()
 
@@ -34,19 +44,24 @@ function LoginFormFields() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        if (error.message === 'Invalid login credentials') {
-          setError(t('auth.loginError'))
-        } else {
-          setError(error.message)
-        }
+        setError(t(authErrorKey(error, 'auth.loginGenericError')))
         return
       }
+
+      // Public pages and <html lang> read the fulbot_lang cookie: sync it with
+      // the account's language (A-I1).
+      const { data: profile } = await supabase
+        .from('users')
+        .select('preferred_language')
+        .eq('id', data.user.id)
+        .single()
+      if (profile?.preferred_language) setLanguageCookie(profile.preferred_language)
 
       router.push(redirectTo)
       router.refresh()
@@ -75,7 +90,7 @@ function LoginFormFields() {
             autoCapitalize="none"
             type="email"
             autoComplete="email"
-            placeholder="tu@email.com"
+            placeholder={t('ui.screens.auth.emailPlaceholder')}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -83,7 +98,15 @@ function LoginFormFields() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">{t('auth.password')}</Label>
+          <div className="flex items-baseline justify-between gap-3">
+            <Label htmlFor="password">{t('auth.password')}</Label>
+            <Link
+              href={`/forgot-password${redirectQuery}`}
+              className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              {t('auth.forgotPassword')}
+            </Link>
+          </div>
           <PasswordInput
             id="password"
             name="password"
@@ -103,7 +126,7 @@ function LoginFormFields() {
 
       <p className="text-center text-sm text-muted-foreground">
         {t('auth.noAccount')}{' '}
-        <Link href="/register" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+        <Link href={`/register${redirectQuery}`} className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
           {t('auth.registerCta')}
         </Link>
       </p>
