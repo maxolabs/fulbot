@@ -814,6 +814,8 @@ export type Database = {
           last_error: string | null
           created_at: string
           sent_at: string | null
+          claimed_at: string | null
+          lease_id: string | null
         }
         Insert: {
           id?: string
@@ -827,6 +829,8 @@ export type Database = {
           last_error?: string | null
           created_at?: string
           sent_at?: string | null
+          claimed_at?: string | null
+          lease_id?: string | null
         }
         Update: {
           id?: string
@@ -840,6 +844,8 @@ export type Database = {
           last_error?: string | null
           created_at?: string
           sent_at?: string | null
+          claimed_at?: string | null
+          lease_id?: string | null
         }
         Relationships: []
       }
@@ -1227,6 +1233,24 @@ export type Database = {
         Args: Record<string, never>
         Returns: number
       }
+      list_my_notifications: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: string
+          group_id: string
+          match_id: string | null
+          recipient_player_id: string | null
+          type: string
+          payload: Json
+          created_at: string
+          is_read: boolean
+        }[]
+      }
+      mark_all_notifications_read: {
+        Args: Record<string, never>
+        Returns: undefined
+      }
+      claim_notification_outbox: { Args: { p_limit?: number }; Returns: Json[] }
       claim_due_jobs: {
         Args: {
           p_limit?: number

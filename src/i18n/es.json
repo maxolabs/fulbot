@@ -434,6 +434,26 @@
     "plusOneHint": "Reportar el resultado suma a tu puntaje de miembro"
   },
   "ui": {
+    "postMatch": {
+      "noShowConfirmTitle": "¿Marcar que {name} no vino?",
+      "noShowConfirmBody": "Cuenta como falta sin avisar en su compromiso y deja de sumar como partido jugado.",
+      "presentConfirmTitle": "¿Marcar a {name} como presente?",
+      "presentConfirmBody": "Se le saca la falta y vuelve a contar como partido jugado.",
+      "attendanceError": "No se pudo actualizar la asistencia. Probá de nuevo.",
+      "removeError": "No se pudo sacar a {name} del partido. Probá de nuevo.",
+      "rateTitle": "Calificá a los que jugaron",
+      "ratedOne": "Calificaste a 1 jugador. Solo vos ves tus calificaciones.",
+      "ratedMany": "Calificaste a {count} jugadores. Solo vos ves tus calificaciones.",
+      "editResult": "Editar y cerrar el resultado"
+    },
+    "notify": {
+      "reminderHint": "0 = sin recordatorio. Les llega solo a los anotados.",
+      "reminderInvalid": "El recordatorio tiene que ser un número entero de horas entre 0 y 48.",
+      "webhookInvalid": "La URL del webhook no es válida.",
+      "webhookHttps": "La URL del webhook tiene que empezar con https://.",
+      "webhookCredentials": "La URL del webhook no puede llevar usuario ni contraseña.",
+      "webhookHost": "La URL del webhook no puede apuntar a una red local o privada."
+    },
     "guest": "invitado",
     "close": "Cerrar",
     "spots": {
@@ -670,7 +690,8 @@
           "safe_hands": "Manos seguras",
           "mvp": "MVP",
           "mvp_streak": "Racha de MVP",
-          "first_match": "Primera vez"
+          "first_match": "Primera vez",
+          "ejemplar": "Ejemplar"
         },
         "groupRating": "Calificación del grupo"
       },

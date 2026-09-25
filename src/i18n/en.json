@@ -434,6 +434,26 @@
     "plusOneHint": "Reporting the result adds to your member score"
   },
   "ui": {
+    "postMatch": {
+      "noShowConfirmTitle": "Mark {name} as a no-show?",
+      "noShowConfirmBody": "It counts as an unannounced absence in their member score and no longer counts as a played match.",
+      "presentConfirmTitle": "Mark {name} as present?",
+      "presentConfirmBody": "The absence is removed and it counts as a played match again.",
+      "attendanceError": "Couldn't update attendance. Try again.",
+      "removeError": "Couldn't remove {name} from the match. Try again.",
+      "rateTitle": "Rate the players",
+      "ratedOne": "You rated 1 player. Only you can see your ratings.",
+      "ratedMany": "You rated {count} players. Only you can see your ratings.",
+      "editResult": "Edit and lock the result"
+    },
+    "notify": {
+      "reminderHint": "0 = no reminder. Only confirmed players get it.",
+      "reminderInvalid": "The reminder must be a whole number of hours between 0 and 48.",
+      "webhookInvalid": "The webhook URL is not valid.",
+      "webhookHttps": "The webhook URL must start with https://.",
+      "webhookCredentials": "The webhook URL can't include a username or password.",
+      "webhookHost": "The webhook URL can't point to a local or private network."
+    },
     "guest": "guest",
     "close": "Close",
     "spots": {
@@ -670,7 +690,8 @@
           "safe_hands": "Safe hands",
           "mvp": "MVP",
           "mvp_streak": "MVP streak",
-          "first_match": "First match"
+          "first_match": "First match",
+          "ejemplar": "Role model"
         },
         "groupRating": "Group rating"
       },

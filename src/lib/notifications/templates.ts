@@ -87,9 +87,11 @@ export function renderNotificationText(
     case 'match_created': {
       const { date, time } = formatDateTime(event.payload.date_time, timeZone)
       const location = event.payload.location ? ` en ${event.payload.location}` : ''
+      const spots = event.payload.spots_left ?? event.payload.max_players
       return (
         `¡Partido confirmado! ${date} ${time}hs${location} -- ${event.payload.group_name}. ` +
-        `Quedan ${event.payload.max_players} lugares. Anotate acá: ${resolveReportUrl(event.payload.signup_url)}`
+        `${spots === 1 ? 'Queda 1 lugar' : `Quedan ${spots} lugares`}. ` +
+        `Anotate acá: ${resolveReportUrl(event.payload.signup_url)}`
       )
     }
     case 'waitlist_promoted':
@@ -102,6 +104,11 @@ export function renderNotificationText(
       )
     case 'match_reminder':
       return `Hoy ${event.payload.time} -- ${event.payload.group_name} -- remera oscura/clara según tu equipo`
+    case 'match_cancelled': {
+      const { date, time } = formatDateTime(event.payload.date_time, timeZone)
+      const location = event.payload.location ? ` en ${event.payload.location}` : ''
+      return `Se suspendió el partido del ${date} ${time}hs${location} -- ${event.payload.group_name}.`
+    }
     case 'results_posted': {
       const p = event.payload
       const parts: string[] = [`Resultado: Oscuro ${p.dark_score} – Claro ${p.light_score}.`]
