@@ -8,13 +8,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder files
-     * - api routes that don't need auth (signup links, etc.)
+     * Match all request paths except:
+     * - api (route handlers create their own Supabase client, which can write
+     *   refreshed session cookies itself; cron routes use CRON_SECRET)
+     * - _next/static, _next/image (build output, image optimization)
+     * - favicon.ico, manifest.json, sw.js, icons/ and image files (public assets)
+     * The public /m and /invite pages stay matched: they read the session.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/|_next/static|_next/image|favicon\\.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
