@@ -794,7 +794,9 @@
         "defaults": "Defaults",
         "maxPlayersHint": "For 7-a-side: 14 players (7 vs 7)",
         "createError": "Error creating the group",
-        "networkError": "Connection error. Try again."
+        "networkError": "Connection error. Try again.",
+        "slugTaken": "This URL is already taken. Pick another one.",
+        "invalidData": "Check the group details."
       },
       "auth": {
         "namePlaceholder": "Your name",
@@ -1009,8 +1011,31 @@
       "closedShortBody": "Signups are closed and {n} more confirmed players are needed. Reopen signups or add guests to build the teams."
     },
     "lifecycle": {
+      "recurring": {
+        "intro": "The next match is created automatically every week, with signups that open on their own.",
+        "active": "Active",
+        "inactive": "Inactive",
+        "saved": "Recurring match saved",
+        "saveError": "Couldn't save the recurring match. Try again.",
+        "toggleError": "Couldn't update the recurring match. Try again.",
+        "weekday": "Match day",
+        "matchTime": "Match time",
+        "location": "Location",
+        "locationPlaceholder": "E.g. Club pitch",
+        "maxPlayers": "Max players",
+        "signupWeekday": "Signups open on",
+        "signupTime": "Signups open at",
+        "timezone": "Time zone",
+        "customTimezone": "Other (type it)…",
+        "customTimezonePlaceholder": "E.g. America/Cordoba",
+        "deactivate": "Deactivate",
+        "activate": "Activate"
+      },
       "deleteError": "Could not delete the match. Try again.",
       "maxPlayersBelowConfirmed": "The player limit can't be lower than the number of confirmed players.",
+      "capSavedOtherFailed": "The player limit was saved, but the other changes weren't. Try again.",
+      "matchNotEditable": "This match can no longer be changed.",
+      "noPermission": "You don't have permission to change this match.",
       "timezoneRequired": "Enter a time zone.",
       "invalidTimezone": "That time zone doesn't exist. Use a name like America/Argentina/Cordoba.",
       "waitlistSuffix": " · +{n} waitlisted",
@@ -1083,6 +1108,9 @@
       "unlockConfirmBody": "The result is recalculated from player reports and what you entered by hand is discarded.",
       "unlocked": "Result reopened: it follows the consensus of the reports again.",
       "unlockError": "Couldn't reopen the result. Try again.",
+      "forbiddenError": "You don't have permission to enter results.",
+      "notFinishedError": "The match hasn't finished yet.",
+      "noTeamsError": "The match has no teams yet.",
       "minusGoal": "Remove a goal from {team}",
       "plusGoal": "Add a goal to {team}",
       "goalsOf": "{team} goals",

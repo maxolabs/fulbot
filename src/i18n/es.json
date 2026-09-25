@@ -794,7 +794,9 @@
         "defaults": "Configuración por defecto",
         "maxPlayersHint": "Para fútbol 7: 14 jugadores (7 vs 7)",
         "createError": "Error al crear el grupo",
-        "networkError": "Error de conexión. Probá de nuevo."
+        "networkError": "Error de conexión. Probá de nuevo.",
+        "slugTaken": "Esta URL ya está en uso. Elegí otra.",
+        "invalidData": "Revisá los datos del grupo."
       },
       "auth": {
         "namePlaceholder": "Tu nombre",
@@ -1009,8 +1011,31 @@
       "closedShortBody": "Las inscripciones están cerradas y faltan {n} confirmados. Reabrilas o sumá invitados para armar los equipos."
     },
     "lifecycle": {
+      "recurring": {
+        "intro": "El próximo partido se crea solo cada semana, con inscripciones que abren solas.",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "saved": "Partido recurrente guardado correctamente",
+        "saveError": "No se pudo guardar el partido recurrente. Probá de nuevo.",
+        "toggleError": "No se pudo actualizar el partido recurrente. Probá de nuevo.",
+        "weekday": "Día del partido",
+        "matchTime": "Hora del partido",
+        "location": "Lugar",
+        "locationPlaceholder": "Ej: Cancha del club",
+        "maxPlayers": "Jugadores máx.",
+        "signupWeekday": "Día en que abre inscripción",
+        "signupTime": "Hora en que abre inscripción",
+        "timezone": "Zona horaria",
+        "customTimezone": "Otra (escribir)…",
+        "customTimezonePlaceholder": "Ej: America/Cordoba",
+        "deactivate": "Desactivar",
+        "activate": "Activar"
+      },
       "deleteError": "No se pudo eliminar el partido. Probá de nuevo.",
       "maxPlayersBelowConfirmed": "El cupo no puede ser menor que la cantidad de confirmados.",
+      "capSavedOtherFailed": "El cupo se guardó, pero el resto de los cambios no. Probá de nuevo.",
+      "matchNotEditable": "Este partido ya no se puede modificar.",
+      "noPermission": "No tenés permiso para modificar este partido.",
       "timezoneRequired": "Ingresá una zona horaria.",
       "invalidTimezone": "Esa zona horaria no existe. Usá un nombre como America/Argentina/Cordoba.",
       "waitlistSuffix": " · +{n} en espera",
@@ -1083,6 +1108,9 @@
       "unlockConfirmBody": "El resultado vuelve a calcularse con los reportes de los jugadores y lo que cargaste a mano se descarta.",
       "unlocked": "Resultado reabierto: vuelve a seguir el consenso de los reportes.",
       "unlockError": "No se pudo reabrir el resultado. Probá de nuevo.",
+      "forbiddenError": "No tenés permiso para cargar resultados.",
+      "notFinishedError": "El partido todavía no terminó.",
+      "noTeamsError": "El partido no tiene equipos armados.",
       "minusGoal": "Restar gol a {team}",
       "plusGoal": "Sumar gol a {team}",
       "goalsOf": "Goles de {team}",

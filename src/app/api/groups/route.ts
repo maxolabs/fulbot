@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 
 const createGroupSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(50),
@@ -16,6 +18,9 @@ const createGroupSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  const language: Language = request.cookies.get('fulbot_lang')?.value === 'en' ? 'en' : 'es'
+  const t = getT(language)
+
   try {
     const supabase = await createClient()
 
@@ -34,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Datos inválidos', details: validationResult.error.flatten() },
+        { error: t('ui.screens.newGroup.invalidData'), details: validationResult.error.flatten() },
         { status: 400 }
       )
     }
@@ -59,13 +64,13 @@ export async function POST(request: NextRequest) {
       // only shows up as the unique violation on insert.
       if (groupError.code === '23505') {
         return NextResponse.json(
-          { error: 'Esta URL ya está en uso. Elegí otra.' },
+          { error: t('ui.screens.newGroup.slugTaken') },
           { status: 400 }
         )
       }
       console.error('Error creating group:', groupError)
       return NextResponse.json(
-        { error: 'Error al crear el grupo' },
+        { error: t('ui.screens.newGroup.createError') },
         { status: 500 }
       )
     }
@@ -74,7 +79,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      { error: t('ui.screens.newGroup.createError') },
       { status: 500 }
     )
   }

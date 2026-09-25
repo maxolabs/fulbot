@@ -48,6 +48,9 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
     setLoading(true)
     setError(null)
 
+    // The cap RPC commits on its own, before the plain-field UPDATE.
+    let capSaved = false
+
     try {
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
@@ -60,12 +63,17 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         }
         const { error: capError } = await supabase.rpc('admin_set_match_max_players', args)
         if (capError) {
-          if (capError.message?.includes('max_players_below_confirmed')) {
-            setError(t('ui.lifecycle.maxPlayersBelowConfirmed'))
-            return
-          }
-          throw capError
+          console.error('Error updating max players:', capError)
+          const message = capError.message ?? ''
+          setError(t(
+            message.includes('max_players_below_confirmed') ? 'ui.lifecycle.maxPlayersBelowConfirmed'
+              : message.includes('No se puede modificar') ? 'ui.lifecycle.matchNotEditable'
+              : message.includes('No tenés permiso') ? 'ui.lifecycle.noPermission'
+              : 'common.error'
+          ))
+          return
         }
+        capSaved = true
       }
 
       const { error: updateError } = await supabase
@@ -87,7 +95,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
       router.refresh()
     } catch (err) {
       console.error('Error updating match:', err)
-      setError(t('common.error'))
+      setError(t(capSaved ? 'ui.lifecycle.capSavedOtherFailed' : 'common.error'))
     } finally {
       setLoading(false)
     }

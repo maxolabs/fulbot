@@ -34,13 +34,13 @@ interface RecurringPatternFormProps {
 }
 
 const DAYS = [
-  { value: 0, label: 'Domingo' },
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
+  { value: 0, key: 'days.sunday' },
+  { value: 1, key: 'days.monday' },
+  { value: 2, key: 'days.tuesday' },
+  { value: 3, key: 'days.wednesday' },
+  { value: 4, key: 'days.thursday' },
+  { value: 5, key: 'days.friday' },
+  { value: 6, key: 'days.saturday' },
 ]
 
 // A handful of common Argentina/LatAm/EU zones; "Otra" lets an admin type
@@ -105,18 +105,20 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
     setSuccess(false)
 
-    try {
-      if (!effectiveTimezone) {
-        throw new Error(t('ui.lifecycle.timezoneRequired'))
-      }
-      if (!isValidTimezone(effectiveTimezone)) {
-        throw new Error(t('ui.lifecycle.invalidTimezone'))
-      }
+    if (!effectiveTimezone) {
+      setError(t('ui.lifecycle.timezoneRequired'))
+      return
+    }
+    if (!isValidTimezone(effectiveTimezone)) {
+      setError(t('ui.lifecycle.invalidTimezone'))
+      return
+    }
 
+    setLoading(true)
+    try {
       const payload = {
         group_id: groupId,
         weekday,
@@ -157,7 +159,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       if (dbError?.code === '22023' || dbError?.message?.includes('invalid_timezone')) {
         setError(t('ui.lifecycle.invalidTimezone'))
       } else {
-        setError(err instanceof Error ? err.message : 'Error al guardar el partido recurrente')
+        setError(t('ui.lifecycle.recurring.saveError'))
       }
     } finally {
       setLoading(false)
@@ -182,7 +184,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       router.refresh()
     } catch (err) {
       console.error('Error toggling recurring pattern:', err)
-      setError('Error al actualizar el partido recurrente')
+      setError(t('ui.lifecycle.recurring.toggleError'))
     } finally {
       setLoading(false)
     }
@@ -193,21 +195,21 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       <div className="flex items-center gap-2">
         <Repeat className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
-          El próximo partido se crea solo cada semana, con inscripciones que abren solas.
+          {t('ui.lifecycle.recurring.intro')}
         </p>
         {patternId && (
           <Badge variant={isActive ? 'success' : 'outline'} className="ml-auto">
-            {isActive ? 'Activo' : 'Inactivo'}
+            {isActive ? t('ui.lifecycle.recurring.active') : t('ui.lifecycle.recurring.inactive')}
           </Badge>
         )}
       </div>
 
       {error && <FormNotice kind="error">{error}</FormNotice>}
-      {success && <FormNotice kind="success">Partido recurrente guardado correctamente</FormNotice>}
+      {success && <FormNotice kind="success">{t('ui.lifecycle.recurring.saved')}</FormNotice>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="weekday">Día del partido</Label>
+          <Label htmlFor="weekday">{t('ui.lifecycle.recurring.weekday')}</Label>
           <NativeSelect
             id="weekday"
             value={weekday}
@@ -215,13 +217,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
             disabled={loading}
           >
             {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>{day.label}</option>
+              <option key={day.value} value={day.value}>{t(day.key)}</option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="matchTime">Hora del partido</Label>
+          <Label htmlFor="matchTime">{t('ui.lifecycle.recurring.matchTime')}</Label>
           <Input
             id="matchTime"
             type="time"
@@ -233,19 +235,19 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="location">Lugar</Label>
+          <Label htmlFor="location">{t('ui.lifecycle.recurring.location')}</Label>
           <Input
             id="location"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             disabled={loading}
-            placeholder="Ej: Cancha del club"
+            placeholder={t('ui.lifecycle.recurring.locationPlaceholder')}
             maxLength={200}
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="maxPlayers">Jugadores máx.</Label>
+          <Label htmlFor="maxPlayers">{t('ui.lifecycle.recurring.maxPlayers')}</Label>
           <Input
             id="maxPlayers"
             type="number"
@@ -259,7 +261,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="signupOpensWeekday">Día en que abre inscripción</Label>
+          <Label htmlFor="signupOpensWeekday">{t('ui.lifecycle.recurring.signupWeekday')}</Label>
           <NativeSelect
             id="signupOpensWeekday"
             value={signupOpensWeekday}
@@ -267,13 +269,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
             disabled={loading}
           >
             {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>{day.label}</option>
+              <option key={day.value} value={day.value}>{t(day.key)}</option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="signupOpensTime">Hora en que abre inscripción</Label>
+          <Label htmlFor="signupOpensTime">{t('ui.lifecycle.recurring.signupTime')}</Label>
           <Input
             id="signupOpensTime"
             type="time"
@@ -285,7 +287,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="timezone">Zona horaria</Label>
+          <Label htmlFor="timezone">{t('ui.lifecycle.recurring.timezone')}</Label>
           <NativeSelect
             id="timezone"
             value={timezoneChoice}
@@ -295,14 +297,14 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
             {TIMEZONE_PRESETS.map((tz) => (
               <option key={tz} value={tz}>{tz}</option>
             ))}
-            <option value="__custom__">Otra (escribir)…</option>
+            <option value="__custom__">{t('ui.lifecycle.recurring.customTimezone')}</option>
           </NativeSelect>
           {timezoneChoice === '__custom__' && (
             <Input
               value={customTimezone}
               onChange={(e) => setCustomTimezone(e.target.value)}
               disabled={loading}
-              placeholder="Ej: America/Cordoba"
+              placeholder={t('ui.lifecycle.recurring.customTimezonePlaceholder')}
               className="mt-2 font-mono text-sm"
             />
           )}
@@ -312,12 +314,12 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={loading}>
           {loading ? <Spinner size="sm" /> : <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
-          Guardar
+          {t('common.save')}
         </Button>
         {patternId && (
           <Button type="button" variant="outline" onClick={handleToggleActive} disabled={loading}>
             <Power className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {isActive ? 'Desactivar' : 'Activar'}
+            {isActive ? t('ui.lifecycle.recurring.deactivate') : t('ui.lifecycle.recurring.activate')}
           </Button>
         )}
       </div>

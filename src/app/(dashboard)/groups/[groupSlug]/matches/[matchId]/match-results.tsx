@@ -53,10 +53,16 @@ interface MatchResultsProps {
 }
 
 // supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
-// instance), so the SQL layer's Spanish messages have to be read off `.message`.
-function errorMessage(err: unknown, fallback: string): string {
+// instance). The SQL layer raises Spanish text (00020), so known messages map to
+// ui.result.* keys and anything else (network, unexpected) gets the fallback key.
+function errorKey(err: unknown, fallbackKey: string): string {
   const message = (err as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message.trim() ? message : fallback
+  if (typeof message !== 'string') return fallbackKey
+  if (message.includes('No tenés permiso')) return 'ui.result.forbiddenError'
+  if (message.includes('todavía no terminó')) return 'ui.result.notFinishedError'
+  if (message.includes('no tiene equipos')) return 'ui.result.noTeamsError'
+  if (message.includes('superan el resultado')) return 'ui.result.overAttributedError'
+  return fallbackKey
 }
 
 // Only attributed goals become rows; unattributed consensus goals (player and
@@ -235,7 +241,7 @@ export function MatchResults({
       router.refresh()
     } catch (err) {
       console.error('Error saving results:', err)
-      setError(errorMessage(err, t('ui.result.saveError')))
+      setError(t(errorKey(err, 'ui.result.saveError')))
     } finally {
       setSaving(false)
     }
@@ -254,7 +260,7 @@ export function MatchResults({
     } catch (err) {
       console.error('Error unlocking result:', err)
       setUnlockOpen(false)
-      setError(errorMessage(err, t('ui.result.unlockError')))
+      setError(t(errorKey(err, 'ui.result.unlockError')))
     } finally {
       setSaving(false)
     }
