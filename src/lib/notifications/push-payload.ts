@@ -16,6 +16,7 @@ const labels = {
   es: {
     match_created: 'Se abrió la lista', waitlist_promoted: '¡Entraste al partido!',
     teams_created: 'Los equipos están listos', match_reminder: 'Se viene el partido',
+    match_cancelled: 'Se suspendió el partido',
     results_posted: 'Ya está el resultado', results_request: '¿Cómo salió el partido?',
     results_reminder: 'Falta tu resultado',
     open: 'Tocá para ver el partido.', signup: 'Tocá para anotarte.',
@@ -24,6 +25,7 @@ const labels = {
   en: {
     match_created: 'Signups are open', waitlist_promoted: 'You’re in!',
     teams_created: 'Teams are ready', match_reminder: 'Your match is coming up',
+    match_cancelled: 'Match cancelled',
     results_posted: 'The result is in', results_request: 'How did the match go?',
     results_reminder: 'Your result is still missing',
     open: 'Tap to view the match.', signup: 'Tap to sign up.',

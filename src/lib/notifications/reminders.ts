@@ -4,6 +4,10 @@
 // GET /api/cron/reminders route so the consolidated GET /api/cron/daily route
 // (see vercel.json / §2.4 caveat) can call the same logic without duplicating
 // it.
+//
+// One group-wide row per match (one WhatsApp message to the group). In the app
+// and on devices it only reaches the players confirmed for that match:
+// push_audience_matches (00026) checks match_signups for 'match_reminder'.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types/database'
 import type { MatchReminderPayload } from './types'
@@ -31,6 +35,8 @@ export async function emitMatchReminders(
 
   for (const settings of settingsRows ?? []) {
     const hours = settings.reminder_hours_before ?? 3
+    // 0 is the explicit "no reminder" setting (the form validates 0..48).
+    if (!Number.isFinite(hours) || hours <= 0) continue
     const windowEnd = new Date(now.getTime() + hours * 60 * 60 * 1000)
 
     const { data: group } = await supabase
@@ -43,7 +49,7 @@ export async function emitMatchReminders(
       .from('matches')
       .select('id, group_id, date_time, location')
       .eq('group_id', settings.group_id)
-      .in('status', ['teams_created', 'full', 'signup_open'])
+      .in('status', ['teams_created', 'full', 'signup_open', 'signup_closed'])
       .gte('date_time', now.toISOString())
       .lte('date_time', windowEnd.toISOString())
 

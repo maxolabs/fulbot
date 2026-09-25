@@ -8,6 +8,7 @@ export type NotificationType =
   | 'waitlist_promoted'
   | 'teams_created'
   | 'match_reminder'
+  | 'match_cancelled'
   | 'results_posted'
   | 'rate_new_member'
   | 'results_request'
@@ -22,6 +23,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'waitlist_promoted',
   'teams_created',
   'match_reminder',
+  'match_cancelled',
   'results_posted',
   'rate_new_member',
   'results_request',
@@ -38,6 +40,9 @@ export interface MatchCreatedPayload {
   date_time: string // ISO timestamp
   location: string | null
   max_players: number
+  // Capacity minus confirmed signups when the list opened (00026). Absent on
+  // older rows; the template falls back to max_players.
+  spots_left?: number
   signup_url: string
 }
 
@@ -61,6 +66,17 @@ export interface MatchReminderPayload {
   group_name: string
   time: string // "HH:MM" in the group's timezone
   location: string | null
+}
+
+// Emitted by a trigger on matches (00026) when a match with signups is
+// cancelled before it starts. One group-wide row (one WhatsApp message); the
+// app and device push show it only to the players confirmed at that moment.
+export interface MatchCancelledPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  location: string | null
+  player_ids: string[]
 }
 
 // Crowd-sourced results (docs/match-results-consensus.md §11.1). Emitted from
@@ -171,6 +187,7 @@ export interface NotificationPayloadMap {
   waitlist_promoted: WaitlistPromotedPayload
   teams_created: TeamsCreatedPayload
   match_reminder: MatchReminderPayload
+  match_cancelled: MatchCancelledPayload
   results_posted: ResultsPostedPayload
   rate_new_member: RateNewMemberPayload
   results_request: ResultsRequestPayload
@@ -188,6 +205,7 @@ export type NotificationEvent =
   | { type: 'waitlist_promoted'; payload: WaitlistPromotedPayload }
   | { type: 'teams_created'; payload: TeamsCreatedPayload }
   | { type: 'match_reminder'; payload: MatchReminderPayload }
+  | { type: 'match_cancelled'; payload: MatchCancelledPayload }
   | { type: 'results_posted'; payload: ResultsPostedPayload }
   | { type: 'rate_new_member'; payload: RateNewMemberPayload }
   | { type: 'results_request'; payload: ResultsRequestPayload }
