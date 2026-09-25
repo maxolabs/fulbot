@@ -11,6 +11,15 @@ export type TranslateFn = (key: string, params?: Record<string, string | number>
 
 const translations: Record<Language, Record<string, unknown>> = { es, en }
 
+// Development only: warn once per missing key so typos surface early.
+const warnedMissingKeys = new Set<string>()
+
+function warnMissingKey(path: string) {
+  if (process.env.NODE_ENV !== 'development' || warnedMissingKeys.has(path)) return
+  warnedMissingKeys.add(path)
+  console.warn(`[i18n] Missing translation key: ${path}`)
+}
+
 function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const keys = path.split('.')
   let current: unknown = obj
@@ -19,11 +28,16 @@ function getNestedValue(obj: Record<string, unknown>, path: string): string {
     if (current && typeof current === 'object' && key in current) {
       current = (current as Record<string, unknown>)[key]
     } else {
+      warnMissingKey(path)
       return path // Return the path if translation not found
     }
   }
 
-  return typeof current === 'string' ? current : path
+  if (typeof current !== 'string') {
+    warnMissingKey(path)
+    return path
+  }
+  return current
 }
 
 export function translate(
@@ -35,7 +49,7 @@ export function translate(
 
   if (params) {
     Object.entries(params).forEach(([paramKey, paramValue]) => {
-      value = value.replace(`{${paramKey}}`, String(paramValue))
+      value = value.split(`{${paramKey}}`).join(String(paramValue))
     })
   }
 
