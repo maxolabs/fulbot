@@ -69,7 +69,11 @@ export function SettingsForm({
     setSuccess(false)
 
     try {
-      await saveSettings({ language, theme, notificationPrefs })
+      const result = await saveSettings({ language, theme, notificationPrefs })
+      if (result.error === 'not_authenticated') {
+        setError(t('ui.screens.auth.errorSessionExpired'))
+        return
+      }
       setSuccess(true)
       router.refresh()
       setTimeout(() => setSuccess(false), 3000)

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Syne, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import { cookies } from 'next/headers'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 import './globals.css'
 
 type ThemePreference = 'light' | 'dark' | 'system'
@@ -34,16 +36,26 @@ const fontMono = IBM_Plex_Mono({
   variable: '--font-mono',
 })
 
-export const metadata: Metadata = {
-  title: 'fulbot — Organizá tus partidos',
-  description: 'Organizá partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más.',
-  manifest: '/manifest.json',
-  icons: { apple: '/icons/icon-192.png' },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'fulbot',
-  },
+// Public pages and the root layout follow the fulbot_lang cookie, which login,
+// the auth callback and /settings keep in sync with users.preferred_language.
+async function getCookieLanguage(): Promise<Language> {
+  const cookieStore = await cookies()
+  return cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es'
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = getT(await getCookieLanguage())
+  return {
+    title: t('ui.shell.metaTitle'),
+    description: t('ui.shell.metaDescription'),
+    manifest: '/manifest.json',
+    icons: { apple: '/icons/icon-192.png' },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: 'fulbot',
+    },
+  }
 }
 
 export const viewport: Viewport = {
@@ -58,6 +70,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const cookieStore = await cookies()
+  const language = await getCookieLanguage()
   const themeCookie = cookieStore.get('fulbot_theme')?.value
   const theme: ThemePreference =
     themeCookie === 'light' || themeCookie === 'dark' || themeCookie === 'system'
@@ -78,7 +91,7 @@ export default async function RootLayout({
     .join(' ')
 
   return (
-    <html lang="es" className={htmlClassName} suppressHydrationWarning>
+    <html lang={language} className={htmlClassName} suppressHydrationWarning>
       <body className="font-sans">
         {theme === 'system' && (
           <script

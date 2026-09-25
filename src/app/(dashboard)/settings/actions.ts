@@ -25,7 +25,10 @@ export interface SaveSettingsInput {
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
 
-export async function saveSettings(input: SaveSettingsInput) {
+// Error codes, not user-facing text: the settings form maps them to i18n keys.
+export type SaveSettingsResult = { error: 'not_authenticated' | null }
+
+export async function saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult> {
   const supabase = await createClient()
 
   const {
@@ -33,7 +36,7 @@ export async function saveSettings(input: SaveSettingsInput) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    throw new Error('No autenticado')
+    return { error: 'not_authenticated' }
   }
 
   const { error } = await supabase
@@ -59,4 +62,6 @@ export async function saveSettings(input: SaveSettingsInput) {
     maxAge: ONE_YEAR_SECONDS,
     sameSite: 'lax',
   })
+
+  return { error: null }
 }
