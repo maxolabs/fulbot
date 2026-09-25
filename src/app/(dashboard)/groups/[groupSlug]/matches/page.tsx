@@ -74,6 +74,8 @@ export default async function MatchesListPage({ params }: PageProps) {
   if (!membership) return notFound()
 
   const isAdminOrCaptain = membership.role === 'admin' || membership.role === 'captain'
+  // Creating matches is admin-only (matches INSERT policy); captains manage existing ones.
+  const isAdmin = membership.role === 'admin'
 
   // All matches for this group, with team scores for the finished ones
   const { data: matches } = await supabase
@@ -115,7 +117,7 @@ export default async function MatchesListPage({ params }: PageProps) {
         title={t('matches.title')}
         back={`/groups/${groupSlug}`}
         action={
-          isAdminOrCaptain ? (
+          isAdmin ? (
             <TopBarAction href={createHref} label={t('matches.create')}>
               <Plus className="h-5 w-5" strokeWidth={1.75} />
             </TopBarAction>
@@ -127,7 +129,7 @@ export default async function MatchesListPage({ params }: PageProps) {
         title={t('matches.title')}
         subtitle={group.name}
         actions={
-          isAdminOrCaptain ? (
+          isAdmin ? (
             <Button asChild>
               <Link href={createHref}>
                 <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -140,7 +142,7 @@ export default async function MatchesListPage({ params }: PageProps) {
 
       {(matches || []).length === 0 ? (
         <p className="text-sm text-muted-foreground text-pretty">
-          {isAdminOrCaptain ? t('ui.matchScreens.list.emptyAdmin') : t('ui.matchScreens.list.empty')}
+          {isAdmin ? t('ui.matchScreens.list.emptyAdmin') : t('ui.matchScreens.list.empty')}
         </p>
       ) : (
         <>

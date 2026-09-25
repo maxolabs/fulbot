@@ -887,6 +887,25 @@
       "attentionBody": "Estas fechas ya pasaron. Revisá los equipos y finalizá o cancelá cada partido.",
       "closedBody": "Las inscripciones están cerradas. Balanceá los equipos automáticamente o repartí a los confirmados a mano.",
       "closedShortBody": "Las inscripciones están cerradas y faltan {n} confirmados. Reabrilas o sumá invitados para armar los equipos."
+    },
+    "lifecycle": {
+      "maxPlayersBelowConfirmed": "El cupo no puede ser menor que la cantidad de confirmados.",
+      "timezoneRequired": "Ingresá una zona horaria.",
+      "invalidTimezone": "Esa zona horaria no existe. Usá un nombre como America/Argentina/Cordoba.",
+      "waitlistSuffix": " · +{n} en espera",
+      "guestErrors": {
+        "invalidRequest": "Solicitud inválida.",
+        "nameRequired": "Ingresá tu nombre.",
+        "nameTooLong": "El nombre puede tener hasta 60 caracteres.",
+        "matchNotFound": "Partido no encontrado.",
+        "closed": "El partido no está aceptando inscripciones.",
+        "alreadySignedUp": "Ya estás anotado en este partido.",
+        "rateLimited": "Hubo muchas inscripciones de invitados en este partido. Probá de nuevo en un rato.",
+        "noGuestSignup": "No hay una inscripción de invitado para bajar.",
+        "signupNotFound": "No encontramos tu inscripción.",
+        "signupFailed": "No pudimos anotarte. Probá de nuevo.",
+        "cancelFailed": "No pudimos bajarte. Probá de nuevo."
+      }
     }
   },
   "devicePush": {

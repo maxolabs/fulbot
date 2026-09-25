@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 import { Button } from '@/components/ui/button'
@@ -337,7 +338,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     }
   }
 
-  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite/${group.invite_code}`
+  const inviteUrl = `${getAppBaseUrl()}/invite/${group.invite_code}`
 
   // Subtitle: "Lunes 20:00 · Cancha … · 14 lugares · 18 miembros"
   const subtitleParts: string[] = []
@@ -446,7 +447,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
         actions={
           <>
             <InviteButton inviteUrl={inviteUrl} />
-            {isAdminOrCaptain && (
+            {isAdmin && (
               <Button asChild variant={createIsPrimary ? 'default' : 'outline'}>
                 <Link href={`/groups/${groupSlug}/matches/new`}>
                   <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -463,7 +464,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
         <h1 className="sr-only">{group.name}</h1>
         <p className="text-sm text-muted-foreground text-pretty">{subtitle}</p>
         <div className="flex flex-wrap gap-2">
-          {isAdminOrCaptain && (
+          {isAdmin && (
             <Button asChild variant={createIsPrimary && !nextMatch ? 'default' : 'outline'}>
               <Link href={`/groups/${groupSlug}/matches/new`}>
                 <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -501,7 +502,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 <p className="text-sm text-muted-foreground text-pretty">
                   {otherUpcoming.length > 0
                     ? t('ui.polish.noOpenMatch')
-                    : isAdminOrCaptain
+                    : isAdmin
                       ? t('ui.matchScreens.dashboard.noNextMatchAdmin')
                       : t('ui.matchScreens.dashboard.noNextMatch')}
                 </p>

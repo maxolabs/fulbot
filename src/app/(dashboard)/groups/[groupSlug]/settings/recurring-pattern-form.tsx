@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
+import { useT } from '@/i18n/provider'
 
 interface RecurringPatternFormProps {
   groupId: string
@@ -55,6 +56,17 @@ const TIMEZONE_PRESETS = [
   'Europe/Madrid',
 ]
 
+// Same check the DB trigger does against pg_timezone_names (00025), done in
+// the browser first so the admin gets a readable error.
+function isValidTimezone(tz: string) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function trimTime(t: string) {
   // Inputs come back as "HH:mm:ss"; <input type="time"> wants "HH:mm".
   return t.slice(0, 5)
@@ -63,6 +75,7 @@ function trimTime(t: string) {
 export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialPattern }: RecurringPatternFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const defaultWeekday = initialPattern?.weekday ?? groupDefaults.default_match_day ?? 1
   const defaultSignupWeekday = initialPattern?.signup_opens_weekday ?? ((defaultWeekday - 1 + 7) % 7)
@@ -98,7 +111,10 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
 
     try {
       if (!effectiveTimezone) {
-        throw new Error('Ingresá una zona horaria')
+        throw new Error(t('ui.lifecycle.timezoneRequired'))
+      }
+      if (!isValidTimezone(effectiveTimezone)) {
+        throw new Error(t('ui.lifecycle.invalidTimezone'))
       }
 
       const payload = {
@@ -110,9 +126,9 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         signup_opens_weekday: signupOpensWeekday,
         signup_opens_time: signupOpensTime,
         timezone: effectiveTimezone,
-        is_active: true,
       }
 
+      // Saving keeps the current on/off state; only the toggle changes it.
       if (patternId) {
         const { error: updateError } = await supabase
           .from('recurring_patterns')
@@ -120,17 +136,15 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           .eq('id', patternId)
 
         if (updateError) throw updateError
-        setIsActive(true)
       } else {
         const { data: created, error: insertError } = await supabase
           .from('recurring_patterns')
-          .insert(payload)
+          .insert({ ...payload, is_active: isActive })
           .select('id')
           .single()
 
         if (insertError) throw insertError
         setPatternId(created.id)
-        setIsActive(true)
       }
 
       setSuccess(true)
@@ -138,7 +152,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error saving recurring pattern:', err)
-      setError(err instanceof Error ? err.message : 'Error al guardar el partido recurrente')
+      // The DB trigger raises 22023 / invalid_timezone for a zone Postgres doesn't know.
+      const dbError = err as { code?: string; message?: string }
+      if (dbError?.code === '22023' || dbError?.message?.includes('invalid_timezone')) {
+        setError(t('ui.lifecycle.invalidTimezone'))
+      } else {
+        setError(err instanceof Error ? err.message : 'Error al guardar el partido recurrente')
+      }
     } finally {
       setLoading(false)
     }

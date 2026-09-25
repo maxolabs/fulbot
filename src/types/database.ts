@@ -319,6 +319,27 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_match_occurrences: {
+        Row: {
+          pattern_id: string
+          occurrence_date: string
+          match_id: string | null
+          created_at: string
+        }
+        Insert: {
+          pattern_id: string
+          occurrence_date: string
+          match_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          pattern_id?: string
+          occurrence_date?: string
+          match_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       guest_players: {
         Row: {
           id: string
@@ -1046,6 +1067,13 @@ export type Database = {
         Args: {
           p_match_id: string
           p_status: Database['public']['Enums']['match_status']
+        }
+        Returns: Database['public']['Tables']['matches']['Row']
+      }
+      admin_set_match_max_players: {
+        Args: {
+          p_match_id: string
+          p_max_players: number
         }
         Returns: Database['public']['Tables']['matches']['Row']
       }

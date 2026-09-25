@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { combineDateTimeInTimezone } from '@/lib/utils/datetime'
 import { useT } from '@/i18n/provider'
+import type { Database } from '@/types/database'
 
 interface EditMatchFormProps {
   matchId: string
@@ -50,12 +51,28 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
     try {
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
+      // The cap goes through the RPC: raising it promotes the waitlist and
+      // fixes full/signup_open; lowering it below the confirmed count fails.
+      if (maxPlayers !== defaults.maxPlayers) {
+        const args: Database['public']['Functions']['admin_set_match_max_players']['Args'] = {
+          p_match_id: matchId,
+          p_max_players: maxPlayers,
+        }
+        const { error: capError } = await supabase.rpc('admin_set_match_max_players', args)
+        if (capError) {
+          if (capError.message?.includes('max_players_below_confirmed')) {
+            setError(t('ui.lifecycle.maxPlayersBelowConfirmed'))
+            return
+          }
+          throw capError
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('matches')
         .update({
           date_time: dateTime,
           location: location || null,
-          max_players: maxPlayers,
           notes: notes || null,
           duration_minutes: durationMinutes,
           results_request_delay_minutes: resultsRequestDelayMinutes,

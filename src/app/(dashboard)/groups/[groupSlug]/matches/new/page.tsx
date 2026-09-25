@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { CreateMatchForm } from './create-match-form'
+import { DEFAULT_TIMEZONE, splitDateTimeInTimezone, weekdayIndexInTimezone } from '@/lib/utils/datetime'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
@@ -51,7 +52,8 @@ export default async function CreateMatchPage({ params }: PageProps) {
 
   if (!group) return notFound()
 
-  // Check if user is admin or captain
+  // Creating matches is admin-only (matches INSERT policy); captains manage
+  // existing matches but can't create them.
   const { data: membership } = await supabase
     .from('group_memberships')
     .select('role')
@@ -60,7 +62,7 @@ export default async function CreateMatchPage({ params }: PageProps) {
     .eq('is_active', true)
     .single() as { data: { role: string } | null }
 
-  if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
+  if (!membership || membership.role !== 'admin') {
     redirect(`/groups/${groupSlug}`)
   }
 
@@ -73,28 +75,25 @@ export default async function CreateMatchPage({ params }: PageProps) {
   const durationMinutes = notifDefaults?.default_duration_minutes ?? 60
   const resultsRequestDelayMinutes = notifDefaults?.default_results_request_delay_minutes ?? 60
 
-  // Calculate next match date based on default_match_day
+  // Next default_match_day at default_match_time, computed on the group's wall
+  // clock: the server runs in UTC, so getDay()/setHours() would pick the wrong
+  // day around midnight.
   const getNextMatchDate = () => {
-    const today = new Date()
+    const timeZone = group.timezone || DEFAULT_TIMEZONE
+    const now = new Date()
+    const today = splitDateTimeInTimezone(now.toISOString(), timeZone)
     const targetDay = group.default_match_day ?? 1 // Default to Monday
-    const daysUntilTarget = (targetDay - today.getDay() + 7) % 7
-    const nextDate = new Date(today)
+    let daysUntilTarget = (targetDay - weekdayIndexInTimezone(now, timeZone) + 7) % 7
 
     // If target day is today and it's past the default time, go to next week
-    if (daysUntilTarget === 0) {
-      const defaultTime = group.default_match_time || '21:00'
-      const [hours, minutes] = defaultTime.split(':').map(Number)
-      const targetTime = new Date(today)
-      targetTime.setHours(hours, minutes, 0, 0)
-
-      if (today > targetTime) {
-        nextDate.setDate(today.getDate() + 7)
-      }
-    } else {
-      nextDate.setDate(today.getDate() + daysUntilTarget)
+    const defaultTime = (group.default_match_time || '21:00').slice(0, 5)
+    if (daysUntilTarget === 0 && today.time > defaultTime) {
+      daysUntilTarget = 7
     }
 
-    return nextDate.toISOString().split('T')[0]
+    // Calendar arithmetic on the local date only (UTC midnight, no DST shifts).
+    const [year, month, day] = today.date.split('-').map(Number)
+    return new Date(Date.UTC(year, month - 1, day + daysUntilTarget)).toISOString().split('T')[0]
   }
 
   const title = t('ui.matchScreens.forms.createMatch')
