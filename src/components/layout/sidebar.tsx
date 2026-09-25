@@ -77,6 +77,7 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
     await disableDevicePush().catch(() => {})
     await supabase.auth.signOut()
     router.push('/login')
+    router.refresh()
   }
 
   const slug = groupSlugFromPathname(pathname)
