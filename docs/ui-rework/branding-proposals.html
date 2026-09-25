@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- artifact:start -->
+<title>Fulbot Rebrand Proposals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Archivo:wdth,wght@100,400;100,500;100,600;125,800&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* ───────────────────────── Deck (host page) tokens ───────────────────────── */
+:root{
+  --bg:#F3F3F0; --surface:#FFFFFF; --ink:#17191B; --muted:#5F6469; --line:#D8DAD5; --line-soft:#E8E9E5;
+  --accent:#2B6E4F; --accent-soft:#E1EEE6; --frame:#E4E5E0; --frame-ink:#6B6E6A;
+  --sans:'Instrument Sans',system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141517; --surface:#1B1D20; --ink:#ECEDEA; --muted:#9A9EA3; --line:#2C2F33; --line-soft:#232629;
+    --accent:#7FC8A0; --accent-soft:#1E2E27; --frame:#25282C; --frame-ink:#9A9EA3; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141517; --surface:#1B1D20; --ink:#ECEDEA; --muted:#9A9EA3; --line:#2C2F33; --line-soft:#232629;
+  --accent:#7FC8A0; --accent-soft:#1E2E27; --frame:#25282C; --frame-ink:#9A9EA3; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;padding-inline:clamp(16px,4vw,56px);padding-block:0 120px;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;min-width:0}
+h1,h2,h3,h4{margin:0;text-wrap:balance;line-height:1.15}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.prose{max-width:62ch}
+.prose p+p{margin-top:.8em}
+
+/* header */
+.deck-head{padding-block:56px 40px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:32px;align-items:end}
+.deck-head h1{font-size:clamp(30px,4.2vw,46px);font-weight:600;letter-spacing:-.02em;margin-top:12px}
+.deck-head .lede{margin-top:16px;color:var(--muted);max-width:60ch;font-size:16px}
+.current{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:8px;min-width:200px}
+.current .sw{display:flex;gap:6px;align-items:center}
+.current .sw i{width:22px;height:22px;border-radius:5px;border:1px solid var(--line);display:inline-block}
+.jump{display:flex;flex-wrap:wrap;gap:8px 20px;padding-block:18px;border-bottom:1px solid var(--line-soft);font-size:13px}
+.jump a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
+.jump a:hover{border-bottom-color:var(--ink)}
+.jump a.dim{color:var(--muted)}
+
+/* sections */
+.block{padding-block:56px 24px}
+.block>.eyebrow{margin-bottom:10px}
+.block>h2{font-size:clamp(24px,3vw,32px);font-weight:600;letter-spacing:-.015em;margin-bottom:14px}
+.block>.lede{color:var(--muted);max-width:62ch;margin-bottom:28px}
+
+/* brief: two interfaces */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:8px}
+.two>div{display:flex;flex-direction:column;gap:14px}
+.two h3{font-size:18px;font-weight:600}
+.two ul{margin:0;padding-left:18px;color:var(--ink)}
+.two li{margin-bottom:6px}
+.two li b{font-weight:600}
+.wire{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:10px;display:grid;gap:6px}
+.wire.desk{grid-template-columns:70px 1fr 1fr;grid-template-rows:14px 1fr 1fr;height:150px}
+.wire.desk .s{grid-row:1/4;background:var(--line-soft);border-radius:4px}
+.wire.desk .t{grid-column:2/4;background:var(--line-soft);border-radius:4px}
+.wire.desk .m{grid-row:2/4;background:var(--accent-soft);border-radius:4px}
+.wire.desk .c1,.wire.desk .c2{background:var(--line-soft);border-radius:4px}
+.wire.mob{grid-template-columns:1fr;grid-template-rows:14px 1fr 26px 22px;height:150px;width:90px}
+.wire.mob .t,.wire.mob .b{background:var(--line-soft);border-radius:4px}
+.wire.mob .m{background:var(--line-soft);border-radius:4px}
+.wire.mob .cta{background:var(--accent);border-radius:4px}
+.shared{margin-top:28px;padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:grid;grid-template-columns:auto 1fr;gap:6px 24px;font-size:14px;align-items:baseline}
+.shared .eyebrow{grid-column:1}
+.shared p{grid-column:2}
+
+/* proposal anatomy */
+.proposal{border-top:1px solid var(--line);padding-block:48px 40px;display:grid;gap:28px}
+.p-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px 48px;align-items:start}
+.p-head .letter{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.p-head h3{font-size:clamp(28px,3.4vw,40px);font-weight:600;letter-spacing:-.02em;margin-top:8px}
+.p-head .thesis{color:var(--ink);font-size:16px;margin-top:10px;max-width:40ch}
+.p-notes{display:grid;gap:14px;font-size:14px;align-self:end}
+.p-notes div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px}
+.p-notes .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.p-notes p{color:var(--ink)}
+
+/* identity strip */
+.identity{display:grid;grid-template-columns:auto minmax(0,1fr) auto;min-width:0;gap:24px 40px;align-items:center;padding:22px 26px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.identity .icon{width:72px;height:72px;border-radius:18px;display:grid;place-items:center;font-size:34px;line-height:1;box-shadow:0 6px 18px -8px rgba(0,0,0,.35)}
+.identity .word{display:flex;flex-direction:column;gap:4px;min-width:0}
+.identity .word .tag{overflow-wrap:anywhere}
+.identity .word .w{font-size:28px;line-height:1}
+.identity .word .tag{font-size:13px;color:var(--muted)}
+.identity .spec{display:grid;grid-template-columns:auto minmax(0,1fr);min-width:0;gap:6px 18px;font-size:12px;align-items:baseline}
+.identity .spec .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.identity .spec .v{font-size:15px;overflow-wrap:anywhere}
+.palette{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid var(--line-soft);padding-top:18px}
+.chip{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.chip i{width:26px;height:26px;border-radius:7px;border:1px solid rgba(0,0,0,.12);display:inline-block}
+.chip b{font-weight:500;color:var(--ink)}
+
+/* mockup frames */
+.mocks{display:grid;gap:22px;min-width:0}
+.mocks>div{min-width:0}
+.mock-label{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:10px}
+.mock-label .eyebrow{color:var(--muted)}
+.mock-label span:last-child{font-size:13px;color:var(--muted)}
+.fit{width:100%;overflow:hidden}
+.fit>.browser{transform-origin:top left;width:960px}
+.browser{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--frame);box-shadow:0 20px 50px -30px rgba(0,0,0,.35)}
+.browser-bar{height:34px;display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--line)}
+.browser-bar i{width:10px;height:10px;border-radius:50%;background:var(--line);display:inline-block}
+.browser-bar .url{margin-left:12px;flex:1;max-width:420px;height:20px;border-radius:6px;background:var(--bg);font-family:var(--mono);font-size:10.5px;color:var(--frame-ink);display:flex;align-items:center;padding:0 10px}
+.phones{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.phone-col{display:flex;flex-direction:column;gap:10px;max-width:100%}
+.phone-col .cap{font-size:13px;color:var(--muted);max-width:300px}
+.phone{width:300px;max-width:100%;height:632px;border-radius:38px;border:9px solid #101112;background:#101112;overflow:hidden;position:relative;box-shadow:0 26px 50px -30px rgba(0,0,0,.5)}
+.phone .scr{position:absolute;inset:0;border-radius:30px;overflow:hidden;display:flex;flex-direction:column}
+
+/* ───────────────────────── Mock UI (token-driven) ───────────────────────── */
+.mock{font-family:var(--p-body),system-ui,sans-serif;color:var(--p-ink);background:var(--p-bg);font-size:12px;line-height:1.35}
+.mock .disp{font-family:var(--p-display),var(--p-body),sans-serif;font-weight:var(--p-display-weight,700);font-stretch:var(--p-display-stretch,100%);letter-spacing:var(--p-display-ls,0);text-transform:var(--p-display-case,none);line-height:1.05}
+.mock .num{font-family:var(--p-mono),var(--p-body),monospace;font-variant-numeric:tabular-nums}
+.mock .eyebrow{font-family:var(--p-mono),monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--p-muted)}
+.mock .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--p-radius);padding:7px 12px;font-weight:600;font-size:11.5px;border:1px solid var(--p-line);background:var(--p-surface);color:var(--p-ink);white-space:nowrap}
+.mock .btn.primary{background:var(--p-accent);color:var(--p-accent-ink);border-color:transparent}
+.mock .btn.ghost{background:transparent}
+.mock .card{background:var(--p-surface);border:1px solid var(--p-line);border-radius:var(--p-radius);padding:14px;display:flex;flex-direction:column;gap:10px}
+.mock .meter{height:6px;background:var(--p-surface2);border-radius:999px;overflow:hidden}
+.mock .meter i{display:block;height:100%;background:var(--p-accent);border-radius:inherit}
+.mock .av{width:22px;height:22px;border-radius:50%;background:var(--p-surface2);color:var(--p-ink);display:inline-grid;place-items:center;font-size:9px;font-weight:700;flex:none}
+.mock .pos{font-family:var(--p-mono),monospace;font-size:9px;padding:1px 5px;border:1px solid var(--p-line);border-radius:max(2px,calc(var(--p-radius) / 2));color:var(--p-muted);margin-left:auto}
+.mock .roster{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.mock .roster li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--p-line)}
+.mock .roster .n{font-family:var(--p-mono),monospace;color:var(--p-muted);width:16px;font-size:10px}
+.mock .roster .g{font-size:9.5px;color:var(--p-muted)}
+.mock .muted{color:var(--p-muted)}
+.mock .row{display:flex;align-items:center;gap:8px}
+.mock .badge{font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:999px;background:var(--p-surface2);color:var(--p-ink)}
+.mock .badge.ok{background:var(--p-accent);color:var(--p-accent-ink)}
+/* desktop */
+.app-desktop{display:grid;grid-template-columns:196px 1fr;min-height:560px}
+.side{border-right:1px solid var(--p-line);padding:16px 12px;display:flex;flex-direction:column;gap:16px;background:var(--p-surface)}
+.brand{display:flex;align-items:center;gap:8px;padding:2px 6px}
+.brand .mark{width:22px;height:22px;border-radius:6px;background:var(--p-accent);color:var(--p-accent-ink);display:grid;place-items:center;font-size:12px}
+.brand .w{font-size:15px}
+.gsw{display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border:1px solid var(--p-line);border-radius:var(--p-radius);font-weight:600;font-size:11.5px;background:var(--p-bg)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav span{padding:6px 9px;border-radius:var(--p-radius);font-size:11.5px;color:var(--p-muted)}
+.nav span.on{background:color-mix(in srgb,var(--p-accent) 16%,transparent);color:var(--p-ink);font-weight:600}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--p-muted)}
+.main{padding:22px 26px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.topbar h1{font-size:22px;margin:0}
+.topbar .sub{color:var(--p-muted);margin-top:4px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px}
+.col{display:flex;flex-direction:column;gap:16px}
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl th{text-align:left;font-family:var(--p-mono),monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--p-muted);font-weight:500;padding:0 0 6px;border-bottom:1px solid var(--p-line)}
+.tbl td{padding:5px 0;border-bottom:1px solid var(--p-line)}
+.tbl .r{text-align:right}
+.dates{display:flex;flex-direction:column;gap:6px}
+.dates div{display:flex;justify-content:space-between;font-size:11px}
+/* mobile */
+.status{display:flex;justify-content:space-between;padding:12px 20px 2px;font-size:11px;font-weight:600}
+.mtop{display:flex;align-items:center;gap:10px;padding:8px 16px 0;font-size:12px}
+.mtop .back{width:22px;height:22px;border-radius:50%;background:var(--p-surface2);display:grid;place-items:center;font-size:12px}
+.screen{flex:1;overflow:hidden;padding:10px 16px 0;display:flex;flex-direction:column;gap:12px}
+.hero h1{font-size:26px;margin:0}
+.hero .sub{color:var(--p-muted);margin-top:4px;font-size:12px}
+.mlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.mlist li{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--p-line);font-size:12px}
+.mlist .n{font-family:var(--p-mono),monospace;color:var(--p-muted);width:16px;font-size:10px}
+.cta{position:absolute;left:16px;right:16px;bottom:66px;display:flex;gap:8px}
+.cta::before{content:'';position:absolute;left:-16px;right:-16px;bottom:-4px;height:84px;background:linear-gradient(180deg,transparent,var(--p-bg) 55%);z-index:-1;pointer-events:none}
+.phone .scr{isolation:isolate}
+.cta .btn{flex:1;padding:12px;font-size:13px}
+.tabs{display:flex;border-top:1px solid var(--p-line);background:var(--p-surface);padding:8px 6px 16px;margin-top:auto}
+.tabs span{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9.5px;color:var(--p-muted)}
+.tabs span i{width:18px;height:18px;border-radius:5px;background:currentColor;opacity:.35;display:block}
+.tabs span.on{color:var(--p-accent)}
+.tabs span.on i{opacity:1}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.teams .t{padding:8px 10px;border-radius:var(--p-radius);display:flex;flex-direction:column;gap:2px;font-size:11px}
+.teams .t.dark{background:var(--p-team-dark);color:#F3F0E6}
+.teams .t.light{background:var(--p-team-light);color:#1B1F2A;border:1px solid var(--p-line)}
+.teams .t .disp{font-size:13px}
+.pitch{position:relative;aspect-ratio:3/3.55;background:var(--p-pitch);border-radius:var(--p-pitch-radius,8px);border:2px solid var(--p-chalk);overflow:hidden;max-width:100%}
+.pitch::before{content:'';position:absolute;left:0;right:0;top:50%;border-top:2px solid var(--p-chalk)}
+.pitch::after{content:'';position:absolute;width:56px;height:56px;border:2px solid var(--p-chalk);border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
+.pitch .box{position:absolute;left:25%;right:25%;height:14%;border:2px solid var(--p-chalk)}
+.pitch .box.t{top:-2px;border-top:0}
+.pitch .box.b{bottom:-2px;border-bottom:0}
+.dot{position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;border:2px solid rgba(255,255,255,.85)}
+.dot.dk{background:var(--p-team-dark);color:#F3F0E6}
+.dot.lt{background:var(--p-team-light);color:#1B1F2A}
+.dot b{position:absolute;top:100%;margin-top:2px;font-size:8px;font-weight:600;white-space:nowrap;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+
+/* ───────────────────────── A · Nocturno ───────────────────────── */
+.p-a{--p-bg:#0B1210;--p-surface:#111A16;--p-surface2:#1A2620;--p-ink:#EEF3EF;--p-muted:#8DA396;--p-line:#1F2D27;
+  --p-accent:#C6F542;--p-accent-ink:#0B1210;--p-display:'Archivo';--p-display-weight:800;--p-display-stretch:125%;--p-display-case:uppercase;--p-display-ls:.01em;
+  --p-body:'Archivo';--p-mono:'JetBrains Mono';--p-radius:6px;--p-team-dark:#1E2B4C;--p-team-light:#F1EEE3;--p-pitch:#14352A;--p-chalk:rgba(238,243,239,.55)}
+.p-a .side{background:linear-gradient(180deg,#101B16,#0B1210)}
+.p-a .card.hot{box-shadow:0 0 70px -24px rgba(198,245,66,.45);border-color:#2A3C33}
+.p-a .brand .mark{box-shadow:0 0 18px -2px rgba(198,245,66,.7)}
+.p-a .hero h1{font-size:30px}
+.p-a .dot{border-color:rgba(198,245,66,.8)}
+/* ───────────────────────── B · Club de barrio ───────────────────────── */
+.p-b{--p-bg:#F1EEE5;--p-surface:#FBFAF6;--p-surface2:#E7E3D5;--p-ink:#1B1F2A;--p-muted:#6B7180;--p-line:#D9D4C4;
+  --p-accent:#9B2335;--p-accent-ink:#FFFFFF;--p-second:#1E2F5C;--p-display:'Fraunces';--p-display-weight:700;--p-display-ls:-.01em;
+  --p-body:'Manrope';--p-mono:'Barlow Condensed';--p-radius:10px;--p-team-dark:#1E2F5C;--p-team-light:#F6F2E6;--p-pitch:#2F6B4A;--p-chalk:rgba(255,255,255,.7)}
+.p-b .mock .num,.p-b .mock .eyebrow,.p-b .tbl th,.p-b .roster .n,.p-b .mlist .n,.p-b .mock .pos{font-size:11px;letter-spacing:.06em}
+.p-b .main{border-top:8px solid transparent;border-image:repeating-linear-gradient(90deg,#1E2F5C 0 16px,#9B2335 16px 32px) 8}
+.p-b .brand .mark{border-radius:6px 6px 10px 10px / 6px 6px 14px 14px;background:var(--p-second)}
+.p-b .nav span.on{background:color-mix(in srgb,var(--p-second) 12%,transparent)}
+.p-b .tabs span.on{color:var(--p-second)}
+.p-b .meter i{background:var(--p-second)}
+.p-b .hero h1{font-size:28px}
+/* ───────────────────────── C · Pizarra ───────────────────────── */
+.p-c{--p-bg:#173129;--p-surface:#1C392F;--p-surface2:#264A3D;--p-ink:#F3F0E6;--p-muted:#9FB4A8;--p-line:rgba(243,240,230,.32);
+  --p-accent:#FF8A3D;--p-accent-ink:#1A1A1A;--p-display:'Syne';--p-display-weight:800;--p-display-ls:-.01em;
+  --p-body:'IBM Plex Sans';--p-mono:'IBM Plex Mono';--p-radius:3px;--p-team-dark:#1C1C1E;--p-team-light:#F3F0E6;--p-pitch:#173129;--p-chalk:rgba(243,240,230,.75);--p-pitch-radius:2px}
+.p-c .mock{background-image:radial-gradient(rgba(243,240,230,.045) 1px,transparent 1px);background-size:7px 7px}
+.p-c .mock .card,.p-c .gsw,.p-c .mock .pos{border-style:dashed}
+.p-c .mock .btn:not(.primary){border-style:dashed}
+.p-c .side{background:rgba(0,0,0,.18)}
+.p-c .pitch{border-style:dashed}
+.p-c .pitch::before,.p-c .pitch::after,.p-c .pitch .box{border-style:dashed}
+.p-c .meter{background:rgba(243,240,230,.15)}
+.p-c .hero h1{font-size:28px}
+/* ───────────────────────── D · Domingo ───────────────────────── */
+.p-d{--p-bg:#FFFBF3;--p-surface:#FFFFFF;--p-surface2:#FFF0E0;--p-ink:#1E1B2E;--p-muted:#746E88;--p-line:#F0E6D8;
+  --p-accent:#FF5A1F;--p-accent-ink:#FFFFFF;--p-second:#2F4BFF;--p-display:'Bricolage Grotesque';--p-display-weight:800;--p-display-ls:-.02em;
+  --p-body:'Figtree';--p-mono:'Figtree';--p-radius:16px;--p-team-dark:#2F4BFF;--p-team-light:#FFF4DE;--p-pitch:#23B36A;--p-chalk:rgba(255,255,255,.8);--p-pitch-radius:18px}
+.p-d .mock .btn{border-radius:999px}
+.p-d .mock .card{box-shadow:0 10px 30px -18px rgba(30,27,46,.25);border-color:transparent}
+.p-d .meter{height:10px}
+.p-d .mock .av{width:26px;height:26px;background:#FFE3CF;color:#C24310}
+.p-d .nav span.on{background:#FFE9DC;color:#C24310}
+.p-d .tabs span.on{color:var(--p-accent)}
+.p-d .mock .pos{border-radius:999px;background:var(--p-surface2);border-color:transparent;font-weight:600;color:#8A5A3A}
+.p-d .hero h1{font-size:30px}
+.p-d .brand .mark{border-radius:8px}
+/* ───────────────────────── E · Diario ───────────────────────── */
+.p-e{--p-bg:#FFFFFF;--p-surface:#FFFFFF;--p-surface2:#F1F1EE;--p-ink:#111111;--p-muted:#6A6A66;--p-line:#111111;
+  --p-accent:#D62828;--p-accent-ink:#FFFFFF;--p-display:'Oswald';--p-display-weight:700;--p-display-case:uppercase;--p-display-ls:.005em;
+  --p-body:'Source Serif 4';--p-mono:'Oswald';--p-radius:0px;--p-team-dark:#111111;--p-team-light:#F1F1EE;--p-pitch:#2A7A4B;--p-chalk:rgba(255,255,255,.75);--p-pitch-radius:0}
+.p-e .mock{font-size:12.5px}
+.p-e .side{background:#111;--p-ink:#fff;--p-muted:#A9A9A4;--p-line:#333;--p-surface2:#222;--p-bg:#1A1A1A}
+.p-e .nav span.on{background:#fff;color:#111}
+.p-e .mock .eyebrow,.p-e .tbl th,.p-e .mock .pos,.p-e .roster .n,.p-e .mlist .n{font-size:10px;letter-spacing:.12em}
+.p-e .mock .card{border-width:0;border-top:2px solid #111;padding-inline:0}
+.p-e .mock .btn:not(.primary){border-color:#111}
+.p-e .topbar h1{font-size:30px}
+.p-e .hero h1{font-size:34px}
+.p-e .tabs{border-top:2px solid #111}
+.p-e .tabs span.on{color:#111}
+.p-e .meter{border-radius:0}
+.p-e .meter i{border-radius:0}
+.p-e .mock .av{border-radius:0;font-family:'Oswald'}
+.p-e .badge{border-radius:0}
+
+/* ───────────────────────── Names ───────────────────────── */
+.shortlist{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0 36px}
+.shortlist div{padding:18px 20px;border:1px solid var(--line);border-radius:12px;background:var(--surface);display:flex;flex-direction:column;gap:6px}
+.shortlist .nm{font-size:26px;font-weight:600;letter-spacing:-.02em}
+.shortlist .why{font-size:14px;color:var(--muted)}
+.ngroup{margin-top:30px}
+.ngroup h3{font-size:16px;font-weight:600;margin-bottom:4px}
+.ngroup .sub{font-size:14px;color:var(--muted);margin-bottom:10px;max-width:62ch}
+.names{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:0 20px;font-size:14px}
+.names>div{display:contents}
+.names>div>*{padding:12px 0;border-top:1px solid var(--line-soft)}
+.names .nm{font-size:18px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.names .nm small{display:block;font-size:12px;color:var(--muted);font-weight:400;font-family:var(--mono)}
+.names .gl{color:var(--ink)}
+.names .gl span{color:var(--muted)}
+.names .tg{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;align-self:start;padding-top:15px}
+.tg.rec{color:var(--accent)}
+.tg.warn{color:#B8651B}
+.tg.no{color:var(--muted)}
+.checks{margin-top:36px;display:grid;grid-template-columns:auto 1fr;gap:8px 24px;font-size:14px;padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.checks .eyebrow{grid-column:1}
+.checks p{grid-column:2}
+
+/* next */
+.next ol{margin:0;padding-left:20px;max-width:62ch}
+.next li{margin-bottom:8px}
+
+@media (max-width:900px){
+  .deck-head{grid-template-columns:1fr}
+  .p-head{grid-template-columns:1fr}
+  .two{grid-template-columns:1fr}
+  .identity{grid-template-columns:auto minmax(0,1fr)}
+  .identity .spec{grid-column:1/-1}
+  .shortlist{grid-template-columns:1fr}
+  .names{grid-template-columns:1fr}
+  .names>div>*{border-top:0;padding:3px 0}
+  .names>div>.nm{border-top:1px solid var(--line-soft);padding-top:14px}
+  .names>div>.tg{padding:2px 0 14px}
+  .shared,.checks{grid-template-columns:1fr}
+  .shared p,.checks p{grid-column:1}
+}
+@media (prefers-reduced-motion:no-preference){
+  .jump a{transition:border-color .15s}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<header class="deck-head">
+  <div>
+    <div class="eyebrow">Branding proposals · September 2026</div>
+    <h1>Five visual directions for the Monday match app</h1>
+    <p class="lede">Each direction dresses the same three real screens: the group dashboard in a browser, and the match signup and lineup on a phone. Palette, type and shape change; the product does not. Names are proposed separately at the end and pair with any direction.</p>
+  </div>
+  <div class="current">
+    <span>Today: fulbot · Inter · dark by default</span>
+    <span class="sw"><i style="background:#0A0A0F"></i><i style="background:#1DD780"></i><i style="background:#1C925B"></i><i style="background:#FBFBFD"></i> single green primary</span>
+  </div>
+</header>
+<nav class="jump" aria-label="Sections">
+  <a href="#brief">Browser vs. mobile</a>
+  <a href="#p-a">A · Nocturno</a>
+  <a href="#p-b">B · Club de barrio</a>
+  <a href="#p-c">C · Pizarra</a>
+  <a href="#p-d">D · Domingo</a>
+  <a href="#p-e">E · Diario</a>
+  <a href="#names">Names</a>
+  <a href="#next" class="dim">Next steps</a>
+</nav>
+
+<!-- ───────────────────────── BRIEF ───────────────────────── -->
+<section class="block" id="brief">
+  <div class="eyebrow">The brief</div>
+  <h2>One app, two interfaces</h2>
+  <p class="lede">The browser is where the admin runs the group on Sunday morning. The phone is where fourteen people tap “Anotarme” from WhatsApp at 12:01. They need different shells, not different apps.</p>
+  <div class="two">
+    <div>
+      <div class="wire desk" aria-hidden="true"><div class="s"></div><div class="t"></div><div class="m"></div><div class="c1"></div><div class="c2"></div></div>
+      <h3>Browser: the admin desk</h3>
+      <ul>
+        <li><b>Persistent sidebar</b> with the group switcher and sections: Partidos, Jugadores, Estadísticas, Reglas, Ajustes.</li>
+        <li><b>Two-column pages.</b> The match on the left, the table and upcoming dates on the right. Nothing hides behind a tap.</li>
+        <li><b>Dense tools.</b> Drag-and-drop lineup editor, pair rules, guest management, image export, all with room to breathe.</li>
+        <li><b>Layout breakpoint</b> around 900px. Tablets in landscape get the desk; portrait gets the pocket.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="wire mob" aria-hidden="true"><div class="t"></div><div class="m"></div><div class="cta"></div><div class="b"></div></div>
+      <h3>Mobile: the player's pocket</h3>
+      <ul>
+        <li><b>One column, one job.</b> The screen opens on the next match with the count of spots and a single sticky action in thumb reach: Anotarme, or Bajarme once you are in.</li>
+        <li><b>Bottom tab bar</b> with three stops: Partido, Grupo, Yo. No hamburger.</li>
+        <li><b>Built for the WhatsApp round trip.</b> Deep links land on the match, the lineup exports as an image, the app installs to the home screen as a PWA.</li>
+        <li><b>Admin actions stay available</b> but move to a sheet, not the main flow.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shared">
+    <span class="eyebrow">Shared</span>
+    <p>Same design tokens, same components, same routes. The current code already drives colors through CSS variables and a dark class, so any direction below is a token and font swap plus a responsive shell. What does not exist yet is the shell itself: today there is a single top header on every screen size.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── PROPOSALS ───────────────────────── -->
+<section class="block" id="proposals">
+  <div class="eyebrow">Directions</div>
+  <h2>Five ways to dress it</h2>
+  <p class="lede">Letters are for pointing at them in conversation, not a ranking. Each mockup uses a working name so the wordmark can be judged in context; swap freely.</p>
+
+  <!-- A -->
+  <article class="proposal p-a" id="p-a">
+    <div class="p-head">
+      <div>
+        <div class="letter">Direction A</div>
+        <h3>Nocturno</h3>
+        <p class="thesis">Floodlit five-a-side at 9 pm. Near-black green ground, one chalk-lime accent, wide uppercase headlines. The closest evolution of the current dark theme, with a sharper voice.</p>
+      </div>
+      <div class="p-notes">
+        <div><span class="k">Mood</span><p>Synthetic turf under lights. Serious about the game, casual about everything else.</p></div>
+        <div><span class="k">Why it works</span><p>Keeps the dark-first default players already know. Lime reads instantly on a phone outdoors and as a WhatsApp preview.</p></div>
+        <div><span class="k">Watch out</span><p>Expanded uppercase type needs discipline: headlines and the wordmark only, never body copy. Light mode should be a warm grey, not white.</p></div>
+        <div><span class="k">Pairs with</span><p>Picado, Cancha, Hay Partido.</p></div>
+      </div>
+    </div>
+    <div class="identity mock" style="background:var(--surface);color:var(--ink)">
+      <div class="icon" style="background:#0B1210;color:#C6F542;font-family:'Archivo';font-weight:800;font-stretch:125%;box-shadow:0 0 30px -6px rgba(198,245,66,.6)">P</div>
+      <div class="word"><span class="w disp" style="font-family:'Archivo';font-weight:800;font-stretch:125%;text-transform:uppercase">Picado</span><span class="tag">Se abre la lista el domingo a las 12.</span></div>
+      <div class="spec">
+        <span class="k">Display</span><span class="v" style="font-family:'Archivo';font-weight:800;font-stretch:125%;text-transform:uppercase">Archivo Expanded 800</span>
+        <span class="k">Body</span><span class="v" style="font-family:'Archivo'">Archivo 400 / 500</span>
+        <span class="k">Numbers</span><span class="v" style="font-family:'JetBrains Mono'">JetBrains Mono · 11 / 14</span>
+        <span class="k">Shape</span><span class="v">6px radius, 1px hairlines, glow on the live card</span>
+      </div>
+      <div class="palette">
+        <span class="chip"><i style="background:#0B1210"></i><b>#0B1210</b> ground</span>
+        <span class="chip"><i style="background:#111A16"></i><b>#111A16</b> surface</span>
+        <span class="chip"><i style="background:#C6F542"></i><b>#C6F542</b> lime</span>
+        <span class="chip"><i style="background:#EEF3EF"></i><b>#EEF3EF</b> ink</span>
+        <span class="chip"><i style="background:#8DA396"></i><b>#8DA396</b> muted</span>
+        <span class="chip"><i style="background:#1E2B4C"></i><b>#1E2B4C</b> oscuras</span>
+        <span class="chip"><i style="background:#F1EEE3"></i><b>#F1EEE3</b> claras</span>
+      </div>
+    </div>
+    <div class="mocks" data-mock='{"name":"Picado","url":"picado.app/g/futbol-lunes","mark":"P"}'></div>
+  </article>
+
+  <!-- B -->
+  <article class="proposal p-b" id="p-b">
+    <div class="p-head">
+      <div>
+        <div class="letter">Direction B</div>
+        <h3>Club de barrio</h3>
+        <p class="thesis">The neighbourhood club that has existed since 1954. Off-white ground, navy and burgundy from the jersey, a warm serif for names and condensed numerals like the ones on a shirt back.</p>
+      </div>
+      <div class="p-notes">
+        <div><span class="k">Mood</span><p>Crest on the door, trophies behind the bar. Belonging first, software second.</p></div>
+        <div><span class="k">Why it works</span><p>The group has a history and a Monday ritual; this direction treats it like a club, which makes stats and MVPs feel earned rather than gamified.</p></div>
+        <div><span class="k">Watch out</span><p>Light-first, so the dark mode needs its own navy ground rather than an inversion. Serif at small sizes on phones needs the 600 weight.</p></div>
+        <div><span class="k">Pairs with</span><p>Convocados, Plantel, Fecha.</p></div>
+      </div>
+    </div>
+    <div class="identity" >
+      <div class="icon" style="background:#1E2F5C;color:#F6F2E6;font-family:'Fraunces';font-weight:700;border-radius:14px 14px 30px 30px / 14px 14px 36px 36px;font-size:30px">C</div>
+      <div class="word"><span class="w" style="font-family:'Fraunces';font-weight:700;letter-spacing:-.01em">Convocados</span><span class="tag">Fundado un lunes, como todos.</span></div>
+      <div class="spec">
+        <span class="k">Display</span><span class="v" style="font-family:'Fraunces';font-weight:700">Fraunces 700</span>
+        <span class="k">Body</span><span class="v" style="font-family:'Manrope'">Manrope 400 / 600</span>
+        <span class="k">Numbers</span><span class="v" style="font-family:'Barlow Condensed';font-weight:600;letter-spacing:.04em">BARLOW CONDENSED · 11 / 14</span>
+        <span class="k">Shape</span><span class="v">10px radius, jersey stripe on page tops</span>
+      </div>
+      <div class="palette">
+        <span class="chip"><i style="background:#F1EEE5"></i><b>#F1EEE5</b> ground</span>
+        <span class="chip"><i style="background:#FBFAF6"></i><b>#FBFAF6</b> surface</span>
+        <span class="chip"><i style="background:#1E2F5C"></i><b>#1E2F5C</b> navy</span>
+        <span class="chip"><i style="background:#9B2335"></i><b>#9B2335</b> burgundy</span>
+        <span class="chip"><i style="background:#C9A227"></i><b>#C9A227</b> gold (MVP only)</span>
+        <span class="chip"><i style="background:#1B1F2A"></i><b>#1B1F2A</b> ink</span>
+        <span class="chip"><i style="background:#6B7180"></i><b>#6B7180</b> muted</span>
+      </div>
+    </div>
+    <div class="mocks" data-mock='{"name":"Convocados","url":"convocados.app/g/futbol-lunes","mark":"C"}'></div>
+  </article>
+
+  <!-- C -->
+  <article class="proposal p-c" id="p-c">
+    <div class="p-head">
+      <div>
+        <div class="letter">Direction C</div>
+        <h3>Pizarra</h3>
+        <p class="thesis">The coach's chalkboard. Slate-green ground with chalk-white dashed lines, cone-orange for the one thing to do, a geometric display face and monospaced numbers. Puts the team generator at the centre of the brand.</p>
+      </div>
+      <div class="p-notes">
+        <div><span class="k">Mood</span><p>Halftime talk. Tactical, a bit nerdy, deliberately un-corporate.</p></div>
+        <div><span class="k">Why it works</span><p>The AI lineup is the feature nobody else's WhatsApp group has. A board-and-chalk language makes the lineup screen the hero and the exported image instantly recognisable.</p></div>
+        <div><span class="k">Watch out</span><p>Dashed borders everywhere get noisy; reserve them for cards and the pitch, keep buttons solid. Orange on green needs the dark ink label, never white.</p></div>
+        <div><span class="k">Pairs with</span><p>Pizarra, Cancha, Plantel.</p></div>
+      </div>
+    </div>
+    <div class="identity">
+      <div class="icon" style="background:#173129;color:#F3F0E6;font-family:'Syne';font-weight:800;border:2px dashed rgba(243,240,230,.6);font-size:26px;letter-spacing:-.04em">XO</div>
+      <div class="word"><span class="w" style="font-family:'Syne';font-weight:800;letter-spacing:-.01em">Pizarra</span><span class="tag">Los equipos se arman solos. Casi.</span></div>
+      <div class="spec">
+        <span class="k">Display</span><span class="v" style="font-family:'Syne';font-weight:800">Syne 800</span>
+        <span class="k">Body</span><span class="v" style="font-family:'IBM Plex Sans'">IBM Plex Sans 400 / 600</span>
+        <span class="k">Numbers</span><span class="v" style="font-family:'IBM Plex Mono'">IBM Plex Mono · 11 / 14</span>
+        <span class="k">Shape</span><span class="v">3px radius, dashed chalk rules, dust texture on the ground</span>
+      </div>
+      <div class="palette">
+        <span class="chip"><i style="background:#173129"></i><b>#173129</b> board</span>
+        <span class="chip"><i style="background:#1C392F"></i><b>#1C392F</b> surface</span>
+        <span class="chip"><i style="background:#F3F0E6"></i><b>#F3F0E6</b> chalk</span>
+        <span class="chip"><i style="background:#FF8A3D"></i><b>#FF8A3D</b> cone</span>
+        <span class="chip"><i style="background:#9FB4A8"></i><b>#9FB4A8</b> muted</span>
+        <span class="chip"><i style="background:#1C1C1E"></i><b>#1C1C1E</b> oscuras</span>
+      </div>
+    </div>
+    <div class="mocks" data-mock='{"name":"Pizarra","url":"pizarra.app/g/futbol-lunes","mark":"X"}'></div>
+  </article>
+
+  <!-- D -->
+  <article class="proposal p-d" id="p-d">
+    <div class="p-head">
+      <div>
+        <div class="letter">Direction D</div>
+        <h3>Domingo</h3>
+        <p class="thesis">Sunday-league pop. Warm white ground, tangerine for action, cobalt for the second team, pill buttons and big friendly counts. The lightest, most consumer-app direction of the five.</p>
+      </div>
+      <div class="p-notes">
+        <div><span class="k">Mood</span><p>Sunny, loud, easy. The app you open while still in bed on Sunday.</p></div>
+        <div><span class="k">Why it works</span><p>Lowest friction for guests who arrive from an invite link and have never seen the app. Big tap targets, unambiguous primary action, colour that survives a cracked screen.</p></div>
+        <div><span class="k">Watch out</span><p>Tangerine and cobalt together can tip into “startup”; keep cobalt for team Claras and links only. Dark mode should be a deep aubergine, not black.</p></div>
+        <div><span class="k">Pairs with</span><p>Falta Uno, Hay Partido, Anotate.</p></div>
+      </div>
+    </div>
+    <div class="identity">
+      <div class="icon" style="background:#FF5A1F;color:#fff;font-family:'Bricolage Grotesque';font-weight:800;border-radius:22px;font-size:38px;letter-spacing:-.05em">1</div>
+      <div class="word"><span class="w" style="font-family:'Bricolage Grotesque';font-weight:800;letter-spacing:-.02em">Falta Uno</span><span class="tag">Somos 13. Vos sabés lo que hay que hacer.</span></div>
+      <div class="spec">
+        <span class="k">Display</span><span class="v" style="font-family:'Bricolage Grotesque';font-weight:800">Bricolage Grotesque 800</span>
+        <span class="k">Body</span><span class="v" style="font-family:'Figtree'">Figtree 400 / 600</span>
+        <span class="k">Numbers</span><span class="v" style="font-family:'Figtree';font-weight:700;font-variant-numeric:tabular-nums">Figtree 700 tabular · 11 / 14</span>
+        <span class="k">Shape</span><span class="v">16px cards, pill buttons, soft shadows, no hairlines</span>
+      </div>
+      <div class="palette">
+        <span class="chip"><i style="background:#FFFBF3"></i><b>#FFFBF3</b> ground</span>
+        <span class="chip"><i style="background:#FFFFFF"></i><b>#FFFFFF</b> surface</span>
+        <span class="chip"><i style="background:#FF5A1F"></i><b>#FF5A1F</b> tangerine</span>
+        <span class="chip"><i style="background:#2F4BFF"></i><b>#2F4BFF</b> cobalt</span>
+        <span class="chip"><i style="background:#23B36A"></i><b>#23B36A</b> pitch</span>
+        <span class="chip"><i style="background:#1E1B2E"></i><b>#1E1B2E</b> ink</span>
+        <span class="chip"><i style="background:#746E88"></i><b>#746E88</b> muted</span>
+      </div>
+    </div>
+    <div class="mocks" data-mock='{"name":"Falta Uno","url":"faltauno.app/g/futbol-lunes","mark":"1"}'></div>
+  </article>
+
+  <!-- E -->
+  <article class="proposal p-e" id="p-e">
+    <div class="p-head">
+      <div>
+        <div class="letter">Direction E</div>
+        <h3>Diario</h3>
+        <p class="thesis">The Tuesday sports page. Paper white, ink black, one red for the call to action. Condensed uppercase headlines over a reading serif, rules instead of boxes. Stats and results become the story.</p>
+      </div>
+      <div class="p-notes">
+        <div><span class="k">Mood</span><p>Match report. Dry, confident, a little theatrical about a 7-a-side.</p></div>
+        <div><span class="k">Why it works</span><p>The app is about to gain crowd-sourced results, goal scorers and MVPs. A newspaper voice gives all of that a natural home and makes the weekly recap shareable as a “front page”.</p></div>
+        <div><span class="k">Watch out</span><p>Hairlines and serif need generous spacing on phones or it turns into a spreadsheet. Dark mode is an inverted masthead, not a grey theme.</p></div>
+        <div><span class="k">Pairs with</span><p>Fecha, Titular, Convocados.</p></div>
+      </div>
+    </div>
+    <div class="identity">
+      <div class="icon" style="background:#111;color:#fff;font-family:'Oswald';font-weight:700;border-radius:4px;font-size:34px">F.</div>
+      <div class="word"><span class="w" style="font-family:'Oswald';font-weight:700;text-transform:uppercase;letter-spacing:.01em">Fecha</span><span class="tag">Lunes se juega. Martes se discute.</span></div>
+      <div class="spec">
+        <span class="k">Display</span><span class="v" style="font-family:'Oswald';font-weight:700;text-transform:uppercase">Oswald 700</span>
+        <span class="k">Body</span><span class="v" style="font-family:'Source Serif 4'">Source Serif 4 · 400 / 600</span>
+        <span class="k">Numbers</span><span class="v" style="font-family:'Oswald';font-weight:500;letter-spacing:.04em">OSWALD 500 · 11 / 14</span>
+        <span class="k">Shape</span><span class="v">0 radius, 1px and 2px black rules, black masthead sidebar</span>
+      </div>
+      <div class="palette">
+        <span class="chip"><i style="background:#FFFFFF"></i><b>#FFFFFF</b> paper</span>
+        <span class="chip"><i style="background:#F1F1EE"></i><b>#F1F1EE</b> tint</span>
+        <span class="chip"><i style="background:#111111"></i><b>#111111</b> ink</span>
+        <span class="chip"><i style="background:#D62828"></i><b>#D62828</b> red</span>
+        <span class="chip"><i style="background:#6A6A66"></i><b>#6A6A66</b> muted</span>
+        <span class="chip"><i style="background:#2A7A4B"></i><b>#2A7A4B</b> pitch</span>
+      </div>
+    </div>
+    <div class="mocks" data-mock='{"name":"Fecha","url":"fecha.app/g/futbol-lunes","mark":"F"}'></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── NAMES ───────────────────────── -->
+<section class="block" id="names">
+  <div class="eyebrow">Names</div>
+  <h2>What to call it</h2>
+  <p class="lede">The strongest names come from the ritual itself: the words the group already types on Sunday. “fulbot” has served, but the “bot” suffix promises a chatbot and the app is a list, a pitch and a coach.</p>
+
+  <div class="shortlist">
+    <div><span class="eyebrow">Shortlist · 1</span><span class="nm">Picado</span><span class="why">The Rioplatense word for a pick-up match. Two syllables, no accent, describes the product to anyone who would use it. Feels like a brand, not a feature.</span></div>
+    <div><span class="eyebrow">Shortlist · 2</span><span class="nm">Falta Uno</span><span class="why">The eternal WhatsApp message. Funny, memorable, and it names the exact moment the app exists to solve. Reads great in a notification.</span></div>
+    <div><span class="eyebrow">Shortlist · 3</span><span class="nm">Cancha</span><span class="why">The pitch. Neutral, travels across every Spanish-speaking country, ages well. The safe choice if you ever go beyond one city.</span></div>
+  </div>
+
+  <div class="ngroup">
+    <h3>From the ritual</h3>
+    <p class="sub">Words the group already uses. Highest recognition, most local.</p>
+    <div class="names">
+      <div><span class="nm">Picado<small>picado.app</small></span><span class="gl">A casual match among friends. <span>In Spain “picado” also means annoyed, and Chile and Peru say “pichanga”. Fine if the audience is Argentina and Uruguay first.</span></span><span class="tg rec">Recommended</span></div>
+      <div><span class="nm">Picadito<small>picadito.app</small></span><span class="gl">Same word, friendlier and smaller. <span>Four syllables is a lot for a wordmark; works better as the tagline.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Fulbo<small>fulbo.app</small></span><span class="gl">The game itself, said the way the group says it. <span>Generic, hard to own, likely taken everywhere.</span></span><span class="tg no">Pass</span></div>
+      <div><span class="nm">Fulbot<small>current</small></span><span class="gl">Fulbo plus bot. <span>Keep only for continuity. It suggests a chat assistant and the “t” muddies pronunciation.</span></span><span class="tg warn">Keep or retire</span></div>
+    </div>
+  </div>
+
+  <div class="ngroup">
+    <h3>The WhatsApp message</h3>
+    <p class="sub">Phrases that trigger the ritual. They double as notification copy.</p>
+    <div class="names">
+      <div><span class="nm">Falta Uno<small>faltauno.app</small></span><span class="gl">“We're one short.” <span>Playful, tells the job, and the app icon writes itself. Slight risk of sounding like a problem, which is the charm.</span></span><span class="tg rec">Recommended</span></div>
+      <div><span class="nm">Hay Partido<small>haypartido.app</small></span><span class="gl">“There's a match.” <span>Announcement energy, perfect as the push notification title. Slightly long for an icon.</span></span><span class="tg rec">Strong</span></div>
+      <div><span class="nm">Se Armó<small>searmo.app</small></span><span class="gl">“It's on”, said when the list fills. <span>Great for the “full” state and the lineup share; less clear as a product name out of context.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Anotate<small>anotate.app</small></span><span class="gl">The imperative on the button. <span>Verb-as-name like “Anotame”; clear, but sounds like a to-do app.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Somos 14<small>somos14.app</small></span><span class="gl">The magic number. <span>Locks the brand to 7-a-side; a group of ten will not identify.</span></span><span class="tg warn">Too specific</span></div>
+    </div>
+  </div>
+
+  <div class="ngroup">
+    <h3>The pitch and the board</h3>
+    <p class="sub">Neutral nouns from the game. Travel best, feel most like a product.</p>
+    <div class="names">
+      <div><span class="nm">Cancha<small>cancha.app · lacancha.app</small></span><span class="gl">The pitch. <span>Understood from Mexico to Patagonia. The bare domain is probably taken; “La Cancha” is the fallback.</span></span><span class="tg rec">Recommended</span></div>
+      <div><span class="nm">Pizarra<small>pizarra.app</small></span><span class="gl">The tactics board. <span>Centres the AI lineup, the one feature no chat group has. Pairs naturally with direction C.</span></span><span class="tg rec">Strong</span></div>
+      <div><span class="nm">Convocados<small>convocados.app</small></span><span class="gl">The call-up list. <span>Official, a little grand for a Monday, which can be the joke. Long.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Plantel<small>plantel.app</small></span><span class="gl">The squad. <span>Serious and club-like; good if member scoring and stats become central.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Vestuario<small>vestuario.app</small></span><span class="gl">The locker room. <span>Nice for a social angle; says nothing about organising a match.</span></span><span class="tg no">Alternate</span></div>
+    </div>
+  </div>
+
+  <div class="ngroup">
+    <h3>Short and brandable</h3>
+    <p class="sub">One or two syllables. Own them with a mark rather than a meaning.</p>
+    <div class="names">
+      <div><span class="nm">Fecha<small>fecha.app</small></span><span class="gl">Matchday, and also “date”. <span>Two syllables, works as “Fecha 12” in results and recaps. Ambiguous outside Spanish.</span></span><span class="tg rec">Strong</span></div>
+      <div><span class="nm">Titular<small>titular.app</small></span><span class="gl">A starter, not a sub. <span>Aspirational for players; a little inward-looking for a group tool.</span></span><span class="tg no">Alternate</span></div>
+      <div><span class="nm">Siete<small>siete.app</small></span><span class="gl">Seven-a-side. <span>Same lock-in as Somos 14, and the domain is a lottery.</span></span><span class="tg warn">Too specific</span></div>
+    </div>
+  </div>
+
+  <div class="checks">
+    <span class="eyebrow">Before committing</span>
+    <p>Check the .app and .com.ar domains, search the App Store and Play Store even though it ships as a PWA today, paste the name into a WhatsApp message and look at the link preview, and say it out loud to someone from Spain or Mexico. Avoid accents in the name itself so the URL and the wordmark match.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── NEXT ───────────────────────── -->
+<section class="block next" id="next">
+  <div class="eyebrow">Next steps</div>
+  <h2>How this becomes code</h2>
+  <ol>
+    <li><b>Pick a direction and a name</b>, or ask for a hybrid (for example B's palette with A's dark-first default).</li>
+    <li><b>Token swap.</b> The palette lands in the existing CSS variables in the global stylesheet, light and dark, and the fonts replace Inter in the root layout.</li>
+    <li><b>Responsive shell.</b> A sidebar layout for the dashboard group above 900px and a bottom tab bar plus sticky action below it. The header component becomes the mobile top bar.</li>
+    <li><b>Assets.</b> App icon, manifest colours, WhatsApp share image template for the lineup export, and the invite page as the first thing a guest sees in the new brand.</li>
+  </ol>
+</section>
+</div>
+
+<script>
+(function(){
+  var players=[["Nico","GK"],["Maxo","CM"],["Fede","ST"],["Juanma","CB"],["Lucho","LW"],["Tato","CM"],["Seba","CB"],["Pablo","RW"],["Rama","ST"],["Gonza","CM"],["Mati","CB"]];
+  var wait=[["Facu","CM"],["Agus","CB"]];
+  var ini=function(n){return n.slice(0,2).toUpperCase();};
+  function li(i,p,guest){return '<li><span class="n num">'+String(i).padStart(2,'0')+'</span><span class="av">'+ini(p[0])+'</span><span>'+p[0]+(guest?' <span class="g">invitado</span>':'')+'</span><span class="pos">'+p[1]+'</span></li>';}
+  function desktop(c){
+    var rows=players.map(function(p,i){return li(i+1,p,p[0]==='Rama');}).join('');
+    return '<div class="fit"><div class="browser"><div class="browser-bar"><i></i><i></i><i></i><span class="url">'+c.url+'</span></div>'+
+    '<div class="mock app-desktop">'+
+      '<aside class="side">'+
+        '<div class="brand"><span class="mark disp">'+c.mark+'</span><span class="w disp">'+c.name+'</span></div>'+
+        '<div class="gsw"><span>Fútbol lunes</span><span class="muted">⌄</span></div>'+
+        '<nav class="nav"><span class="on">Partidos</span><span>Jugadores</span><span>Estadísticas</span><span>Reglas</span><span>Ajustes</span></nav>'+
+        '<div class="foot"><span class="av">MA</span><span>Maxo · admin</span></div>'+
+      '</aside>'+
+      '<main class="main">'+
+        '<div class="topbar"><div><h1 class="disp">Fútbol lunes</h1><div class="sub">Lunes 20:00 · Cancha Los Pinos · 14 lugares · 18 miembros</div></div><div class="row"><span class="btn ghost">Invitar</span><span class="btn primary">+ Crear partido</span></div></div>'+
+        '<div class="grid">'+
+          '<section class="card hot">'+
+            '<div class="row" style="justify-content:space-between"><span class="eyebrow">Próximo partido</span><span class="badge ok">Inscripción abierta</span></div>'+
+            '<div><div class="disp" style="font-size:20px">Lunes 14 sep · 20:00</div><div class="muted">Cancha Los Pinos · cerró la lista el domingo 12:00</div></div>'+
+            '<div class="meter"><i style="width:78.5%"></i></div>'+
+            '<div class="row" style="justify-content:space-between"><span class="num"><b>11</b> de 14 anotados</span><span class="muted num">3 lugares · 2 en espera</span></div>'+
+            '<ul class="roster">'+rows+'</ul>'+
+            '<div class="muted">Lista de espera: Facu, Agus</div>'+
+            '<div class="row"><span class="btn primary">Armar equipos</span><span class="btn">Compartir por WhatsApp</span><span class="btn ghost">Sumar invitado</span></div>'+
+          '</section>'+
+          '<div class="col">'+
+            '<section class="card"><span class="eyebrow">Tabla · últimos 10</span><table class="tbl"><tr><th>Jugador</th><th class="r">PJ</th><th class="r">G</th><th class="r">MVP</th></tr>'+
+              '<tr><td>Fede</td><td class="r num">10</td><td class="r num">9</td><td class="r num">3</td></tr>'+
+              '<tr><td>Lucho</td><td class="r num">9</td><td class="r num">7</td><td class="r num">2</td></tr>'+
+              '<tr><td>Maxo</td><td class="r num">10</td><td class="r num">4</td><td class="r num">2</td></tr>'+
+              '<tr><td>Rama</td><td class="r num">8</td><td class="r num">5</td><td class="r num">1</td></tr>'+
+              '<tr><td>Nico</td><td class="r num">10</td><td class="r num">0</td><td class="r num">1</td></tr></table></section>'+
+            '<section class="card"><span class="eyebrow">Próximas fechas</span><div class="dates"><div><span>Lun 21 sep</span><span class="muted num">20:00</span></div><div><span>Lun 28 sep</span><span class="muted num">20:00</span></div><div><span>Lun 5 oct</span><span class="muted num">20:00</span></div></div></section>'+
+            '<section class="card"><span class="eyebrow">Último resultado</span><div class="row" style="justify-content:space-between"><span>Oscuras</span><span class="disp num" style="font-size:18px">4 – 3</span><span>Claras</span></div><div class="muted">MVP: Fede · lun 7 sep</div></section>'+
+          '</div>'+
+        '</div>'+
+      '</main>'+
+    '</div></div></div>';
+  }
+  function phoneSignup(c){
+    var rows=players.map(function(p,i){return '<li><span class="n num">'+String(i+1).padStart(2,'0')+'</span><span class="av">'+ini(p[0])+'</span><span>'+p[0]+'</span><span class="pos">'+p[1]+'</span></li>';}).join('');
+    return '<div class="phone"><div class="scr mock">'+
+      '<div class="status"><span class="num">12:01</span><span>●●● ▮</span></div>'+
+      '<div class="mtop"><span class="back">‹</span><span class="muted">Fútbol lunes</span></div>'+
+      '<div class="screen">'+
+        '<div class="hero"><span class="eyebrow">Próximo partido</span><h1 class="disp">Lunes 14 sep</h1><div class="sub">20:00 · Cancha Los Pinos</div></div>'+
+        '<div><div class="meter"><i style="width:78.5%"></i></div><div class="row" style="justify-content:space-between;margin-top:6px"><span class="num"><b>11</b> de 14</span><span class="muted num">3 lugares</span></div></div>'+
+        '<ul class="mlist">'+rows+'</ul>'+
+      '</div>'+
+      '<div class="cta"><span class="btn primary">Anotarme</span></div>'+
+      '<div class="tabs"><span class="on"><i></i>Partido</span><span><i></i>Grupo</span><span><i></i>Yo</span></div>'+
+    '</div></div>';
+  }
+  function phoneLineup(c){
+    var dk=[[50,90,"Nico"],[30,79,"Juanma"],[70,79,"Seba"],[18,67,"Lucho"],[50,69,"Maxo"],[82,67,"Tato"],[50,57,"Fede"]];
+    var lt=[[50,8,"Nacho"],[30,19,"Mati"],[70,19,"Facu"],[18,31,"Pablo"],[50,29,"Gonza"],[82,31,"Agus"],[50,41,"Rama"]];
+    var dots=dk.map(function(d){return '<span class="dot dk" style="left:'+d[0]+'%;top:'+d[1]+'%">'+ini(d[2])+'<b>'+d[2]+'</b></span>';}).join('')+
+             lt.map(function(d){return '<span class="dot lt" style="left:'+d[0]+'%;top:'+d[1]+'%">'+ini(d[2])+'<b>'+d[2]+'</b></span>';}).join('');
+    return '<div class="phone"><div class="scr mock">'+
+      '<div class="status"><span class="num">19:20</span><span>●●● ▮</span></div>'+
+      '<div class="mtop"><span class="back">‹</span><span class="muted">Lunes 14 sep · 20:00</span></div>'+
+      '<div class="screen">'+
+        '<div class="row" style="justify-content:space-between"><h1 class="disp" style="font-size:22px;margin:0">Equipos</h1><span class="badge">Formación 1-2-3-1</span></div>'+
+        '<div class="teams"><div class="t dark"><span class="disp">Oscuras</span><span class="num">Nivel 3.6 · 7 jugadores</span></div><div class="t light"><span class="disp">Claras</span><span class="num">Nivel 3.5 · 7 jugadores</span></div></div>'+
+        '<div class="pitch"><div class="box t"></div><div class="box b"></div>'+dots+'</div>'+
+      '</div>'+
+      '<div class="cta"><span class="btn">Editar</span><span class="btn primary">Enviar al grupo</span></div>'+
+      '<div class="tabs"><span class="on"><i></i>Partido</span><span><i></i>Grupo</span><span><i></i>Yo</span></div>'+
+    '</div></div>';
+  }
+  document.querySelectorAll('.mocks').forEach(function(el){
+    var c=JSON.parse(el.getAttribute('data-mock'));
+    el.innerHTML=
+      '<div><div class="mock-label"><span class="eyebrow">Browser · group dashboard</span><span>Sidebar shell, two columns, admin actions inline</span></div>'+desktop(c)+'</div>'+
+      '<div><div class="mock-label"><span class="eyebrow">Mobile · player flow</span><span>Bottom tabs, one column, sticky action</span></div>'+
+      '<div class="phones"><div class="phone-col">'+phoneSignup(c)+'<span class="cap">Landing from the WhatsApp link. The count and the button are the whole screen.</span></div>'+
+      '<div class="phone-col">'+phoneLineup(c)+'<span class="cap">Generated lineup, ready to send back to the group as an image.</span></div></div></div>';
+  });
+  function fit(){
+    document.querySelectorAll('.fit').forEach(function(w){
+      var inner=w.firstElementChild; if(!inner) return;
+      var s=Math.min(1,w.clientWidth/960);
+      inner.style.transform='scale('+s+')';
+      w.style.height=(inner.offsetHeight*s)+'px';
+    });
+  }
+  fit(); window.addEventListener('resize',fit);
+  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(fit);}
+  window.addEventListener('load',fit);
+})();
+</script>
+<!-- artifact:end -->
+</body>
+</html>

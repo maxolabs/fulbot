@@ -3,52 +3,66 @@
 @tailwind utilities;
 
 @layer base {
-  /* Light palette (default — no .dark class on <html>) */
+  /* Light palette · "Papel" (default — no .dark class on <html>).
+     Values from docs/ui-rework/01-brand.md §1. */
   :root {
-    --background: 240 20% 99%;
-    --foreground: 240 10% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 10%;
-    --primary: 152 68% 34%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 6% 94%;
-    --secondary-foreground: 240 10% 10%;
-    --muted: 240 6% 93%;
-    --muted-foreground: 240 4% 40%;
-    --accent: 240 6% 93%;
-    --accent-foreground: 240 10% 10%;
-    --destructive: 0 72% 45%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 87%;
-    --input: 240 6% 87%;
-    --ring: 152 68% 34%;
-    --radius: 0.75rem;
+    color-scheme: light;
+    --background: 46 35% 93%;
+    --foreground: 162 36% 14%;
+    --card: 45 50% 97%;
+    --card-foreground: 162 36% 14%;
+    --popover: 45 50% 97%;
+    --popover-foreground: 162 36% 14%;
+    --primary: 24 87% 55%;
+    --primary-foreground: 0 0% 10%;
+    --secondary: 44 30% 89%;
+    --secondary-foreground: 162 36% 14%;
+    --muted: 44 30% 89%;
+    --muted-foreground: 154 8% 40%;
+    --accent: 44 30% 89%;
+    --accent-foreground: 162 36% 14%;
+    --destructive: 4 70% 45%;
+    --destructive-foreground: 46 35% 93%;
+    --success: 152 45% 52%;
+    --success-foreground: 0 0% 10%;
+    --warning: 40 90% 55%;
+    --warning-foreground: 0 0% 10%;
+    --border: 43 16% 79%;
+    --input: 43 16% 79%;
+    --ring: 24 87% 42%; /* deeper cone: 3.8:1 on paper (WCAG 1.4.11) */
+    --radius: 0.25rem;
   }
 
-  /* Dark palette — applied when <html> carries the .dark class
+  /* Dark palette · "Pizarra" — applied when <html> carries the .dark class
      (set server-side from the fulbot_theme cookie, see root layout). */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 5.5%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 5.5%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 152 76% 48%;
-    --primary-foreground: 0 0% 2%;
-    --secondary: 240 5% 12%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 15%;
-    --muted-foreground: 240 5% 55%;
-    --accent: 240 5% 15%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 6% 16%;
-    --input: 240 6% 16%;
-    --ring: 152 76% 48%;
+    color-scheme: dark;
+    --background: 162 36% 14%;
+    --foreground: 46 35% 93%;
+    --card: 159 34% 17%;
+    --card-foreground: 46 35% 93%;
+    --popover: 159 34% 17%;
+    --popover-foreground: 46 35% 93%;
+    --primary: 24 100% 62%;
+    --primary-foreground: 0 0% 10%;
+    --secondary: 158 32% 22%;
+    --secondary-foreground: 46 35% 93%;
+    --muted: 158 32% 22%;
+    --muted-foreground: 146 12% 66%;
+    --accent: 158 32% 22%;
+    --accent-foreground: 46 35% 93%;
+    /* Raised from 4 72% 55% (01-brand §1): the original failed the 4.5:1 floor
+       both as text on the board (3.35) and under chalk on the button (3.65).
+       #F47A71 → text/board 5.22, text/card 4.63, ink/destructive 6.52. */
+    --destructive: 4 85% 70%;
+    --destructive-foreground: 0 0% 10%;
+    --success: 152 45% 52%;
+    --success-foreground: 0 0% 10%;
+    --warning: 40 90% 55%;
+    --warning-foreground: 0 0% 10%;
+    --border: 150 9% 42%;
+    --input: 150 9% 42%;
+    --ring: 24 100% 62%;
   }
 }
 
@@ -59,13 +73,54 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  html {
+    scroll-padding-top: 5rem;
+    scroll-padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+  }
+  :where(a, button, input, select, textarea) {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  /* Keep form text readable without triggering iOS's automatic zoom. */
+  @media (max-width: 1023px) {
+    /* The :not()s lift specificity above `.text-sm` utilities. */
+    input:not([type='checkbox']):not([type='radio']),
+    select:not([multiple]):not([hidden]),
+    textarea:not([hidden]):not([data-_]) {
+      font-size: 1rem;
+    }
+  }
+  /* Chalk dust on the board (01-brand.md §3). Cards sit flat on top of it.
+     `.chalk-dust` is the same texture for the PublicFrame, which is always
+     a board regardless of the theme. */
+  .dark body,
+  .chalk-dust {
+    background-image: radial-gradient(hsl(var(--foreground) / 0.045) 1px, transparent 1px);
+    background-size: 7px 7px;
+  }
+  /* Native checkboxes / radios / ranges in chalk instead of cone: the one
+     orange on a screen belongs to its primary action (06-principles §2). */
+  .accent-chalk {
+    accent-color: hsl(var(--foreground));
+  }
 }
 
-@layer utilities {
-  .glow-sm {
-    box-shadow: 0 0 20px -5px hsl(152 76% 48% / 0.15);
-  }
-  .glow-md {
-    box-shadow: 0 0 40px -5px hsl(152 76% 48% / 0.2);
+/* 06-principles.md §8: no motion for people who asked for none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

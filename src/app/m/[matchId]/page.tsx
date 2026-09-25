@@ -1,26 +1,29 @@
 import { cookies } from 'next/headers'
-import Link from 'next/link'
-import { Calendar, Clock, MapPin, Users, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database'
+import Link from 'next/link'
+import { PublicFrame } from '@/components/layout/public-frame'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { PlayerRow } from '@/components/ui/player-row'
+import { SpotsMeter } from '@/components/ui/spots-meter'
 import { PublicMatchActions } from './public-match-actions'
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
+import { formatRowDate } from '@/app/(dashboard)/groups/[groupSlug]/matches/match-format'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
 
 interface PageProps {
   params: Promise<{ matchId: string }>
 }
 
-const STATUS_MESSAGES: Record<string, string> = {
-  draft: 'Las inscripciones aún no están abiertas',
-  teams_created: 'Los equipos ya fueron armados',
-  finished: 'Este partido ya terminó',
-  cancelled: 'Este partido fue cancelado',
-}
+// Public match page (docs/ui-rework/03-screens.md §12): the first screen a
+// guest sees from WhatsApp. Hero (group eyebrow, date in display, location,
+// SpotsMeter), the confirmed names, the guest form, and an action bar pinned
+// to the bottom of the viewport at every width.
 
 interface PublicMatch {
   id: string
@@ -38,28 +41,42 @@ interface PublicMatch {
   timezone: string | null
 }
 
-function NotFoundCard() {
+function Message({
+  eyebrow,
+  title,
+  body,
+  cta,
+}: {
+  eyebrow?: string
+  title: string
+  body: string
+  cta?: { href: string; label: string }
+}) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="flex flex-col items-center py-8">
-          <XCircle className="h-12 w-12 text-destructive mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Partido no encontrado</h2>
-          <p className="text-muted-foreground text-center mb-6">
-            Este partido no existe o ya no está disponible.
-          </p>
-          <Link href="/">
-            <Button>Ir al inicio</Button>
-          </Link>
-        </CardContent>
-      </Card>
-    </div>
+    <PublicFrame className="justify-center">
+      <div className="space-y-4 text-center">
+        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance">{title}</h1>
+        <p className="text-sm text-muted-foreground text-pretty">{body}</p>
+        {cta && (
+          <div className="pt-2">
+            <Button asChild variant="outline">
+              <Link href={cta.href}>{cta.label}</Link>
+            </Button>
+          </div>
+        )}
+      </div>
+    </PublicFrame>
   )
 }
 
 export default async function PublicMatchPage({ params }: PageProps) {
   const { matchId } = await params
   const supabase = await createClient()
+  const cookieStore = await cookies()
+  const langCookie = cookieStore.get('fulbot_lang')?.value
+  const language: Language = langCookie === 'en' ? 'en' : 'es'
+  const t = getT(language)
 
   // get_public_match works for anonymous visitors too -- it's the only way
   // this page reads match data, so RLS never needs to open matches to anon.
@@ -71,7 +88,13 @@ export default async function PublicMatchPage({ params }: PageProps) {
   }
 
   if (!match || !match.id) {
-    return <NotFoundCard />
+    return (
+      <Message
+        title={t('ui.screens.publicMatch.notFoundTitle')}
+        body={t('ui.screens.publicMatch.notFoundBody')}
+        cta={{ href: '/', label: t('ui.screens.publicMatch.goHome') }}
+      />
+    )
   }
 
   const date = new Date(match.date_time)
@@ -82,23 +105,16 @@ export default async function PublicMatchPage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!isSignupPhase) {
+    const statusKey = ['draft', 'teams_created', 'finished', 'cancelled'].includes(match.status)
+      ? `ui.screens.publicMatch.status.${match.status}`
+      : 'ui.screens.publicMatch.status.unavailable'
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex flex-col items-center py-8">
-            <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">{match.group_name}</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              {STATUS_MESSAGES[match.status] || 'Este partido no está disponible'}
-            </p>
-            {user && (
-              <Link href={`/groups/${match.group_slug}/matches/${matchId}`}>
-                <Button>Ver detalles del partido</Button>
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Message
+        eyebrow={match.group_name}
+        title={formatMatchDate(date, timeZone)}
+        body={t(statusKey)}
+        cta={user ? { href: `/groups/${match.group_slug}/matches/${matchId}`, label: t('ui.screens.publicMatch.viewMatch') } : undefined}
+      />
     )
   }
 
@@ -166,7 +182,6 @@ export default async function PublicMatchPage({ params }: PageProps) {
   let guestSignup: { status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
 
   if (!isMember) {
-    const cookieStore = await cookies()
     const guestToken = cookieStore.get(`fulbot_guest_${matchId}`)?.value
 
     if (guestToken) {
@@ -200,108 +215,102 @@ export default async function PublicMatchPage({ params }: PageProps) {
     }
   }
 
+  const statusBadge =
+    match.status === 'full' ? (
+      <Badge variant="success">{t('ui.spots.full')}</Badge>
+    ) : match.status === 'signup_closed' ? (
+      <Badge variant="outline">{t('ui.screens.publicMatch.signupClosed')}</Badge>
+    ) : (
+      <Badge variant="secondary">{t('ui.screens.publicMatch.signupOpen')}</Badge>
+    )
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2">
-            <Badge variant={match.status === 'full' ? 'secondary' : match.status === 'signup_closed' ? 'outline' : 'default'}>
-              {match.status === 'full'
-                ? 'Completo'
-                : match.status === 'signup_closed'
-                  ? 'Inscripción cerrada'
-                  : 'Inscripción abierta'}
-            </Badge>
-          </div>
-          <CardTitle className="text-xl">{match.group_name}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>{formatMatchDate(date, timeZone)}</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{formatMatchTime(date, timeZone)}</span>
-            </div>
-            {match.location && (
-              <div className="flex items-center gap-3 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>{match.location}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-3 text-sm">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <span>{match.confirmed_count}/{match.max_players} jugadores</span>
-            </div>
-          </div>
-
-          {match.notes && (
-            <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3">
-              {match.notes}
-            </p>
+    <PublicFrame className="justify-start">
+      {/* Hero */}
+      <header className="space-y-3">
+        <Eyebrow>{match.group_name}</Eyebrow>
+        {/* Same short hero as the match screen on phones ("Jueves 17 sep", then
+            the mono time · location line), in the group timezone, so the title
+            stays on one line at 390px inside the 448px frame. */}
+        <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-balance lg:text-4xl">
+          {formatRowDate(t, date, timeZone)}
+        </h1>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <span className="font-mono tabular-nums text-foreground">{formatMatchTime(date, timeZone)}</span>
+          {match.location && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{match.location}</span>
+            </>
           )}
+          {statusBadge}
+        </div>
+        <SpotsMeter
+          confirmed={match.confirmed_count}
+          max={match.max_players}
+          waitlist={match.waitlist_count}
+          language={language}
+        />
+        {match.notes && <p className="text-sm text-muted-foreground text-pretty">{match.notes}</p>}
+      </header>
 
-          {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests unaffected */}
-          {!isPast && isMember && !memberSignup && match.status === 'signup_open' && groupId && profileId && (
+      <div className="mt-6">
+        {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests unaffected */}
+        {!isPast && isMember && !memberSignup && match.status === 'signup_open' && groupId && profileId && (
+          <div className="mb-6">
             <SignupPolicyNotice
               matchId={matchId}
               groupId={groupId}
               playerId={profileId}
               timeZone={timeZone}
             />
-          )}
-
-          <PublicMatchActions
-            matchId={matchId}
-            groupSlug={match.group_slug}
-            status={match.status as 'signup_open' | 'full' | 'signup_closed'}
-            isPast={isPast}
-            isLoggedIn={!!user}
-            isMember={isMember}
-            memberSignup={memberSignup}
-            guestSignup={guestSignup}
-            inviteCode={inviteCode}
-          />
-
-          <div className="space-y-3 border-t border-border/50 pt-4">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                Confirmados ({match.confirmed_names.length})
-              </p>
-              {match.confirmed_names.length > 0 ? (
-                <ul className="text-sm space-y-1">
-                  {match.confirmed_names.map((name, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <span className="w-5 text-center text-xs text-muted-foreground">{i + 1}</span>
-                      <span>{name}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nadie se inscribió todavía</p>
-              )}
-            </div>
-
-            {match.waitlist_names.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                  Lista de espera ({match.waitlist_names.length})
-                </p>
-                <ul className="text-sm space-y-1">
-                  {match.waitlist_names.map((name, i) => (
-                    <li key={i} className="flex items-center gap-2 text-muted-foreground">
-                      <span className="w-5 text-center text-xs">{i + 1}</span>
-                      <span>{name}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+
+        <PublicMatchActions
+          matchId={matchId}
+          groupSlug={match.group_slug}
+          status={match.status as 'signup_open' | 'full' | 'signup_closed'}
+          isPast={isPast}
+          isLoggedIn={!!user}
+          isMember={isMember}
+          memberSignup={memberSignup}
+          guestSignup={guestSignup}
+          inviteCode={inviteCode}
+        >
+          <section className="space-y-2">
+            <Eyebrow as="h2">
+              {t('ui.screens.publicMatch.confirmed')} · {match.confirmed_names.length}
+            </Eyebrow>
+            {match.confirmed_names.length > 0 ? (
+              <ol className="[&>li:last-child>*]:border-b-0">
+                {match.confirmed_names.map((name, i) => (
+                  <li key={`${name}-${i}`}>
+                    <PlayerRow index={i + 1} name={name} language={language} />
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t('ui.screens.publicMatch.nobodyYet')}</p>
+            )}
+          </section>
+
+          {match.waitlist_names.length > 0 && (
+            <section className="space-y-2">
+              <Eyebrow as="h2">
+                {t('ui.screens.publicMatch.waitlist')} · {match.waitlist_names.length}
+              </Eyebrow>
+              <ol className="[&>li:last-child>*]:border-b-0">
+                {match.waitlist_names.map((name, i) => (
+                  <li key={`${name}-${i}`}>
+                    <PlayerRow index={i + 1} name={name} language={language} className="text-muted-foreground" />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </PublicMatchActions>
+      </div>
+    </PublicFrame>
   )
 }

@@ -9,6 +9,18 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      push_subscriptions: {
+        Row: { id: string; user_id: string; endpoint: string; p256dh: string; auth: string; created_at: string }
+        Insert: { id?: string; user_id: string; endpoint: string; p256dh: string; auth: string; created_at?: string }
+        Update: { endpoint?: string; p256dh?: string; auth?: string }
+        Relationships: []
+      }
+      push_deliveries: {
+        Row: { id: string; notification_id: string; subscription_id: string; status: string; attempts: number; available_at: string; lease_id: string | null; last_error: string | null; created_at: string }
+        Insert: { notification_id: string; subscription_id: string }
+        Update: { status?: string; available_at?: string; last_error?: string | null }
+        Relationships: []
+      }
       users: {
         Row: {
           id: string
@@ -992,6 +1004,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_push_deliveries: { Args: { p_limit?: number }; Returns: Json[] }
       signup_for_match: {
         Args: {
           p_match_id: string
@@ -1130,6 +1143,10 @@ export type Database = {
         Args: {
           p_match_id: string
         }
+        Returns: undefined
+      }
+      publish_match_teams: {
+        Args: { p_match_id: string; p_assignments: Json; p_snapshot?: Json }
         Returns: undefined
       }
       save_team_assignments: {

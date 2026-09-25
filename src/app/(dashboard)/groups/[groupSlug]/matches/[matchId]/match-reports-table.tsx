@@ -121,7 +121,7 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                         <td className="py-2 pr-3 whitespace-nowrap">
                           {nameOf(r.reporter_player_id)}
                           {r.submitted_after_lock && (
-                            <span className="ml-2 inline-flex items-center gap-1 text-xs text-amber-600">
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
                               <AlertTriangle className="h-3 w-3" /> después del cierre
                             </span>
                           )}
@@ -130,7 +130,7 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                           {hasScore ? (
                             <span
                               className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium ${
-                                agrees ? 'bg-green-500/10 text-green-700' : 'bg-amber-500/10 text-amber-700'
+                                agrees ? 'bg-success/15 text-foreground' : 'bg-warning/15 text-foreground'
                               }`}
                             >
                               {agrees && <Check className="h-3 w-3" />}

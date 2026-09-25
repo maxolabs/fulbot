@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
 import type { Json } from '@/types/database'
 
 interface GroupSettingsFormProps {
@@ -122,18 +123,10 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          Cambios guardados correctamente
-        </div>
-      )}
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      {success && <FormNotice kind="success">Cambios guardados correctamente</FormNotice>}
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="name">Nombre del grupo</Label>
         <Input
           id="name"
@@ -145,7 +138,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="description">Descripción</Label>
         <Input
           id="description"
@@ -158,24 +151,23 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="defaultMatchDay">Día habitual</Label>
-          <select
+          <NativeSelect
             id="defaultMatchDay"
             value={defaultMatchDay}
             onChange={(e) => setDefaultMatchDay(Number(e.target.value))}
             disabled={loading}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {DAYS.map((day) => (
               <option key={day.value} value={day.value}>
                 {day.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="defaultMatchTime">Hora habitual</Label>
           <Input
             id="defaultMatchTime"
@@ -186,7 +178,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="defaultMaxPlayers">Jugadores máx.</Label>
           <Input
             id="defaultMaxPlayers"
@@ -209,7 +201,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="weightAdmin">Admin</Label>
             <Input
               id="weightAdmin"
@@ -222,7 +214,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
               disabled={loading}
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="weightCaptain">Capitán</Label>
             <Input
               id="weightCaptain"
@@ -235,7 +227,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
               disabled={loading}
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="weightMember">Miembro</Label>
             <Input
               id="weightMember"

@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { getTranslation, type Language } from '@/i18n/core'
 import {
   DIMENSION_LABELS,
   DIMENSION_SHORT,
@@ -16,17 +17,27 @@ function fmt(value: number | null | undefined): string {
   return value === null || value === undefined ? '–' : value.toFixed(1)
 }
 
+// No 'use client' here (server pages render these), so the language comes in as
+// a prop like member-score.tsx.
+
 // One line for lists: ★ 3.7 · ARQ 1.3 · DEF 4.0 · ATA 4.1 · FÍS 3.9
-export function SkillSummaryLine({ summary }: { summary: RatingSummary | undefined | null }) {
+export function SkillSummaryLine({
+  summary,
+  language = 'es',
+}: {
+  summary: RatingSummary | undefined | null
+  language?: Language
+}) {
+  const t = getTranslation(language)
   const noData = !summary || (summary.peer_votes === 0 && summary.matches_rated === 0)
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <span className="flex items-center gap-1 font-medium">
-        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+        <Star className="h-4 w-4 text-primary fill-primary" strokeWidth={1.75} aria-hidden="true" />
         {overallOf(summary).toFixed(1)}
       </span>
       {noData ? (
-        <span className="text-xs text-muted-foreground">Sin calificaciones todavía</span>
+        <span className="text-xs text-muted-foreground">{t('ratings.noRatingsYet')}</span>
       ) : (
         RATING_DIMENSIONS.map((dim) => (
           <span key={dim} className="text-xs text-muted-foreground" title={DIMENSION_LABELS[dim]}>
@@ -39,23 +50,37 @@ export function SkillSummaryLine({ summary }: { summary: RatingSummary | undefin
 }
 
 // Block for the player detail page: big overall, four dimensions, tags, vote counts.
-export function SkillSummaryCard({ summary }: { summary: RatingSummary | undefined | null }) {
+export function SkillSummaryCard({
+  summary,
+  language = 'es',
+}: {
+  summary: RatingSummary | undefined | null
+  language?: Language
+}) {
+  const t = getTranslation(language)
   const noData = !summary || (summary.peer_votes === 0 && summary.matches_rated === 0)
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1">
-          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-          <span className="text-2xl font-bold">{overallOf(summary).toFixed(1)}</span>
+          <Star className="h-6 w-6 text-primary fill-primary" strokeWidth={1.75} aria-hidden="true" />
+          <span className="font-display text-2xl font-bold tabular-nums">{overallOf(summary).toFixed(1)}</span>
         </div>
         <div className="text-xs text-muted-foreground">
           {noData ? (
-            'Sin calificaciones todavía'
+            t('ratings.noRatingsYet')
           ) : (
             <>
-              {summary!.peer_votes} {summary!.peer_votes === 1 ? 'voto' : 'votos'} de compañeros
+              {summary!.peer_votes === 1
+                ? t('ratings.peerVotesOne')
+                : t('ratings.peerVotes', { n: summary!.peer_votes })}
               {summary!.matches_rated > 0 && (
-                <> · {summary!.matches_rated} {summary!.matches_rated === 1 ? 'partido' : 'partidos'} calificados</>
+                <>
+                  {' · '}
+                  {summary!.matches_rated === 1
+                    ? t('ratings.matchesRatedOne')
+                    : t('ratings.matchesRated', { n: summary!.matches_rated })}
+                </>
               )}
             </>
           )}
@@ -72,8 +97,9 @@ export function SkillSummaryCard({ summary }: { summary: RatingSummary | undefin
                 <span className="text-xs text-muted-foreground">{DIMENSION_LABELS[dim]}</span>
                 <span className="text-sm font-semibold">{fmt(value)}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+              <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
+                {/* Chalk fill: the star is the only cone on the player page (06-principles §2). */}
+                <div className="h-full rounded-sm bg-foreground" style={{ width: `${pct}%` }} />
               </div>
             </div>
           )

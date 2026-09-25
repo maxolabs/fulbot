@@ -2,19 +2,26 @@
 
 import * as React from 'react'
 import { cn } from '@/lib/utils/cn'
+import { initials as initialsOf } from '@/lib/utils/initials'
+
+// Pizarra avatar (docs/ui-rework/04-components.md §1). Initials in the display
+// face on a raised surface; the circle is the one shape that is not squared.
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
 interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   src?: string | null
   alt?: string
   fallback: string
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** `xl` is an alias of `lg` kept for older callers. */
+  size?: AvatarSize
 }
 
-const sizeClasses = {
-  sm: 'h-8 w-8 text-xs',
+const sizeClasses: Record<AvatarSize, string> = {
+  xs: 'h-[22px] w-[22px] text-[10px]',
+  sm: 'h-7 w-7 text-xs',
   md: 'h-10 w-10 text-sm',
-  lg: 'h-12 w-12 text-base',
-  xl: 'h-16 w-16 text-lg',
+  lg: 'h-16 w-16 text-xl',
+  xl: 'h-16 w-16 text-xl',
 }
 
 export function Avatar({
@@ -27,23 +34,19 @@ export function Avatar({
 }: AvatarProps) {
   const [imageError, setImageError] = React.useState(false)
 
-  const initials = fallback
-    .split(' ')
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
+  const initials = initialsOf(fallback)
 
   if (src && !imageError) {
     return (
       <div
         className={cn(
-          'relative overflow-hidden rounded-full bg-muted',
+          'relative shrink-0 overflow-hidden rounded-full bg-secondary',
           sizeClasses[size],
           className
         )}
         {...props}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={alt || fallback}
@@ -57,10 +60,11 @@ export function Avatar({
   return (
     <div
       className={cn(
-        'flex items-center justify-center rounded-full bg-primary text-primary-foreground font-medium',
+        'flex shrink-0 select-none items-center justify-center rounded-full bg-secondary font-display font-bold leading-none text-foreground',
         sizeClasses[size],
         className
       )}
+      aria-label={alt || fallback}
       {...props}
     >
       {initials}

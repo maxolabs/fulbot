@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { TopBarConfig } from '@/components/layout/top-bar'
+import { PageHeader } from '@/components/layout/page-header'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { splitDateTimeInTimezone } from '@/lib/utils/datetime'
@@ -75,39 +74,25 @@ export default async function EditMatchPage({ params }: PageProps) {
   const { date, time } = splitDateTimeInTimezone(match.date_time, group.timezone)
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <Link
-        href={`/groups/${groupSlug}/matches/${matchId}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        {t('common.backTo', { name: group.name })}
-      </Link>
+    <div className="mx-auto max-w-xl space-y-6">
+      <TopBarConfig title={t('matches.editMatch')} back={`/groups/${groupSlug}/matches/${matchId}`} />
+      <PageHeader title={t('matches.editMatch')} subtitle={t('matches.editMatchSubtitle')} />
+      <p className="text-sm text-muted-foreground text-pretty lg:hidden">{t('matches.editMatchSubtitle')}</p>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('matches.editMatch')}</CardTitle>
-          <CardDescription>
-            {t('matches.editMatchSubtitle')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EditMatchForm
-            matchId={match.id}
-            groupSlug={group.slug}
-            timezone={group.timezone}
-            defaults={{
-              date,
-              time,
-              location: match.location || '',
-              maxPlayers: match.max_players,
-              notes: match.notes || '',
-              durationMinutes: match.duration_minutes ?? 60,
-              resultsRequestDelayMinutes: match.results_request_delay_minutes ?? 60,
-            }}
-          />
-        </CardContent>
-      </Card>
+      <EditMatchForm
+        matchId={match.id}
+        groupSlug={group.slug}
+        timezone={group.timezone}
+        defaults={{
+          date,
+          time,
+          location: match.location || '',
+          maxPlayers: match.max_players,
+          notes: match.notes || '',
+          durationMinutes: match.duration_minutes ?? 60,
+          resultsRequestDelayMinutes: match.results_request_delay_minutes ?? 60,
+        }}
+      />
     </div>
   )
 }

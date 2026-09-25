@@ -1,12 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
 import type { Language } from '@/i18n/use-translations'
+
+// Register (docs/ui-rework/03-screens.md §11): same frame as login.
 
 interface RegisterFormProps {
   initialLanguage: Language
@@ -26,6 +33,8 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
   const [language, setLanguage] = useState<Language>(initialLanguage)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [passwordError, setPasswordError] = useState(false)
+  const confirmRef = useRef<HTMLInputElement>(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -38,9 +47,12 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setPasswordError(false)
 
     if (password !== confirmPassword) {
       setError(t('auth.passwordMismatch'))
+      setPasswordError(true)
+      confirmRef.current?.focus()
       return
     }
 
@@ -82,112 +94,109 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
     }
   }
 
-  const inputClass =
-    'flex h-11 w-full rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:opacity-50 transition-colors'
-
   return (
     <div className="w-full max-w-sm space-y-8">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight">{t('auth.createAccount')}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t('auth.registerSubtitle')}
-        </p>
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance lg:text-3xl">
+          {t('auth.createAccount')}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t('auth.registerSubtitle')}</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        <div className="space-y-2">
-          <label htmlFor="name" className="text-sm font-medium">
-            {t('auth.name')}
-          </label>
-          <input
+      <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-5">
+        {error && !passwordError && <FormNotice kind="error">{error}</FormNotice>}
+        <div className="space-y-1.5">
+          <Label htmlFor="name">{t('auth.name')}</Label>
+          <Input
             id="name"
+            name="name"
             type="text"
-            placeholder="Tu nombre"
+            autoComplete="name"
+            placeholder={t('ui.screens.auth.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             disabled={loading}
-            className={inputClass}
           />
         </div>
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium">
-            {t('auth.email')}
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="email">{t('auth.email')}</Label>
+          <Input
             id="email"
+            name="email"
+            spellCheck={false}
+            autoCapitalize="none"
             type="email"
+            autoComplete="email"
             placeholder="tu@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={loading}
-            className={inputClass}
           />
         </div>
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium">
-            {t('auth.password')}
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="password">{t('auth.password')}</Label>
+          <PasswordInput
             id="password"
-            type="password"
-            placeholder="Mínimo 6 caracteres"
+            name="password"
+            minLength={6}
+            aria-describedby="password-hint"
+            autoComplete="new-password"
+            placeholder={t('ui.screens.auth.passwordPlaceholder')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={loading}
-            className={inputClass}
           />
+          <p id="password-hint" className="text-xs text-muted-foreground">{t('auth.passwordHint')}</p>
         </div>
-        <div className="space-y-2">
-          <label htmlFor="confirmPassword" className="text-sm font-medium">
-            {t('auth.confirmPassword')}
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="confirmPassword">{t('auth.confirmPassword')}</Label>
+          <PasswordInput
             id="confirmPassword"
-            type="password"
-            placeholder="Repetí tu contraseña"
+            name="confirmPassword"
+            ref={confirmRef}
+            minLength={6}
+            aria-invalid={passwordError || undefined}
+            aria-describedby={passwordError ? 'confirm-password-error' : undefined}
+            autoComplete="new-password"
+            placeholder={t('ui.screens.auth.confirmPlaceholder')}
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value)
+              if (passwordError) {
+                setPasswordError(false)
+                setError(null)
+              }
+            }}
             required
             disabled={loading}
-            className={inputClass}
           />
+          {passwordError && <p id="confirm-password-error" role="alert" className="text-sm text-destructive">{t('auth.passwordMismatch')}</p>}
         </div>
-        <div className="space-y-2">
-          <label htmlFor="language" className="text-sm font-medium">
-            {t('auth.language')}
-          </label>
-          <select
+        <div className="space-y-1.5">
+          <Label htmlFor="language">{t('auth.language')}</Label>
+          <NativeSelect
             id="language"
+            name="language"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value as Language)}
             disabled={loading}
-            className={inputClass}
           >
             <option value="es">{t('auth.languageEs')}</option>
             <option value="en">{t('auth.languageEn')}</option>
-          </select>
+          </NativeSelect>
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex w-full items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground transition-all hover:brightness-110 glow-sm hover:glow-md disabled:opacity-50"
-        >
-          {loading ? <Spinner size="sm" className="mr-2" /> : null}
+        <Button type="submit" size="xl" disabled={loading} className="w-full">
+          {loading && <Spinner size="sm" />}
           {t('auth.createAccount')}
-        </button>
+        </Button>
       </form>
 
-      <p className="text-sm text-muted-foreground text-center">
+      <p className="text-center text-sm text-muted-foreground">
         {t('auth.hasAccount')}{' '}
-        <Link href="/login" className="text-primary font-medium hover:underline">
+        <Link href="/login" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
           {t('auth.loginCta')}
         </Link>
       </p>

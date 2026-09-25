@@ -184,7 +184,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
 
   if (loading) {
     return (
-      <Card>
+      <Card variant="solid">
         <CardContent className="py-8 flex justify-center">
           <Spinner />
         </CardContent>
@@ -193,9 +193,9 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
   }
 
   return (
-    <Card>
+    <Card variant="solid">
       <CardHeader>
-        <CardTitle className="text-base">Reglas para armar equipos</CardTitle>
+        <CardTitle>Reglas para armar equipos</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Existing rules */}
@@ -208,7 +208,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
         {rules.map((rule) => {
           const config = RULE_LABELS[rule.rule_type as RuleType]
           return (
-            <div key={rule.id} className="flex items-center gap-3 p-3 rounded-lg border">
+            <div key={rule.id} className="flex items-center gap-3 rounded-md border border-border p-3">
               <span className="text-muted-foreground shrink-0">{config?.icon}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{config?.label || rule.rule_type}</p>
@@ -229,7 +229,7 @@ export function RulesManager({ groupId, matchId, players }: RulesManagerProps) {
 
         {/* Add rule form */}
         {addingType && (
-          <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+          <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
             <p className="text-sm font-medium">
               {RULE_LABELS[addingType]?.label}
             </p>

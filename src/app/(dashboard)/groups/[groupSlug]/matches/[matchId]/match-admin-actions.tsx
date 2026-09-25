@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Play, Pause, RotateCcw, Users, CheckCircle, XCircle, Trash2 } from 'lucide-react'
+import { Play, Pause, RotateCcw, Users, CheckCircle, XCircle, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 import type { Database } from '@/types/database'
 
 type MatchStatus = Database['public']['Enums']['match_status']
@@ -18,18 +18,28 @@ interface MatchAdminActionsProps {
   currentStatus: string
   hasEnoughPlayers: boolean
   /** Teams exist for this match; without them the status can never reach 'finished'. */
+  secondaryOnly?: boolean
   hasTeams?: boolean
+  /** Called after a navigation so the popover / sheet can close. */
+  onNavigate?: () => void
 }
 
+// The content of the "Gestionar" popover (browser) and sheet (mobile),
+// docs/ui-rework/04-components.md §4: no card of its own, every button and
+// confirm dialog kept. Chalk outlines only; the one orange on the match
+// screen belongs to the signup action.
 export function MatchAdminActions({
   matchId,
   groupSlug,
   currentStatus,
   hasEnoughPlayers,
   hasTeams = true,
+  secondaryOnly = false,
+  onNavigate,
 }: MatchAdminActionsProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
   const [loading, setLoading] = useState<string | null>(null)
 
   const updateStatus = async (newStatus: MatchStatus) => {
@@ -83,133 +93,151 @@ export function MatchAdminActions({
     currentStatus === 'signup_closed' ||
     currentStatus === 'teams_created' ||
     currentStatus === 'cancelled'
-  if (!hasActions) return null
+
+  const canEdit = currentStatus !== 'finished' && currentStatus !== 'cancelled'
+  if (!hasActions && !canEdit) return null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Administrar partido</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!hasTeams &&
-          (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
-            <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-              Sin equipos no se puede cerrar el partido: armá los equipos primero.
-            </p>
-          )}
-
-        {/* Open signup */}
-        {currentStatus === 'draft' && (
-          <Button
-            variant="default"
-            className="w-full justify-start"
-            onClick={() => updateStatus('signup_open')}
-            disabled={loading !== null}
-          >
-            {loading === 'signup_open' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <Play className="mr-2 h-4 w-4" />
-            )}
-            Abrir inscripciones
-          </Button>
+    <div className="space-y-2">
+      {!secondaryOnly && !hasTeams &&
+        (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
+          <p className="text-xs text-muted-foreground text-pretty">
+            Sin equipos no se puede cerrar el partido: armá los equipos primero.
+          </p>
         )}
 
-        {/* Close signup */}
-        {(currentStatus === 'signup_open' || currentStatus === 'full') && (
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => updateStatus('signup_closed')}
-            disabled={loading !== null}
-          >
-            {loading === 'signup_closed' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <Pause className="mr-2 h-4 w-4" />
-            )}
-            Cerrar inscripciones
-          </Button>
-        )}
-
-        {/* Reopen signup */}
-        {currentStatus === 'signup_closed' && (
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => updateStatus('signup_open')}
-            disabled={loading !== null}
-          >
-            {loading === 'signup_open' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <RotateCcw className="mr-2 h-4 w-4" />
-            )}
-            Reabrir inscripciones
-          </Button>
-        )}
-
-        {/* Generate teams */}
-        {(currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && hasEnoughPlayers && (
-          <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`}>
-            <Button variant="default" className="w-full justify-start">
-              <Users className="mr-2 h-4 w-4" />
-              Armar equipos
-            </Button>
+      {/* Edit */}
+      {canEdit && (
+        <Button asChild variant="outline" className="w-full justify-start">
+          <Link href={`/groups/${groupSlug}/matches/${matchId}/edit`} onClick={onNavigate}>
+            <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            Editar partido
           </Link>
-        )}
+        </Button>
+      )}
 
-        {/* Mark as finished */}
-        {currentStatus === 'teams_created' && (
-          <Button
-            variant="outline"
-            className="w-full justify-start"
-            onClick={() => updateStatus('finished')}
-            disabled={loading !== null}
-          >
-            {loading === 'finished' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <CheckCircle className="mr-2 h-4 w-4" />
-            )}
-            Marcar como finalizado
-          </Button>
-        )}
+      {/* Open signup */}
+      {!secondaryOnly && currentStatus === 'draft' && (
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={() => updateStatus('signup_open')}
+          disabled={loading !== null}
+        >
+          {loading === 'signup_open' ? (
+            <Spinner size="sm" />
+          ) : (
+            <Play className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Abrir inscripciones
+        </Button>
+      )}
 
-        {/* Cancel match */}
-        {currentStatus !== 'cancelled' && (
-          <Button
-            variant="outline"
-            className="w-full justify-start text-destructive hover:text-destructive"
-            onClick={() => updateStatus('cancelled')}
-            disabled={loading !== null}
-          >
-            {loading === 'cancelled' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <XCircle className="mr-2 h-4 w-4" />
-            )}
-            Cancelar partido
-          </Button>
-        )}
+      {/* Close signup */}
+      {!secondaryOnly && (currentStatus === 'signup_open' || currentStatus === 'full') && (
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={() => updateStatus('signup_closed')}
+          disabled={loading !== null}
+        >
+          {loading === 'signup_closed' ? (
+            <Spinner size="sm" />
+          ) : (
+            <Pause className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Cerrar inscripciones
+        </Button>
+      )}
 
-        {/* Delete match */}
-        {(currentStatus === 'draft' || currentStatus === 'cancelled') && (
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleDelete}
-            disabled={loading !== null}
-          >
-            {loading === 'delete' ? (
-              <Spinner size="sm" className="mr-2" />
-            ) : (
-              <Trash2 className="mr-2 h-4 w-4" />
-            )}
-            Eliminar partido
+      {/* Reopen signup */}
+      {!secondaryOnly && currentStatus === 'signup_closed' && (
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={() => updateStatus('signup_open')}
+          disabled={loading !== null}
+        >
+          {loading === 'signup_open' ? (
+            <Spinner size="sm" />
+          ) : (
+            <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Reabrir inscripciones
+        </Button>
+      )}
+
+      {/* Generate teams — or, once they exist, go and edit them */}
+      {!secondaryOnly && (hasTeams ? (
+        currentStatus !== 'cancelled' && (
+          <Button asChild variant="outline" className="w-full justify-start">
+            <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {t('ui.matchScreens.match.editTeams')}
+            </Link>
           </Button>
-        )}
-      </CardContent>
-    </Card>
+        )
+      ) : (
+        (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && hasEnoughPlayers && (
+          <Button asChild variant="outline" className="w-full justify-start">
+            <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {t('ui.matchScreens.dashboard.buildTeams')}
+            </Link>
+          </Button>
+        )
+      ))}
+
+      {/* Mark as finished */}
+      {!secondaryOnly && currentStatus === 'teams_created' && (
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={() => updateStatus('finished')}
+          disabled={loading !== null}
+        >
+          {loading === 'finished' ? (
+            <Spinner size="sm" />
+          ) : (
+            <CheckCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Marcar como finalizado
+        </Button>
+      )}
+
+      {/* Cancel match */}
+      {hasActions && currentStatus !== 'cancelled' && (
+        <Button
+          variant="outline"
+          className="w-full justify-start text-destructive hover:text-destructive"
+          onClick={() => { if (window.confirm(t('ui.workflow.cancelConfirm'))) void updateStatus('cancelled') }}
+          disabled={loading !== null}
+        >
+          {loading === 'cancelled' ? (
+            <Spinner size="sm" />
+          ) : (
+            <XCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Cancelar partido
+        </Button>
+      )}
+
+      {/* Delete match */}
+      {(currentStatus === 'draft' || currentStatus === 'cancelled') && (
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={handleDelete}
+          disabled={loading !== null}
+        >
+          {loading === 'delete' ? (
+            <Spinner size="sm" />
+          ) : (
+            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          )}
+          Eliminar partido
+        </Button>
+      )}
+    </div>
   )
 }

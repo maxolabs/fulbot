@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 
 interface JoinGroupButtonProps {
   groupId: string
@@ -19,6 +21,7 @@ export function JoinGroupButton({
   playerId,
   wasInactive,
 }: JoinGroupButtonProps) {
+  const t = useT()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -31,7 +34,6 @@ export function JoinGroupButton({
     try {
       if (wasInactive) {
         // Reactivate membership
-         
         const { error: updateError } = await (supabase as any)
           .from('group_memberships')
           .update({ is_active: true })
@@ -43,7 +45,6 @@ export function JoinGroupButton({
         }
       } else {
         // Create new membership
-         
         const { error: insertError } = await (supabase as any)
           .from('group_memberships')
           .insert({
@@ -66,22 +67,18 @@ export function JoinGroupButton({
       router.refresh()
     } catch (err) {
       console.error('Error joining group:', err)
-      setError('Error al unirse al grupo. Intenta de nuevo.')
+      setError(t('ui.screens.invite.joinError'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-2">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive text-center">
-          {error}
-        </div>
-      )}
-      <Button onClick={handleJoin} disabled={loading} className="w-full">
-        {loading && <Spinner size="sm" className="mr-2" />}
-        {wasInactive ? 'Volver al grupo' : 'Unirme al grupo'}
+    <div className="space-y-3">
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      <Button onClick={handleJoin} disabled={loading} size="xl" className="w-full">
+        {loading && <Spinner size="sm" />}
+        {wasInactive ? t('ui.screens.invite.rejoin') : t('ui.screens.invite.join')}
       </Button>
     </div>
   )

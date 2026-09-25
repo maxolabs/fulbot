@@ -10,7 +10,6 @@ import {
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
 import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
-import type { TeamsCreatedPayload } from '@/lib/notifications/types'
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
@@ -67,6 +66,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
       return NextResponse.json({ error: 'No tenés permiso para armar equipos en este grupo' }, { status: 403 })
+    }
+
+    if (!['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
+      return NextResponse.json({ error: 'Este partido no permite modificar equipos' }, { status: 409 })
     }
 
     // Get confirmed signups with player profiles and guest players.
@@ -264,27 +267,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })),
     ]
 
-    const { error: saveError } = await supabase.rpc('save_team_assignments', {
-      p_match_id: matchId,
-      p_assignments: assignmentsPayload as unknown as Json,
-    })
-
-    if (saveError) {
-      console.error('Error saving team assignments:', saveError)
-      return NextResponse.json(
-        { error: 'No se pudieron guardar los equipos generados. Probá de nuevo.' },
-        { status: 500 }
-      )
-    }
-
-    const { data: teams } = await supabase
-      .from('teams')
-      .select('id, name')
-      .eq('match_id', matchId)
-
-    const darkTeamId = teams?.find((t) => t.name === 'dark')?.id ?? null
-    const lightTeamId = teams?.find((t) => t.name === 'light')?.id ?? null
-
     const generatedAt = new Date().toISOString()
     const snapshot = {
       input: {
@@ -310,39 +292,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       generatedAt,
     } as unknown as Json
 
-    const { error: updateError } = await supabase
-      .from('matches')
-      .update({
-        status: 'teams_created',
-        ai_input_snapshot: snapshot,
-      })
-      .eq('id', matchId)
-
-    if (updateError) {
-      console.error('Error updating match after team generation:', updateError)
-      // The teams were already saved, so this is a soft failure - keep going.
-    }
-
-    // Emit teams_created (T5, §2.6). emit_notification is SECURITY DEFINER,
-    // so the user client is enough here - it honors notification_settings
-    // itself. Non-fatal: the teams were already saved and persisted above.
-    const playerNameById = new Map(players.map((p) => [p.id, p.displayName]))
-    const teamsCreatedPayload: TeamsCreatedPayload = {
-      match_id: matchId,
-      dark_team_names: generatedTeams.dark.map((a) => playerNameById.get(a.playerId) ?? 'Jugador'),
-      light_team_names: generatedTeams.light.map((a) => playerNameById.get(a.playerId) ?? 'Jugador'),
-    }
-
-    const { error: notifyError } = await supabase.rpc('emit_notification', {
-      p_group_id: match.group_id,
+    const { error: saveError } = await supabase.rpc('publish_match_teams', {
       p_match_id: matchId,
-      p_type: 'teams_created',
-      p_payload: teamsCreatedPayload as unknown as Json,
+      p_assignments: assignmentsPayload as unknown as Json,
+      p_snapshot: snapshot,
     })
-
-    if (notifyError) {
-      console.error('Error emitting teams_created notification:', notifyError)
+    if (saveError) {
+      return NextResponse.json({ error: saveError.message }, { status: 409 })
     }
+    const { data: teams } = await supabase.from('teams').select('id, name').eq('match_id', matchId)
+    const darkTeamId = teams?.find((team) => team.name === 'dark')?.id ?? null
+    const lightTeamId = teams?.find((team) => team.name === 'light')?.id ?? null
 
     return NextResponse.json({
       success: true,

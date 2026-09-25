@@ -3,22 +3,20 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
+import { PageHeader } from '@/components/layout/page-header'
+import { useTopBar } from '@/components/layout/top-bar'
+import { useT } from '@/i18n/provider'
 
-const DAYS = [
-  { value: 0, label: 'Domingo' },
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
-]
+// Create group (docs/ui-rework/03-screens.md §6 pattern): one-column form
+// max-w-xl, submit at the end (the tab bar hides itself on /new).
+
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
 function slugify(text: string): string {
   return text
@@ -32,6 +30,7 @@ function slugify(text: string): string {
 }
 
 export default function NewGroupPage() {
+  const t = useT()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,6 +42,8 @@ export default function NewGroupPage() {
   const [defaultMatchDay, setDefaultMatchDay] = useState(1) // Monday
   const [defaultMatchTime, setDefaultMatchTime] = useState('21:00')
   const [defaultMaxPlayers, setDefaultMaxPlayers] = useState(14)
+
+  useTopBar({ title: t('groups.create'), back: '/groups' })
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value
@@ -79,51 +80,38 @@ export default function NewGroupPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Error al crear el grupo')
+        setError(data.error || t('ui.screens.newGroup.createError'))
         return
       }
 
       router.push(`/groups/${data.slug}`)
       router.refresh()
     } catch {
-      setError('Error de conexión. Intenta de nuevo.')
+      setError(t('ui.screens.newGroup.networkError'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Back button */}
-      <Link
-        href="/groups"
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a mis grupos
-      </Link>
+    <div className="mx-auto max-w-xl space-y-6">
+      <PageHeader title={t('groups.create')} subtitle={t('ui.screens.newGroup.subtitle')} />
 
       <Card>
-        <CardHeader>
-          <CardTitle>Crear nuevo grupo</CardTitle>
-          <CardDescription>
-            Crea un grupo para organizar partidos de fútbol con tus amigos
-          </CardDescription>
+        {/* Mobile: the top bar already says "Crear grupo" (02-shell §2), so the
+            card only repeats the subtitle. */}
+        <CardHeader className="lg:hidden">
+          <CardDescription>{t('ui.screens.newGroup.subtitle')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-6">
-            {error && (
-              <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+          <CardContent className="space-y-6 lg:pt-5">
+            {error && <FormNotice kind="error">{error}</FormNotice>}
 
-            {/* Group Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Nombre del grupo *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="name">{t('groups.name')}</Label>
               <Input
                 id="name"
-                placeholder="Ej: Fútbol lunes"
+                placeholder={t('ui.screens.newGroup.namePlaceholder')}
                 value={name}
                 onChange={handleNameChange}
                 required
@@ -132,13 +120,10 @@ export default function NewGroupPage() {
               />
             </div>
 
-            {/* Slug */}
-            <div className="space-y-2">
-              <Label htmlFor="slug">URL del grupo *</Label>
-              <div className="flex items-center">
-                <span className="text-sm text-muted-foreground mr-2">
-                  futbot.app/groups/
-                </span>
+            <div className="space-y-1.5">
+              <Label htmlFor="slug">{t('groups.slug')}</Label>
+              <div className="flex items-center gap-2">
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">/groups/</span>
                 <Input
                   id="slug"
                   placeholder="futbol-lunes"
@@ -147,20 +132,17 @@ export default function NewGroupPage() {
                   required
                   disabled={loading}
                   maxLength={30}
-                  className="flex-1"
+                  className="flex-1 font-mono"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Solo letras minúsculas, números y guiones
-              </p>
+              <p className="text-xs text-muted-foreground">{t('ui.screens.newGroup.slugHint')}</p>
             </div>
 
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Descripción (opcional)</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="description">{t('ui.screens.newGroup.description')}</Label>
               <Input
                 id="description"
-                placeholder="Partidos de fútbol 7 todos los lunes"
+                placeholder={t('ui.screens.newGroup.descriptionPlaceholder')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={loading}
@@ -168,44 +150,40 @@ export default function NewGroupPage() {
               />
             </div>
 
-            {/* Default settings */}
-            <div className="border-t pt-6">
-              <h3 className="font-medium mb-4">Configuración por defecto</h3>
+            <div className="space-y-4 border-t border-border pt-6">
+              <h3 className="font-display text-base font-bold">{t('ui.screens.newGroup.defaults')}</h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                {/* Default day */}
-                <div className="space-y-2">
-                  <Label htmlFor="defaultMatchDay">Día habitual</Label>
-                  <select
+                <div className="space-y-1.5">
+                  <Label htmlFor="defaultMatchDay">{t('groups.defaultDay')}</Label>
+                  <NativeSelect
                     id="defaultMatchDay"
                     value={defaultMatchDay}
                     onChange={(e) => setDefaultMatchDay(Number(e.target.value))}
                     disabled={loading}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    {DAYS.map((day) => (
-                      <option key={day.value} value={day.value}>
-                        {day.label}
+                    {DAY_KEYS.map((key, value) => (
+                      <option key={key} value={value}>
+                        {t(`days.${key}`)}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
 
-                {/* Default time */}
-                <div className="space-y-2">
-                  <Label htmlFor="defaultMatchTime">Hora habitual</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="defaultMatchTime">{t('groups.defaultTime')}</Label>
                   <Input
                     id="defaultMatchTime"
                     type="time"
                     value={defaultMatchTime}
                     onChange={(e) => setDefaultMatchTime(e.target.value)}
                     disabled={loading}
+                    className="font-mono"
                   />
                 </div>
 
-                {/* Max players */}
-                <div className="space-y-2">
-                  <Label htmlFor="defaultMaxPlayers">Jugadores máximos</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="defaultMaxPlayers">{t('groups.maxPlayers')}</Label>
                   <Input
                     id="defaultMaxPlayers"
                     type="number"
@@ -214,25 +192,21 @@ export default function NewGroupPage() {
                     value={defaultMaxPlayers}
                     onChange={(e) => setDefaultMaxPlayers(Number(e.target.value))}
                     disabled={loading}
+                    className="font-mono"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Para fútbol 7: 14 jugadores (7 vs 7)
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('ui.screens.newGroup.maxPlayersHint')}</p>
                 </div>
               </div>
             </div>
 
-            {/* Submit */}
-            <div className="flex gap-3 pt-4">
-              <Button type="submit" disabled={loading || !name || !slug}>
-                {loading && <Spinner size="sm" className="mr-2" />}
-                Crear grupo
-              </Button>
-              <Link href="/groups">
-                <Button type="button" variant="outline" disabled={loading}>
-                  Cancelar
-                </Button>
+            <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
+              <Link href="/groups" className={buttonVariants({ variant: 'outline' })}>
+                {t('common.cancel')}
               </Link>
+              <Button type="submit" disabled={loading || !name || !slug} className="sm:flex-1">
+                {loading && <Spinner size="sm" />}
+                {t('groups.create')}
+              </Button>
             </div>
           </CardContent>
         </form>

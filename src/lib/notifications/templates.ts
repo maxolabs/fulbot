@@ -89,7 +89,7 @@ export function renderNotificationText(
       const location = event.payload.location ? ` en ${event.payload.location}` : ''
       return (
         `¡Partido confirmado! ${date} ${time}hs${location} -- ${event.payload.group_name}. ` +
-        `Quedan ${event.payload.max_players} lugares. Anotate acá: ${event.payload.signup_url}`
+        `Quedan ${event.payload.max_players} lugares. Anotate acá: ${resolveReportUrl(event.payload.signup_url)}`
       )
     }
     case 'waitlist_promoted':

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CircleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -78,28 +79,31 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="flex items-start gap-2 text-sm text-destructive" role="alert">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           {error}
-        </div>
+        </p>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="date">{t('matches.date')}</Label>
           <Input
             id="date"
             type="date"
+            className="font-mono tabular-nums"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
             disabled={loading}
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="time">{t('matches.time')}</Label>
           <Input
             id="time"
             type="time"
+            className="font-mono tabular-nums"
             value={time}
             onChange={(e) => setTime(e.target.value)}
             required
@@ -108,7 +112,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="location">{t('matches.location')}</Label>
         <Input
           id="location"
@@ -120,11 +124,12 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="maxPlayers">{t('matches.maxPlayers')}</Label>
         <Input
           id="maxPlayers"
           type="number"
+          className="font-mono tabular-nums"
           min={4}
           max={30}
           value={maxPlayers}
@@ -135,11 +140,12 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="durationMinutes">Duración (min)</Label>
           <Input
             id="durationMinutes"
             type="number"
+          className="font-mono tabular-nums"
             min={10}
             max={300}
             step={5}
@@ -152,11 +158,12 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
             Al pasar este tiempo el partido se da por terminado solo
           </p>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
           <Input
             id="resultsRequestDelayMinutes"
             type="number"
+          className="font-mono tabular-nums"
             min={0}
             max={1440}
             step={5}
@@ -171,7 +178,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label htmlFor="notes">{t('matches.notes')}</Label>
         <textarea
           id="notes"
@@ -185,8 +192,8 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         />
       </div>
 
-      <div className="flex gap-3">
-        <Button type="submit" disabled={loading}>
+      <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row">
+        <Button type="submit" disabled={loading} className="w-full sm:w-auto">
           {loading && <Spinner size="sm" className="mr-2" />}
           {t('common.save')}
         </Button>
@@ -195,6 +202,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           variant="outline"
           onClick={() => router.back()}
           disabled={loading}
+          className="w-full sm:w-auto"
         >
           {t('common.cancel')}
         </Button>

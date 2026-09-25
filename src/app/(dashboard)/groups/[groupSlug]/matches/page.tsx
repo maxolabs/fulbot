@@ -1,24 +1,30 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Calendar, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { TopBarAction, TopBarConfig } from '@/components/layout/top-bar'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { DEFAULT_TIMEZONE, formatMatchDate, formatMatchTime } from '@/lib/utils/datetime'
+import { Eyebrow } from '@/components/ui/eyebrow'
+import { getT } from '@/i18n/server'
+import type { Language } from '@/i18n/core'
+import { DEFAULT_TIMEZONE, formatMatchTime } from '@/lib/utils/datetime'
+import { MatchRow, MatchStatusBadge, ScoreText } from './match-row'
+import { formatRowDate } from './match-format'
 
 interface PageProps {
   params: Promise<{ groupSlug: string }>
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-800' },
-  signup_open: { label: 'Inscripción abierta', color: 'bg-green-100 text-green-800' },
-  signup_closed: { label: 'Inscripción cerrada', color: 'bg-orange-100 text-orange-800' },
-  full: { label: 'Completo', color: 'bg-yellow-100 text-yellow-800' },
-  teams_created: { label: 'Equipos armados', color: 'bg-blue-100 text-blue-800' },
-  finished: { label: 'Finalizado', color: 'bg-gray-100 text-gray-600' },
-  cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-800' },
+type TeamScore = { name: 'dark' | 'light'; score: number }
+
+type MatchResult = {
+  id: string
+  date_time: string
+  location: string | null
+  status: string
+  max_players: number
+  teams: TeamScore[] | null
 }
 
 export default async function MatchesListPage({ params }: PageProps) {
@@ -28,6 +34,13 @@ export default async function MatchesListPage({ params }: PageProps) {
   // Get current user
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return notFound()
+
+  const { data: userData } = await supabase
+    .from('users')
+    .select('preferred_language')
+    .eq('id', user.id)
+    .single() as { data: { preferred_language: Language } | null }
+  const t = getT(userData?.preferred_language ?? 'es')
 
   // Get user's player profile
   const { data: playerProfile } = await supabase
@@ -62,174 +75,148 @@ export default async function MatchesListPage({ params }: PageProps) {
 
   const isAdminOrCaptain = membership.role === 'admin' || membership.role === 'captain'
 
-  // Get all matches for this group
-  type MatchResult = {
-    id: string
-    date_time: string
-    location: string | null
-    status: string
-    max_players: number
-  }
-
+  // All matches for this group, with team scores for the finished ones
   const { data: matches } = await supabase
     .from('matches')
-    .select('id, date_time, location, status, max_players')
+    .select('id, date_time, location, status, max_players, teams ( name, score )')
     .eq('group_id', group.id)
     .order('date_time', { ascending: false }) as { data: MatchResult[] | null }
 
-  // Get signup counts for all matches
-  const matchesWithCounts = await Promise.all(
-    (matches || []).map(async (match) => {
-      const { count } = await supabase
-        .from('match_signups')
-        .select('*', { count: 'exact', head: true })
-        .eq('match_id', match.id)
-        .eq('status', 'confirmed')
+  // Confirmed counts in one query
+  const confirmedCount = new Map<string, number>()
+  if (matches && matches.length > 0) {
+    const { data: rows } = await supabase
+      .from('match_signups')
+      .select('match_id')
+      .in('match_id', matches.map(m => m.id))
+      .eq('status', 'confirmed') as { data: { match_id: string }[] | null }
+    for (const r of rows || []) confirmedCount.set(r.match_id, (confirmedCount.get(r.match_id) || 0) + 1)
+  }
 
-      return {
-        ...match,
-        signup_count: count || 0,
-      }
-    })
-  )
-
-  // Separate upcoming and past matches
   const now = new Date()
-  const upcomingMatches = matchesWithCounts.filter(
-    m => new Date(m.date_time) >= now && m.status !== 'cancelled'
-  )
-  const pastMatches = matchesWithCounts.filter(
-    m => new Date(m.date_time) < now || m.status === 'cancelled'
-  )
+  const upcoming = (matches || [])
+    .filter(m => new Date(m.date_time) >= now && !['cancelled', 'finished'].includes(m.status))
+    .sort((a, b) => a.date_time.localeCompare(b.date_time))
+  const needsAttention = (matches || []).filter(m => new Date(m.date_time) < now && !['finished', 'cancelled'].includes(m.status))
+  const past = (matches || []).filter(m => m.status === 'finished' || m.status === 'cancelled')
+
+  const scoreOf = (m: MatchResult): { dark: number; light: number } | null => {
+    const dark = m.teams?.find(tm => tm.name === 'dark')
+    const light = m.teams?.find(tm => tm.name === 'light')
+    return dark && light ? { dark: dark.score, light: light.score } : null
+  }
+
+  const createHref = `/groups/${groupSlug}/matches/new`
+  const meta = (m: MatchResult) => [formatMatchTime(m.date_time, timeZone), m.location].filter(Boolean).join(' · ')
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Link
-        href={`/groups/${groupSlug}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a {group.name}
-      </Link>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <TopBarConfig
+        title={t('matches.title')}
+        back={`/groups/${groupSlug}`}
+        action={
+          isAdminOrCaptain ? (
+            <TopBarAction href={createHref} label={t('matches.create')}>
+              <Plus className="h-5 w-5" strokeWidth={1.75} />
+            </TopBarAction>
+          ) : undefined
+        }
+      />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Partidos</h1>
-          <p className="text-muted-foreground">
-            {matchesWithCounts.length} partidos en total
-          </p>
-        </div>
-        {isAdminOrCaptain && (
-          <Link href={`/groups/${groupSlug}/matches/new`}>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Crear partido
-            </Button>
-          </Link>
-        )}
-      </div>
-
-      {/* Upcoming Matches */}
-      {upcomingMatches.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Próximos partidos</h2>
-          <div className="space-y-3">
-            {upcomingMatches.map((match) => {
-              const date = new Date(match.date_time)
-              const status = STATUS_CONFIG[match.status] || STATUS_CONFIG.draft
-
-              return (
-                <Link key={match.id} href={`/groups/${groupSlug}/matches/${match.id}`}>
-                  <Card className="hover:shadow-md transition-shadow">
-                    <CardContent className="py-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">
-                            {formatMatchDate(date, timeZone)}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatMatchTime(date, timeZone)}
-                            {match.location && ` · ${match.location}`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-sm font-medium">
-                              {match.signup_count}/{match.max_players}
-                            </p>
-                            <p className="text-xs text-muted-foreground">jugadores</p>
-                          </div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                            {status.label}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Empty State for Upcoming */}
-      {upcomingMatches.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-8">
-            <Calendar className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">No hay partidos programados</p>
-            {isAdminOrCaptain && (
-              <Link href={`/groups/${groupSlug}/matches/new`} className="mt-3">
-                <Button size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Crear partido
-                </Button>
+      <PageHeader
+        title={t('matches.title')}
+        subtitle={group.name}
+        actions={
+          isAdminOrCaptain ? (
+            <Button asChild>
+              <Link href={createHref}>
+                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('matches.create')}
               </Link>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Past Matches */}
-      {pastMatches.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Partidos anteriores</h2>
-          <div className="space-y-2">
-            {pastMatches.map((match) => {
-              const date = new Date(match.date_time)
-              const status = STATUS_CONFIG[match.status] || STATUS_CONFIG.draft
+      {(matches || []).length === 0 ? (
+        <p className="text-sm text-muted-foreground text-pretty">
+          {isAdminOrCaptain ? t('ui.matchScreens.list.emptyAdmin') : t('ui.matchScreens.list.empty')}
+        </p>
+      ) : (
+        <>
+          {isAdminOrCaptain && needsAttention.length > 0 && (
+            <section className="space-y-2 rounded-md border border-border bg-card p-4">
+              <Eyebrow as="h2">{t('ui.workflow.attention')}</Eyebrow>
+              <p className="text-sm text-muted-foreground">{t('ui.workflow.attentionBody')}</p>
+              <ul>
+                {needsAttention.map(m => (
+                  <li key={m.id}>
+                    <MatchRow href={`/groups/${groupSlug}/matches/${m.id}`} date={formatRowDate(t, m.date_time, timeZone)} meta={meta(m)} trailing={<MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-              return (
-                <Link key={match.id} href={`/groups/${groupSlug}/matches/${match.id}`}>
-                  <Card className="hover:shadow-sm transition-shadow">
-                    <CardContent className="py-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <p className="text-sm">
-                            {formatMatchDate(date, timeZone)}
-                          </p>
-                          {match.location && (
-                            <span className="text-sm text-muted-foreground">
-                              {match.location}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-muted-foreground">
-                            {match.signup_count} jugadores
+          <section className="space-y-2">
+            <Eyebrow as="h2">{t('ui.matchScreens.list.upcoming')}</Eyebrow>
+            {upcoming.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('ui.matchScreens.list.emptyUpcoming')}</p>
+            ) : (
+              <ul className="[&>li:last-child>a]:border-b-0">
+                {upcoming.map(m => (
+                  <li key={m.id}>
+                    <MatchRow
+                      href={`/groups/${groupSlug}/matches/${m.id}`}
+                      date={formatRowDate(t, m.date_time, timeZone)}
+                      meta={meta(m)}
+                      trailing={
+                        <>
+                          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                            {confirmedCount.get(m.id) || 0}/{m.max_players}
                           </span>
-                          <Badge variant="outline">{status.label}</Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
+                          <MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />
+                        </>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {(past.length > 0 || (!isAdminOrCaptain && needsAttention.length > 0)) && (
+            <section className="space-y-2">
+              <Eyebrow as="h2">{t('ui.matchScreens.list.past')}</Eyebrow>
+              <ul className="[&>li:last-child>a]:border-b-0">
+                {(isAdminOrCaptain ? past : [...needsAttention, ...past].sort((a, b) => b.date_time.localeCompare(a.date_time))).map(m => {
+                  const score = m.status === 'finished' ? scoreOf(m) : null
+                  return (
+                    <li key={m.id}>
+                      <MatchRow
+                        href={`/groups/${groupSlug}/matches/${m.id}`}
+                        date={formatRowDate(t, m.date_time, timeZone)}
+                        meta={meta(m)}
+                        trailing={
+                          score ? (
+                            <ScoreText dark={score.dark} light={score.light} className="text-base" />
+                          ) : (
+                            <>
+                              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                                {t('ui.matchScreens.list.players', { n: confirmedCount.get(m.id) || 0 })}
+                              </span>
+                              <MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />
+                            </>
+                          )
+                        }
+                      />
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </div>
   )

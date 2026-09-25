@@ -1,204 +1,210 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { CheckCircle, XCircle, Clock } from 'lucide-react'
+import * as React from 'react'
+import Link from 'next/link'
+import { Check, CircleAlert, Clock, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
-import { createClient } from '@/lib/supabase/client'
-import type { Database, WaitlistReason } from '@/types/database'
-import { useT } from '@/i18n/provider'
+import { ActionBar } from '@/components/layout/action-bar'
+import { useSignupAction, type SignupAction, type SignupButton, type SignupInput } from './use-signup-action'
 
-interface SignupActionsProps {
-  matchId: string
-  currentSignup: {
-    id: string
-    status: string
-    waitlistPosition: number | null
-    waitlistReason?: WaitlistReason | null
-  } | null
-  matchStatus: string
-  isFull: boolean
+// Signup UI for the match screen (docs/ui-rework/03-screens.md §3). One
+// `SignupProvider` owns the hook; `SignupActions` renders the inline block
+// (browser) and `MatchActionBar` the mobile action bar at the end of the
+// page. Both read the same action, so there is one RPC path and one state.
+
+const SignupContext = React.createContext<SignupAction | null>(null)
+
+export function SignupProvider({ children, ...input }: SignupInput & { children: React.ReactNode }) {
+  const action = useSignupAction(input)
+  return <SignupContext.Provider value={action}>{children}</SignupContext.Provider>
 }
 
-export function SignupActions({
-  matchId,
-  currentSignup,
-  matchStatus,
-  isFull,
-}: SignupActionsProps) {
-  const router = useRouter()
-  const supabase = createClient()
-  const t = useT()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  // Reason returned by signup_for_match when the signup lands on the waitlist
-  // (docs/member-scoring.md §10.4). Shown right away; after router.refresh()
-  // the same value comes back through currentSignup.waitlistReason.
-  const [signupReason, setSignupReason] = useState<WaitlistReason | null>(null)
+function useSignup(): SignupAction | null {
+  return React.useContext(SignupContext)
+}
 
-  const canSignUp = matchStatus === 'signup_open' || matchStatus === 'full'
+function ButtonContent({ button, icon }: { button: SignupButton; icon?: React.ReactNode }) {
+  return (
+    <>
+      {button.pending ? <Spinner size="sm" /> : icon}
+      {button.label}
+    </>
+  )
+}
 
-  const handleSignUp = async () => {
-    setLoading(true)
-    setError(null)
+/** Inline block for the browser (`hidden lg:block`); the mobile action bar covers phones. */
+export function SignupActions() {
+  const action = useSignup()
+  if (!action) return null
+  const { primary, secondary, detail, error, status } = action
 
-    try {
-      const args: Database['public']['Functions']['signup_for_match']['Args'] = {
-        p_match_id: matchId,
-      }
-      const { data: signup, error: signupError } = await supabase.rpc('signup_for_match', args)
+  const icon =
+    status === 'confirmed' ? (
+      <Check className="h-4 w-4 text-success" strokeWidth={2} aria-hidden="true" />
+    ) : status === 'waitlist' ? (
+      <Clock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+    ) : undefined
 
-      if (signupError) {
-        throw signupError
-      }
+  return (
+    <div className="hidden lg:block">
+      <div className="flex flex-wrap items-center gap-3">
+        {primary.tone === 'done' ? (
+          <p className="flex min-h-10 items-center gap-2 text-sm font-semibold" aria-live="polite">
+            {icon}
+            {primary.label}
+          </p>
+        ) : (
+          <Button type="button" onClick={primary.onClick} disabled={primary.disabled}>
+            <ButtonContent button={primary} />
+          </Button>
+        )}
+        {secondary && (
+          <Button type="button" variant="outline" onClick={secondary.onClick} disabled={secondary.disabled}>
+            <ButtonContent button={secondary} />
+          </Button>
+        )}
+        {detail && <span className="text-sm text-muted-foreground">{detail}</span>}
+      </div>
+      {error && (
+        <p className="mt-2 flex items-start gap-2 text-sm text-destructive" role="alert">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
 
-      setSignupReason(signup?.status === 'waitlist' ? signup.waitlist_reason ?? 'full' : null)
-      router.refresh()
-    } catch (err) {
-      console.error('Error signing up:', err)
-      setError(t('matches.signupError'))
-    } finally {
-      setLoading(false)
-    }
-  }
+/** Mobile-only line under the meter: the state's explanation and any RPC error. */
+export function SignupDetail() {
+  const action = useSignup()
+  if (!action) return null
+  const { detail, error, status } = action
+  if (!detail && !error) return null
+  return (
+    <div className="space-y-1 lg:hidden" aria-live="polite">
+      {detail && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          {status === 'confirmed' && <Check className="h-4 w-4 text-success" strokeWidth={2} aria-hidden="true" />}
+          {status === 'waitlist' && <Clock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
+          {detail}
+        </p>
+      )}
+      {error && (
+        <p className="flex items-start gap-2 text-sm text-destructive" role="alert">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
 
-  const handleCancel = async () => {
-    if (!confirm(t('matches.confirmCancelSignup'))) {
-      return
-    }
+export interface MatchActionBarProps {
+  /** Admin extra: "Armar equipos" as primary, the signup action as secondary. */
+  buildTeamsHref?: string
+  buildTeamsLabel?: string
+  /**
+   * Once the teams exist: "Ver equipos" as primary for everyone (03-screens
+   * §4), with the signup action as secondary when there is still one.
+   */
+  viewTeamsHref?: string
+  viewTeamsLabel?: string
+  /** Finished match: "Reportar resultado" until the viewer has reported. */
+  reportHref?: string
+  reportLabel?: string
+  allowSignup?: boolean
+}
 
-    setLoading(true)
-    setError(null)
+/** The mobile action bar, placed as the last element of the page content. */
+export function MatchActionBar({
+  buildTeamsHref,
+  buildTeamsLabel,
+  viewTeamsHref,
+  viewTeamsLabel,
+  reportHref,
+  reportLabel,
+  allowSignup = true,
+}: MatchActionBarProps) {
+  const action = useSignup()
 
-    try {
-      const args: Database['public']['Functions']['cancel_my_signup']['Args'] = {
-        p_match_id: matchId,
-      }
-      const { error: cancelError } = await supabase.rpc('cancel_my_signup', args)
-
-      if (cancelError) {
-        throw cancelError
-      }
-
-      router.refresh()
-    } catch (err) {
-      console.error('Error canceling signup:', err)
-      setError(t('matches.cancelError'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Not signed up
-  if (!currentSignup) {
+  if (reportHref) {
     return (
-      <Card>
-        <CardContent className="py-4">
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
-              {error}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">
-                {matchStatus === 'signup_closed'
-                  ? t('matches.signupClosedTitle')
-                  : isFull
-                    ? t('matches.matchFull')
-                    : t('matches.signupPrompt')}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {matchStatus === 'signup_closed'
-                  ? t('matches.signupClosedSubtitle')
-                  : isFull
-                    ? t('matches.canJoinWaitlist')
-                    : t('matches.spotsAvailable')}
-              </p>
-            </div>
-            <Button onClick={handleSignUp} disabled={loading || !canSignUp}>
-              {loading && <Spinner size="sm" className="mr-2" />}
-              {isFull ? t('matches.joinWaitlist') : t('matches.signup')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <ActionBar>
+        <Button asChild size="xl">
+          <Link href={reportHref}>{reportLabel}</Link>
+        </Button>
+      </ActionBar>
     )
   }
 
-  // Confirmed
-  if (currentSignup.status === 'confirmed') {
-    return (
-      <Card className="border-green-500/30 bg-green-500/5">
-        <CardContent className="py-4">
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
-              {error}
-            </div>
-          )}
+  if (!action) return null
+  const { primary, secondary, error } = action
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="font-medium text-green-700">{t('matches.signedUp')}</p>
-                <p className="text-sm text-muted-foreground">
-                  {t('matches.confirmedSpot')}
-                </p>
-              </div>
-            </div>
-            <Button variant="outline" onClick={handleCancel} disabled={loading}>
-              {loading && <Spinner size="sm" className="mr-2" />}
-              {t('matches.leaveMatch')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+  // The signup action as a secondary: whichever of the two is actionable.
+  const signupAsSecondary = allowSignup ? secondary ?? (primary.tone === 'action' ? primary : null) : null
+
+  // "Armar equipos" (no teams yet, admin) and "Ver equipos" (teams exist,
+  // everyone) are mutually exclusive and take the same slot: the primary.
+  const teamsHref = buildTeamsHref ?? viewTeamsHref
+  const teamsLabel = buildTeamsHref ? buildTeamsLabel : viewTeamsLabel
+
+  if (teamsHref) {
+    return (
+      <ActionBar>
+        <Button asChild size="xl">
+          <Link href={teamsHref}>
+            <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {teamsLabel}
+          </Link>
+        </Button>
+        {signupAsSecondary && (
+          <Button
+            type="button"
+            size="xl"
+            variant="outline"
+            onClick={signupAsSecondary.onClick}
+            disabled={signupAsSecondary.disabled}
+          >
+            <ButtonContent button={signupAsSecondary} />
+          </Button>
+        )}
+      </ActionBar>
     )
   }
 
-  // Waitlist
-  if (currentSignup.status === 'waitlist') {
-    const waitlistReason = currentSignup.waitlistReason ?? signupReason
-    return (
-      <Card className="border-yellow-500/30 bg-yellow-500/5">
-        <CardContent className="py-4">
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive mb-4">
-              {error}
-            </div>
-          )}
+  if (!allowSignup) return null
 
-          {/* Stacks on phones: the reason line below makes the text column too narrow for a side-by-side button */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <Clock className="h-5 w-5 mt-0.5 shrink-0 text-yellow-600" />
-              <div>
-                <p className="font-medium text-yellow-700">
-                  {t('matches.onWaitlist')}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {t('matches.waitlistPositionDetail', { position: currentSignup.waitlistPosition ?? 0 })}
-                </p>
-                {waitlistReason && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {t(`signupPolicy.waitlistReason.${waitlistReason}`)}
-                  </p>
-                )}
-              </div>
-            </div>
-            <Button variant="outline" onClick={handleCancel} disabled={loading} className="self-start sm:self-auto">
-              {loading && <Spinner size="sm" className="mr-2" />}
-              {t('matches.leaveWaitlist')}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return null
+  return (
+    <ActionBar>
+      <Button
+        type="button"
+        size="xl"
+        variant={primary.tone === 'done' ? 'secondary' : 'default'}
+        onClick={primary.onClick}
+        disabled={primary.disabled}
+        aria-live="polite"
+      >
+        <ButtonContent
+          button={primary}
+          icon={
+            action.status === 'confirmed' ? (
+              <Check className="h-5 w-5 text-success" strokeWidth={2} aria-hidden="true" />
+            ) : undefined
+          }
+        />
+      </Button>
+      {secondary && (
+        <Button type="button" size="xl" variant="outline" onClick={secondary.onClick} disabled={secondary.disabled}>
+          <ButtonContent button={secondary} />
+        </Button>
+      )}
+      {error && (
+        <p className="sr-only" role="alert">
+          {error}
+        </p>
+      )}
+    </ActionBar>
+  )
 }

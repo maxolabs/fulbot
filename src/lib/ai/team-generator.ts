@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { generateFallbackTeams } from './fallback-balancer'
+import { POSITIONS } from '@/lib/teams/manual'
 import { tagLabel, type PlayerSkills } from '@/lib/ratings'
 
 export interface PlayerInput {
@@ -129,7 +130,9 @@ function computeTeammatePairCounts(history: MatchHistoryEntry[]): Map<string, Pa
 // zod schema for the shape we ask the model to return
 const TeamAssignmentSchema = z.object({
   playerId: z.string().min(1),
-  position: z.string().min(1),
+  // Invented codes ("DM", "LWB") would make publish_match_teams reject the
+  // lineup; failing validation here sends us to the retry/fallback path.
+  position: z.enum(POSITIONS),
   reason: z.string().default(''),
 })
 

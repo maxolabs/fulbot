@@ -112,7 +112,7 @@ export function PostMatchVoting({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Star className="h-5 w-5 text-yellow-500" />
+            <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
             Calificaciones
           </CardTitle>
         </CardHeader>
@@ -142,7 +142,7 @@ export function PostMatchVoting({
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <Star className="h-5 w-5 text-yellow-500" />
+          <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
           Calificá a tus compañeros
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">Opcional y privado: nadie más ve tus calificaciones.</p>
@@ -169,8 +169,8 @@ export function PostMatchVoting({
                     <Star
                       className={`h-5 w-5 transition-colors ${
                         (ratings[player.id] || 0) >= star
-                          ? 'text-yellow-500 fill-yellow-500'
-                          : 'text-muted-foreground/30'
+                          ? 'fill-primary text-primary'
+                          : 'text-muted-foreground'
                       }`}
                     />
                   </button>

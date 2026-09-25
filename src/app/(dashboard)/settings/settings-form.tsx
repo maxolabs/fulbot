@@ -4,45 +4,25 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Eyebrow } from '@/components/ui/eyebrow'
 import { Label } from '@/components/ui/label'
+import { Segmented } from '@/components/ui/segmented'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice, NativeSelect, Toggle } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
 import type { Language } from '@/i18n/use-translations'
 import { saveSettings, type ThemePreference, type NotificationPrefsInput } from './actions'
+
+// Preferences (docs/ui-rework/03-screens.md §10): language, theme as a
+// segmented control (Papel / Pizarra / Sistema) and the notification
+// toggles. The theme preview and the cookie write are unchanged: the class
+// on <html> flips immediately, the cookie is set by the server action.
 
 interface SettingsFormProps {
   initialLanguage: Language
   initialTheme: ThemePreference
   initialNotificationPrefs: NotificationPrefsInput
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed ${
-        checked ? 'bg-primary' : 'bg-muted'
-      }`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  )
 }
 
 function applyThemePreview(theme: ThemePreference) {
@@ -61,9 +41,6 @@ function applyThemePreview(theme: ThemePreference) {
     }
   }
 }
-
-const selectClass =
-  'flex h-11 w-full rounded-xl border border-border/50 bg-card/50 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 disabled:opacity-50 transition-colors sm:max-w-xs'
 
 export function SettingsForm({
   initialLanguage,
@@ -85,7 +62,8 @@ export function SettingsForm({
     applyThemePreview(value)
   }
 
-  const handleSave = async () => {
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
     setSaving(true)
     setError(null)
     setSuccess(false)
@@ -109,6 +87,7 @@ export function SettingsForm({
     title: string
     desc: string
   }[] = [
+    { key: 'match_created', icon: Bell, title: t('devicePush.signupTitle'), desc: t('devicePush.signupDescription') },
     {
       key: 'waitlist_promoted',
       icon: Users,
@@ -148,86 +127,94 @@ export function SettingsForm({
   ]
 
   return (
-    <div className="space-y-8">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-md bg-green-500/10 px-4 py-3 text-sm text-green-600">
-          {t('settings.saved')}
-        </div>
-      )}
+    <form onSubmit={handleSave} className="space-y-6">
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      {success && <FormNotice kind="success">{t('settings.saved')}</FormNotice>}
 
-      {/* Language */}
-      <div className="space-y-2">
-        <Label htmlFor="language">{t('settings.language')}</Label>
-        <p className="text-sm text-muted-foreground">{t('settings.languageDescription')}</p>
-        <select
-          id="language"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value as Language)}
-          disabled={saving}
-          className={selectClass}
-        >
-          <option value="es">{t('auth.languageEs')}</option>
-          <option value="en">{t('auth.languageEn')}</option>
-        </select>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('settings.language')}</CardTitle>
+          <CardDescription>{t('settings.languageDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-1.5">
+          <Label htmlFor="language">{t('settings.language')}</Label>
+          <NativeSelect
+            id="language"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as Language)}
+            disabled={saving}
+            wrapperClassName="sm:max-w-xs"
+          >
+            <option value="es">{t('auth.languageEs')}</option>
+            <option value="en">{t('auth.languageEn')}</option>
+          </NativeSelect>
+        </CardContent>
+      </Card>
 
-      {/* Theme */}
-      <div className="space-y-2 pt-4 border-t border-border/50">
-        <Label htmlFor="theme">{t('settings.theme')}</Label>
-        <p className="text-sm text-muted-foreground">{t('settings.themeDescription')}</p>
-        <select
-          id="theme"
-          value={theme}
-          onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
-          disabled={saving}
-          className={selectClass}
-        >
-          <option value="light">{t('settings.themeLight')}</option>
-          <option value="dark">{t('settings.themeDark')}</option>
-          <option value="system">{t('settings.themeSystem')}</option>
-        </select>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('settings.theme')}</CardTitle>
+          <CardDescription>{t('settings.themeDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-1.5">
+          <Eyebrow id="theme-label" as="span" className="block">
+            {t('settings.theme')}
+          </Eyebrow>
+          <Segmented<ThemePreference>
+            aria-labelledby="theme-label"
+            value={theme}
+            onChange={handleThemeChange}
+            className="w-full sm:w-auto"
+            options={[
+              { value: 'light', label: t('ui.screens.preferences.themePaper') },
+              { value: 'dark', label: t('ui.screens.preferences.themeBoard') },
+              { value: 'system', label: t('ui.screens.preferences.themeSystem') },
+            ]}
+          />
+        </CardContent>
+      </Card>
 
-      {/* Notifications */}
-      <div className="space-y-5 pt-4 border-t border-border/50">
-        <div>
-          <Label className="text-base">{t('settings.notifications')}</Label>
-          <p className="text-sm text-muted-foreground">{t('settings.notificationsDescription')}</p>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('settings.notifications')}</CardTitle>
+          <CardDescription>{t('settings.notificationsDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="[&>li:last-child]:border-b-0">
+            {notificationItems.map((item) => {
+              const id = `pref-${item.key}`
+              return (
+                <li key={item.key} className="flex items-center justify-between gap-4 border-b border-border py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
+                      <item.icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <p id={id} className="text-sm font-medium">{item.title}</p>
+                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                    </div>
+                  </div>
+                  <Toggle
+                    aria-labelledby={id}
+                    checked={notificationPrefs[item.key]}
+                    onChange={(checked) =>
+                      setNotificationPrefs((prev) => ({ ...prev, [item.key]: checked }))
+                    }
+                    disabled={saving}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+        </CardContent>
+      </Card>
 
-        {notificationItems.map((item) => (
-          <div key={item.key} className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 shrink-0 rounded-lg bg-accent flex items-center justify-center">
-                <item.icon className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{item.title}</p>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-            <Toggle
-              checked={notificationPrefs[item.key]}
-              onChange={(checked) =>
-                setNotificationPrefs((prev) => ({ ...prev, [item.key]: checked }))
-              }
-              disabled={saving}
-            />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end pt-4 border-t border-border/50">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving && <Spinner size="sm" className="mr-2" />}
+      <div className="flex justify-end">
+        <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+          {saving && <Spinner size="sm" />}
           {t('common.save')}
         </Button>
       </div>
-    </div>
+    </form>
   )
 }

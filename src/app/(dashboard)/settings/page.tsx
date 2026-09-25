@@ -1,12 +1,15 @@
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
+import { DeviceNotifications } from '@/components/device-notifications'
 import { SettingsForm } from './settings-form'
+import { PageHeader } from '@/components/layout/page-header'
+import { TopBarConfig } from '@/components/layout/top-bar'
 
+// Preferences (docs/ui-rework/03-screens.md §10): one column max-w-xl.
 export default async function SettingsPage() {
   const supabase = await createClient()
 
@@ -32,32 +35,25 @@ export default async function SettingsPage() {
   const prefs = userData.notification_prefs || {}
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t('settings.title')}</h1>
-        <p className="text-muted-foreground">{t('settings.subtitle')}</p>
-      </div>
+    <div className="mx-auto max-w-xl space-y-6">
+      <TopBarConfig title={t('ui.shell.preferences')} back="/profile" />
+      <PageHeader title={t('ui.shell.preferences')} subtitle={t('settings.subtitle')} />
+      <p className="text-sm text-muted-foreground lg:hidden">{t('settings.subtitle')}</p>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('settings.title')}</CardTitle>
-          <CardDescription>{t('settings.subtitle')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SettingsForm
-            initialLanguage={userData.preferred_language}
-            initialTheme={theme}
-            initialNotificationPrefs={{
-              waitlist_promoted: prefs.waitlist_promoted ?? true,
-              teams_created: prefs.teams_created ?? true,
-              match_reminder: prefs.match_reminder ?? true,
-              results_posted: prefs.results_posted ?? true,
-              results_request: prefs.results_request ?? true,
-              results_reminder: prefs.results_reminder ?? true,
-            }}
-          />
-        </CardContent>
-      </Card>
+      <DeviceNotifications />
+      <SettingsForm
+        initialLanguage={userData.preferred_language}
+        initialTheme={theme}
+        initialNotificationPrefs={{
+          match_created: prefs.match_created ?? true,
+          waitlist_promoted: prefs.waitlist_promoted ?? true,
+          teams_created: prefs.teams_created ?? true,
+          match_reminder: prefs.match_reminder ?? true,
+          results_posted: prefs.results_posted ?? true,
+          results_request: prefs.results_request ?? true,
+          results_reminder: prefs.results_reminder ?? true,
+        }}
+      />
     </div>
   )
 }
