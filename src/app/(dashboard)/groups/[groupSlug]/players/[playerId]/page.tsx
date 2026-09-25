@@ -34,7 +34,7 @@ interface PageProps {
 // stats, aside = member score, badges, skills), stacked main-then-aside on
 // mobile.
 
-const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'mvp_streak', 'first_match', 'ejemplar'])
+const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'ejemplar'])
 
 export default async function PlayerProfilePage({ params }: PageProps) {
   const { groupSlug, playerId } = await params
@@ -107,14 +107,18 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const language: Language = userData?.preferred_language ?? 'es'
   const t = getT(language)
 
-  // The player's own role in this group, for the hero.
-  const { data: playerMembership } = await supabase
+  // The player's own membership in this group: a player who never belonged
+  // to it has no page here. Former (inactive) members keep theirs for the
+  // history; only an active membership shows a role in the hero.
+  const { data: targetMembership } = await supabase
     .from('group_memberships')
-    .select('role')
+    .select('role, is_active')
     .eq('group_id', group.id)
     .eq('player_id', playerId)
-    .eq('is_active', true)
-    .maybeSingle() as { data: { role: 'admin' | 'captain' | 'member' } | null }
+    .maybeSingle() as { data: { role: 'admin' | 'captain' | 'member'; is_active: boolean } | null }
+
+  if (!targetMembership) return notFound()
+  const playerMembership = targetMembership.is_active ? targetMembership : null
 
   // Member score ("Compromiso", docs/member-scoring.md §5.4): visible when the
   // group opted into 'group' visibility, or the viewer is admin/captain, or the
@@ -233,7 +237,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       match_id,
       status,
       signup_time,
-      matches (
+      matches!inner (
         id,
         date_time,
         location,
@@ -242,6 +246,9 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     `)
     .eq('player_id', playerId)
     .in('status', ['confirmed', 'did_not_show'])
+    // Only this group's matches that already happened.
+    .eq('matches.group_id', group.id)
+    .lt('matches.date_time', new Date().toISOString())
     .order('signup_time', { ascending: false })
     .limit(10) as { data: RecentMatch[] | null }
 
