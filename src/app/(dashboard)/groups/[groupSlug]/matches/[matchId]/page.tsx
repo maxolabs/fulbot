@@ -102,6 +102,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
       results_finalized: boolean
       result_status: MatchResultStatus
       mvp_player_id: string | null
+      finished_at: string | null
+      duration_minutes: number
       created_at: string
     } | null }
 
@@ -374,8 +376,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
     reports = reportRows || []
   }
 
-  const reportWindowOpen =
-    new Date().getTime() - new Date(match.date_time).getTime() < resultsWindowDays * 24 * 60 * 60 * 1000
+  // Same anchor as match_report_window_open (00026): the end of the match,
+  // finished_at or else start + duration, not the start time.
+  const matchEndMs = match.finished_at
+    ? new Date(match.finished_at).getTime()
+    : new Date(match.date_time).getTime() + (match.duration_minutes ?? 60) * 60 * 1000
+  const reportWindowOpen = new Date().getTime() - matchEndMs < resultsWindowDays * 24 * 60 * 60 * 1000
   const viewerPlayed = currentUserSignup?.status === 'confirmed'
   const viewerCanReport = match.status === 'finished' && viewerPlayed && reportWindowOpen
   const ownReportRow = reports.find(r => r.reporter_player_id === playerProfile.id) ?? null
@@ -396,6 +402,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // A locked result is final and visible to everyone (a late report can't be
   // anchored into changing it), as is anything after the window closed.
   const resultLocked = match.result_status === 'locked'
+  // mvp_player_id follows every vote; the hero names the MVP only once the
+  // result counts (consensus or locked), like mvp_count and the badge.
+  const resultSettled = match.result_status === 'consensus' || resultLocked
   const showConsensus =
     match.status === 'finished' && (ownReport !== null || !viewerCanReport || resultLocked)
   // Admin/captain tools follow the same rule: an admin who played reports
@@ -563,6 +572,31 @@ export default async function MatchDetailPage({ params }: PageProps) {
     </>
   ) : undefined
 
+  const resultsEditor = isFinished && showAdminTools && teamsForResults.length > 0 ? (
+    <MatchResults
+      matchId={match.id}
+      teams={teamsForResults}
+      existingEvents={matchEvents.map(e => ({
+        id: e.id,
+        team_id: e.team_id,
+        player_id: e.player_id,
+        guest_player_id: e.guest_player_id,
+        event_type: e.event_type,
+        linked_event_id: e.linked_event_id,
+      }))}
+      resultStatus={resultMeta.result_status ?? 'pending'}
+      lockedBy={resultMeta.result_locked_by ?? null}
+      lockedAt={resultMeta.result_locked_at ?? null}
+      mvpPlayerId={match.mvp_player_id}
+      mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+    />
+  ) : null
+
+  // Signup numbers only mean something before the match; without them a
+  // finished match has nothing for the aside, so the main column takes it all.
+  const showQuickStats = !isFinished && match.status !== 'cancelled'
+  const hasAside = showAnnouncement || !!addGuest || !!rules || showQuickStats
+
   const statusBadge = <MatchStatusBadge status={match.status} label={statusLabel} />
 
   return (
@@ -598,7 +632,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 ) : (
                   <span className="font-mono text-xs tabular-nums">{countLabel}</span>
                 )}
-                {mvpPlayerName && showConsensus && (
+                {mvpPlayerName && showConsensus && resultSettled && (
                   <span className="flex items-center gap-1">
                     <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
                     {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
@@ -643,7 +677,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <span>{t('ui.matchScreens.dashboard.light')}</span>
               </p>
             )}
-            {mvpPlayerName && showConsensus && (
+            {mvpPlayerName && showConsensus && resultSettled && (
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
                 {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
@@ -660,7 +694,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </details>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className={hasAside ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]' : 'grid grid-cols-1 gap-6'}>
             {/* Main column */}
             <div className="min-w-0 space-y-6">
               {/* Notes */}
@@ -776,26 +810,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 />
               )}
 
-              {/* Match Results Editor - shown to admins when match is finished */}
-              {isFinished && showAdminTools && teamsForResults.length > 0 && (
-                <MatchResults
-                  matchId={match.id}
-                  teams={teamsForResults}
-                  existingEvents={matchEvents.map(e => ({
-                    id: e.id,
-                    team_id: e.team_id,
-                    player_id: e.player_id,
-                    guest_player_id: e.guest_player_id,
-                    event_type: e.event_type,
-                    linked_event_id: e.linked_event_id,
-                  }))}
-                  resultStatus={resultMeta.result_status ?? 'pending'}
-                  lockedBy={resultMeta.result_locked_by ?? null}
-                  lockedAt={resultMeta.result_locked_at ?? null}
-                  mvpPlayerId={match.mvp_player_id}
-                  mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
-                />
-              )}
+              {/* Match Results Editor - admins when the match is finished. Once the
+                  result card above shows a result, the editor folds away so the
+                  score isn't shown twice. */}
+              {resultsEditor && (match.result_status === 'pending' ? resultsEditor : (
+                <details className="rounded-md border border-border bg-card p-4">
+                  <summary className="-my-3 cursor-pointer py-3 text-sm font-semibold">{t('ui.postMatch.editResult')}</summary>
+                  <div className="pt-4">{resultsEditor}</div>
+                </details>
+              ))}
 
               {/* Player reports (who said what) - admins/captains only */}
               {isFinished && showAdminTools && teamsForResults.length > 0 && (
@@ -832,7 +855,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </div>
 
             {/* Aside (browser only; on phones this content lives in the admin sheet) */}
-            <aside className="hidden min-w-0 space-y-6 lg:block">
+            <aside className={hasAside ? 'hidden min-w-0 space-y-6 lg:block' : 'hidden'}>
               {showAnnouncement && (
                 <MatchAnnouncement
                   groupName={group.name}
@@ -850,25 +873,27 @@ export default async function MatchDetailPage({ params }: PageProps) {
               {rules}
 
               {/* Quick Stats */}
-              <Card variant="solid">
-                <CardContent className="space-y-2 p-4 lg:p-5">
-                  <Eyebrow as="h2">{t('ui.matchScreens.match.stats')}</Eyebrow>
-                  <dl className="space-y-1.5 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsSigned')}</dt>
-                      <dd className="font-mono tabular-nums">{confirmedSignups.length}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsWaiting')}</dt>
-                      <dd className="font-mono tabular-nums">{waitlistSignups.length}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsAvailable')}</dt>
-                      <dd className="font-mono tabular-nums">{Math.max(0, match.max_players - confirmedSignups.length)}</dd>
-                    </div>
-                  </dl>
-                </CardContent>
-              </Card>
+              {showQuickStats && (
+                <Card variant="solid">
+                  <CardContent className="space-y-2 p-4 lg:p-5">
+                    <Eyebrow as="h2">{t('ui.matchScreens.match.stats')}</Eyebrow>
+                    <dl className="space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsSigned')}</dt>
+                        <dd className="font-mono tabular-nums">{confirmedSignups.length}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsWaiting')}</dt>
+                        <dd className="font-mono tabular-nums">{waitlistSignups.length}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsAvailable')}</dt>
+                        <dd className="font-mono tabular-nums">{Math.max(0, match.max_players - confirmedSignups.length)}</dd>
+                      </div>
+                    </dl>
+                  </CardContent>
+                </Card>
+              )}
             </aside>
           </div>
 

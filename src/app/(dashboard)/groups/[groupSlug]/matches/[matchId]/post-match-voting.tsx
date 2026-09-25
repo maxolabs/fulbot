@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 
-// Optional teammate ratings (1-5) after a match. The MVP vote moved into the
+// Optional player ratings (1-5) after a match: everyone who played, both teams. The MVP vote moved into the
 // report form (report-form.tsx); this card is independent of it and can be
 // filled or edited any time inside the reporting window (RLS allows own
 // UPDATE/DELETE there, see 00020_match_reports.sql).
@@ -33,6 +34,7 @@ export function PostMatchVoting({
   windowOpen,
 }: PostMatchVotingProps) {
   const supabase = createClient()
+  const t = useT()
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [saved, setSaved] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
@@ -119,7 +121,9 @@ export function PostMatchVoting({
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             {savedCount > 0
-              ? `Calificaste a ${savedCount} ${savedCount === 1 ? 'compañero' : 'compañeros'}. Solo vos ves tus calificaciones.`
+              ? savedCount === 1
+                ? t('ui.postMatch.ratedOne')
+                : t('ui.postMatch.ratedMany', { count: savedCount })
               : 'No calificaste a nadie en este partido.'}
           </p>
           {windowOpen ? (
@@ -143,7 +147,7 @@ export function PostMatchVoting({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
-          Calificá a tus compañeros
+          {t('ui.postMatch.rateTitle')}
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">Opcional y privado: nadie más ve tus calificaciones.</p>
       </CardHeader>

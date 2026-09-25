@@ -34,7 +34,7 @@ interface PageProps {
 // stats, aside = member score, badges, skills), stacked main-then-aside on
 // mobile.
 
-const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'mvp_streak', 'first_match'])
+const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'mvp_streak', 'first_match', 'ejemplar'])
 
 export default async function PlayerProfilePage({ params }: PageProps) {
   const { groupSlug, playerId } = await params
