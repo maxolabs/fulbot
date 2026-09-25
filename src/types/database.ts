@@ -1167,6 +1167,15 @@ export type Database = {
         }
         Returns: Json
       }
+      get_results_window_days: {
+        Args: {
+          p_group_ids: string[]
+        }
+        Returns: {
+          group_id: string
+          results_window_days: number
+        }[]
+      }
       admin_finalize_match_results: {
         Args: {
           p_match_id: string

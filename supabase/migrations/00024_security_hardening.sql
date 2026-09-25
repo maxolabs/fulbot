@@ -9,11 +9,15 @@
 --      (get_public_group_by_invite, get_match_join_info). Admins can delete a group.
 --   3. player_badges: badges are written only by SECURITY DEFINER SQL
 --      (award_badges_for_match, recompute_player_stats); drop the open INSERT policy.
+--      Reading follows player_profiles visibility (no longer open to everyone).
 --   4. match_signups: members write only through the signup RPCs; drop the leftover
 --      member INSERT/UPDATE policies that bypassed capacity and priority rules.
 --   5. get_recent_match_history checks membership; save_team_assignments is reachable
 --      only through publish_match_teams.
 --   6. users: UPDATE gets WITH CHECK, and id/email cannot be changed by the user.
+--   7. player_profiles: stats columns are not writable by the client.
+--      notification_settings: admins only (webhook URL); members read the
+--      reporting window through get_results_window_days.
 
 -- ============================================
 -- 1. GROUP MEMBERSHIPS
@@ -45,6 +49,13 @@ BEGIN
 
     IF TG_OP = 'UPDATE' AND (NEW.group_id <> OLD.group_id OR NEW.player_id <> OLD.player_id) THEN
         RAISE EXCEPTION 'No se puede mover una membresía a otro grupo o jugador';
+    END IF;
+
+    IF OLD.role = 'admin' AND OLD.is_active
+       AND (TG_OP = 'DELETE' OR NEW.role <> 'admin' OR NOT NEW.is_active) THEN
+        -- Serialize admin removals per group: two admins demoting each other at
+        -- the same time would otherwise each still see the other as active.
+        PERFORM 1 FROM public.groups g WHERE g.id = OLD.group_id FOR UPDATE;
     END IF;
 
     IF OLD.role = 'admin' AND OLD.is_active
@@ -222,11 +233,15 @@ BEGIN
         RETURN NULL;
     END IF;
 
+    -- Only while the match is taking signups: a finished or cancelled match id
+    -- (for example one read from another group's badges) is not an invite.
     SELECT jsonb_build_object('group_id', g.id, 'invite_code', g.invite_code)
     INTO v_result
     FROM public.matches m
     JOIN public.groups g ON g.id = m.group_id
-    WHERE m.id = p_match_id;
+    WHERE m.id = p_match_id
+      AND m.status IN ('signup_open', 'full', 'signup_closed')
+      AND m.date_time > NOW() - INTERVAL '2 hours';
 
     RETURN v_result;
 END;
@@ -240,6 +255,15 @@ GRANT EXECUTE ON FUNCTION get_match_join_info(UUID) TO authenticated, service_ro
 -- ============================================
 
 DROP POLICY IF EXISTS "System can insert badges" ON public.player_badges;
+
+-- Badges carry a match_id, so they are visible only where the player's profile is:
+-- to the player and to people who share an active group with them.
+DROP POLICY IF EXISTS "Anyone can read badges" ON public.player_badges;
+DROP POLICY IF EXISTS "Group mates can read badges" ON public.player_badges;
+CREATE POLICY "Group mates can read badges"
+    ON public.player_badges FOR SELECT
+    TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.player_profiles pp WHERE pp.id = player_badges.player_id));
 
 -- ============================================
 -- 4. MATCH SIGNUPS
@@ -338,6 +362,55 @@ DROP TRIGGER IF EXISTS users_protect_identity ON public.users;
 CREATE TRIGGER users_protect_identity
     BEFORE UPDATE ON public.users
     FOR EACH ROW EXECUTE FUNCTION public.trg_users_protect_identity();
+
+-- ============================================
+-- 7. PLAYER PROFILES AND NOTIFICATION SETTINGS
+-- ============================================
+
+-- The stats columns are written only by recompute_player_stats (SECURITY DEFINER,
+-- so current_user is the function owner there). A direct update from the client
+-- runs as anon/authenticated and cannot touch them.
+CREATE OR REPLACE FUNCTION public.trg_player_profiles_protect_stats()
+RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = public
+AS $$
+BEGIN
+    IF current_user IN ('anon', 'authenticated')
+       AND (NEW.matches_played IS DISTINCT FROM OLD.matches_played
+            OR NEW.goals IS DISTINCT FROM OLD.goals
+            OR NEW.assists IS DISTINCT FROM OLD.assists
+            OR NEW.mvp_count IS DISTINCT FROM OLD.mvp_count
+            OR NEW.clean_sheets IS DISTINCT FROM OLD.clean_sheets) THEN
+        RAISE EXCEPTION 'Las estadísticas del jugador no se pueden editar';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.trg_player_profiles_protect_stats() FROM anon, authenticated, PUBLIC;
+
+DROP TRIGGER IF EXISTS player_profiles_protect_stats ON public.player_profiles;
+CREATE TRIGGER player_profiles_protect_stats
+    BEFORE UPDATE ON public.player_profiles
+    FOR EACH ROW EXECUTE FUNCTION public.trg_player_profiles_protect_stats();
+
+-- notification_settings holds the group's WhatsApp webhook URL, so only admins
+-- read the row ("Admins can manage notification settings", FOR ALL). Members get
+-- the reporting window through this function.
+DROP POLICY IF EXISTS "Members can read notification settings" ON public.notification_settings;
+
+CREATE OR REPLACE FUNCTION get_results_window_days(p_group_ids UUID[])
+RETURNS TABLE (group_id UUID, results_window_days INTEGER)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+    SELECT ns.group_id, COALESCE(ns.results_window_days, 7)
+    FROM public.notification_settings ns
+    WHERE ns.group_id = ANY(p_group_ids)
+      AND is_group_member(ns.group_id);
+$$;
+
+REVOKE ALL ON FUNCTION get_results_window_days(UUID[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_results_window_days(UUID[]) TO authenticated, service_role;
 
 -- handle_user_deleted (00002) was defined for auth.users deletes but never attached.
 -- It is a no-op today (ON DELETE CASCADE / SET NULL do the cleanup); wiring it up

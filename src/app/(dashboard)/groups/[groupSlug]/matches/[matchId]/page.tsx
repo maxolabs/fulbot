@@ -354,11 +354,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
       .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: { enabled?: boolean } | null }
     scoringEnabled = !!scoringSettings?.enabled
 
-    const { data: settingsRow } = await supabase
-      .from('notification_settings')
-      .select('results_window_days')
-      .eq('group_id', group.id)
-      .maybeSingle() as { data: { results_window_days: number | null } | null }
+    const { data: windowRows } = await supabase
+      .rpc('get_results_window_days', { p_group_ids: [group.id] }) as { data: { results_window_days: number | null }[] | null }
+    const settingsRow = windowRows?.[0] ?? null
     resultsWindowDays = settingsRow?.results_window_days ?? 7
 
     const { data: reportRows } = await supabase

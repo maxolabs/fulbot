@@ -165,9 +165,7 @@ export default async function GroupsPage() {
 
     // The reporting window is a per-group setting (results_window_days, 00018).
     const { data: windowRows } = await supabase
-      .from('notification_settings')
-      .select('group_id, results_window_days')
-      .in('group_id', groupIds) as { data: { group_id: string; results_window_days: number | null }[] | null }
+      .rpc('get_results_window_days', { p_group_ids: groupIds }) as { data: { group_id: string; results_window_days: number | null }[] | null }
     const windowDaysByGroup = new Map<string, number>()
     for (const row of windowRows || []) windowDaysByGroup.set(row.group_id, row.results_window_days ?? 7)
     const windowDaysFor = (groupId: string) => windowDaysByGroup.get(groupId) ?? 7

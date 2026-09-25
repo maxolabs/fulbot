@@ -300,11 +300,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
   // and has not reported. Reporting also counts as "+1 compromiso".
   let reportNudge: { id: string; date_time: string } | null = null
   if (finished.length > 0) {
-    const { data: settingsRow } = await supabase
-      .from('notification_settings')
-      .select('results_window_days')
-      .eq('group_id', group.id)
-      .maybeSingle() as { data: { results_window_days: number | null } | null }
+    const { data: windowRows } = await supabase
+      .rpc('get_results_window_days', { p_group_ids: [group.id] }) as { data: { results_window_days: number | null }[] | null }
+    const settingsRow = windowRows?.[0] ?? null
     const windowMs = (settingsRow?.results_window_days ?? 7) * 24 * 60 * 60 * 1000
     const now = new Date().getTime()
     type NudgeCandidate = { id: string; date_time: string; result_status: string; finished_at: string | null; duration_minutes: number | null }
