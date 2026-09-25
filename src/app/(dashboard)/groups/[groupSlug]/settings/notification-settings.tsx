@@ -10,6 +10,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 import { FormNotice, Toggle } from '@/components/form-controls'
+import { checkWebhookUrl, type WebhookUrlProblem } from '@/lib/notifications/webhook-url'
+
+const WEBHOOK_PROBLEM_KEY: Record<WebhookUrlProblem, string> = {
+  invalid: 'ui.notify.webhookInvalid',
+  https: 'ui.notify.webhookHttps',
+  credentials: 'ui.notify.webhookCredentials',
+  host: 'ui.notify.webhookHost',
+}
 
 interface NotificationSettingsProps {
   groupId: string
@@ -40,14 +48,30 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
   const supabase = createClient()
 
   const [settings, setSettings] = useState(initialSettings)
+  const [reminderText, setReminderText] = useState(String(initialSettings.reminder_hours_before))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   const handleSave = async () => {
-    setSaving(true)
     setError(null)
     setSuccess(false)
+
+    // Validate before writing: a bad number used to become 0 and silently
+    // switch reminders off, and the webhook URL is fetched by the server.
+    const hours = settings.reminder_hours_before
+    if (!Number.isInteger(hours) || hours < 0 || hours > 48) {
+      setError(t('ui.notify.reminderInvalid'))
+      return
+    }
+    const webhookUrl = settings.whatsapp_webhook_url?.trim() || null
+    const webhookProblem = webhookUrl ? checkWebhookUrl(webhookUrl) : null
+    if (webhookProblem) {
+      setError(t(WEBHOOK_PROBLEM_KEY[webhookProblem]))
+      return
+    }
+
+    setSaving(true)
 
     try {
       const data = {
@@ -56,7 +80,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         reminder_hours_before: settings.reminder_hours_before,
         notify_on_waitlist_promotion: settings.notify_on_waitlist_promotion,
         notify_on_teams_created: settings.notify_on_teams_created,
-        whatsapp_webhook_url: settings.whatsapp_webhook_url || null,
+        whatsapp_webhook_url: webhookUrl,
         default_duration_minutes: settings.default_duration_minutes,
         default_results_request_delay_minutes: settings.default_results_request_delay_minutes,
         results_reminder_hours: settings.results_reminder_hours,
@@ -136,6 +160,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <p className="text-sm text-muted-foreground">
               Horas antes del partido para enviar recordatorio
             </p>
+            <p className="text-xs text-muted-foreground">{t('ui.notify.reminderHint')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -143,13 +168,17 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             type="number"
             min={0}
             max={48}
-            value={settings.reminder_hours_before}
-            onChange={(e) =>
+            step={1}
+            value={reminderText}
+            onChange={(e) => {
+              setReminderText(e.target.value)
               setSettings((prev) => ({
                 ...prev,
-                reminder_hours_before: parseInt(e.target.value) || 0,
+                // NaN / out of range is kept as typed and rejected on save.
+                reminder_hours_before: e.target.value.trim() === '' ? NaN : Number(e.target.value),
               }))
-            }
+            }}
+            aria-invalid={!Number.isInteger(settings.reminder_hours_before) || settings.reminder_hours_before < 0 || settings.reminder_hours_before > 48}
             className="w-20 text-center"
           />
           <span className="text-sm text-muted-foreground">horas</span>
