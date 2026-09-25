@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, LogOut } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
 
 interface DangerZoneProps {
@@ -20,6 +21,7 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleDeleteGroup = async () => {
     if (deleteConfirmText !== groupName) {
@@ -28,18 +30,26 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
     }
 
     setLoading(true)
+    setError(null)
 
     try {
-      // Delete the group (CASCADE will handle related records)
-      const { error } = await supabase.from('groups').delete().eq('id', groupId)
+      // Delete the group (CASCADE will handle related records). RLS filters the
+      // row out for non-admins, which deletes nothing without an error, so ask
+      // for the deleted row back and treat an empty result as a failure.
+      const { data, error } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', groupId)
+        .select('id')
 
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('Group not deleted')
 
       router.push('/groups')
       router.refresh()
     } catch (err) {
       console.error('Error deleting group:', err)
-      alert('Error al eliminar el grupo')
+      setError('Error al eliminar el grupo')
     } finally {
       setLoading(false)
     }
@@ -65,6 +75,7 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
         </div>
       ) : (
         <div className="space-y-4 rounded-md border border-destructive p-4">
+          {error && <FormNotice kind="error">{error}</FormNotice>}
           <p className="text-sm">
             Esta acción <strong>no se puede deshacer</strong>. Se eliminarán todos los
             partidos, inscripciones, equipos y estadísticas del grupo.
