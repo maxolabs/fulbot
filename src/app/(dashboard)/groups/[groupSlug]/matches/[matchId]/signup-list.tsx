@@ -82,14 +82,12 @@ export function SignupList({
   const [error, setError] = useState<string | null>(null)
   // No-show toggle waiting for confirmation (same Sheet pattern as finishing the match).
   const [pendingToggle, setPendingToggle] = useState<{ id: string; status: string; name: string } | null>(null)
+  // Signup waiting for the removal confirmation (same Sheet pattern).
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null)
 
   const canToggleNoShow = isAdminOrCaptain && matchStatus === 'finished'
 
   const handleRemove = async (signupId: string, displayName: string) => {
-    if (!confirm(`¿Seguro que querés sacar a ${displayName} del partido?`)) {
-      return
-    }
-
     setRemovingId(signupId)
     setError(null)
 
@@ -106,6 +104,7 @@ export function SignupList({
       console.error('Error removing signup:', err)
       setError(t('ui.postMatch.removeError', { name: displayName }))
     } finally {
+      setPendingRemoval(null)
       setRemovingId(null)
     }
   }
@@ -217,7 +216,7 @@ export function SignupList({
                       <button
                         type="button"
                         className={cn(iconButtonClassName, 'hover:text-destructive')}
-                        onClick={() => handleRemove(signup.id, displayName)}
+                        onClick={() => setPendingRemoval({ id: signup.id, name: displayName })}
                         disabled={removingId === signup.id}
                         aria-label={t('ui.matchScreens.match.removeFromMatch')}
                         title={t('ui.matchScreens.match.removeFromMatch')}
@@ -250,6 +249,27 @@ export function SignupList({
               {t(pendingIsNoShow ? 'ui.matchScreens.match.markPresent' : 'ui.matchScreens.match.markNoShow')}
             </Button>
             <Button variant="outline" disabled={togglingId !== null} onClick={() => setPendingToggle(null)}>
+              {t('common.cancel')}
+            </Button>
+          </div>
+        </Sheet>
+      )}
+      {isAdminOrCaptain && (
+        <Sheet
+          open={pendingRemoval !== null}
+          onOpenChange={(open) => { if (!open && removingId === null) setPendingRemoval(null) }}
+          title={pendingRemoval ? t('ui.postMatch.removeConfirmTitle', { name: pendingRemoval.name }) : ''}
+        >
+          <div className="flex flex-wrap gap-3 pt-4">
+            <Button
+              variant="destructive"
+              disabled={removingId !== null}
+              onClick={() => pendingRemoval && handleRemove(pendingRemoval.id, pendingRemoval.name)}
+            >
+              {removingId !== null && <Spinner size="sm" />}
+              {t('ui.matchScreens.match.removeFromMatch')}
+            </Button>
+            <Button variant="outline" disabled={removingId !== null} onClick={() => setPendingRemoval(null)}>
               {t('common.cancel')}
             </Button>
           </div>

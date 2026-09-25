@@ -46,6 +46,10 @@ export function MatchAdminActions({
   const t = useT()
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Destructive action waiting for its inline confirmation. This content lives
+  // inside a Popover / Sheet, so the confirm step stays inline instead of
+  // opening another dialog on top.
+  const [pendingConfirm, setPendingConfirm] = useState<'cancel' | 'delete' | null>(null)
 
   const updateStatus = async (newStatus: MatchStatus) => {
     setLoading(newStatus)
@@ -69,10 +73,6 @@ export function MatchAdminActions({
   }
 
   const handleDelete = async () => {
-    if (!confirm('¿Estás seguro de eliminar este partido? Esta acción no se puede deshacer.')) {
-      return
-    }
-
     setLoading('delete')
     setError(null)
 
@@ -90,6 +90,7 @@ export function MatchAdminActions({
       setError(t('ui.lifecycle.deleteError'))
     } finally {
       setLoading(null)
+      setPendingConfirm(null)
     }
   }
 
@@ -110,7 +111,7 @@ export function MatchAdminActions({
       {!secondaryOnly && !hasTeams &&
         (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
           <p className="text-xs text-muted-foreground text-pretty">
-            Sin equipos no se puede cerrar el partido: armá los equipos primero.
+            {t('ui.adminActions.noTeamsHint')}
           </p>
         )}
 
@@ -119,7 +120,7 @@ export function MatchAdminActions({
         <Button asChild variant="outline" className="w-full justify-start">
           <Link href={`/groups/${groupSlug}/matches/${matchId}/edit`} onClick={onNavigate}>
             <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            Editar partido
+            {t('ui.adminActions.edit')}
           </Link>
         </Button>
       )}
@@ -137,7 +138,7 @@ export function MatchAdminActions({
           ) : (
             <Play className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           )}
-          Abrir inscripciones
+          {t('ui.workflow.open')}
         </Button>
       )}
 
@@ -154,7 +155,7 @@ export function MatchAdminActions({
           ) : (
             <Pause className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           )}
-          Cerrar inscripciones
+          {t('ui.workflow.close')}
         </Button>
       )}
 
@@ -171,7 +172,7 @@ export function MatchAdminActions({
           ) : (
             <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           )}
-          Reabrir inscripciones
+          {t('ui.workflow.reopen')}
         </Button>
       )}
 
@@ -209,42 +210,63 @@ export function MatchAdminActions({
           ) : (
             <CheckCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           )}
-          Marcar como finalizado
+          {t('ui.adminActions.markFinished')}
         </Button>
       )}
 
       {/* Cancel match */}
-      {hasActions && currentStatus !== 'cancelled' && (
+      {hasActions && currentStatus !== 'cancelled' && pendingConfirm !== 'cancel' && (
         <Button
           variant="outline"
           className="w-full justify-start text-destructive hover:text-destructive"
-          onClick={() => { if (window.confirm(t('ui.workflow.cancelConfirm'))) void updateStatus('cancelled') }}
+          onClick={() => setPendingConfirm('cancel')}
           disabled={loading !== null}
         >
-          {loading === 'cancelled' ? (
-            <Spinner size="sm" />
-          ) : (
-            <XCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          )}
-          Cancelar partido
+          <XCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {t('ui.adminActions.cancel')}
         </Button>
       )}
 
       {/* Delete match */}
-      {canDelete && (currentStatus === 'draft' || currentStatus === 'cancelled') && (
+      {canDelete && (currentStatus === 'draft' || currentStatus === 'cancelled') && pendingConfirm !== 'delete' && (
         <Button
           variant="ghost"
           className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={handleDelete}
+          onClick={() => setPendingConfirm('delete')}
           disabled={loading !== null}
         >
-          {loading === 'delete' ? (
-            <Spinner size="sm" />
-          ) : (
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          )}
-          Eliminar partido
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {t('ui.adminActions.delete')}
         </Button>
+      )}
+
+      {pendingConfirm && (
+        <div className="space-y-3 rounded-md border border-destructive p-3">
+          <p className="text-sm text-pretty">
+            {t(pendingConfirm === 'cancel' ? 'ui.workflow.cancelConfirm' : 'ui.adminActions.deleteConfirm')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={loading !== null}
+              onClick={async () => {
+                if (pendingConfirm === 'delete') {
+                  await handleDelete()
+                } else {
+                  await updateStatus('cancelled')
+                  setPendingConfirm(null)
+                }
+              }}
+            >
+              {(loading === 'cancelled' || loading === 'delete') && <Spinner size="sm" />}
+              {t(pendingConfirm === 'cancel' ? 'ui.adminActions.confirmCancel' : 'ui.adminActions.confirmDelete')}
+            </Button>
+            <Button variant="outline" size="sm" disabled={loading !== null} onClick={() => setPendingConfirm(null)}>
+              {t('common.back')}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )
