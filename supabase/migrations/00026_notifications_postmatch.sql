@@ -23,7 +23,8 @@
 --   * No-show toggled after the match finished recomputes the player's counters
 --     and the match badges (E#6).
 --   * The report/rating window runs from finished_at (fallback: start + duration),
---     not from the start time (E#10).
+--     not from the start time (E#10). recompute_member_score's participation
+--     window and pending results_window_close jobs use the same anchor.
 --   * emit_notification accepts direct database sessions (no JWT claims) again,
 --     so the seed and SQL jobs can insert signup_open matches.
 
@@ -446,6 +447,260 @@ BEGIN
     -- cancelled / draft / locked: nothing to schedule.
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 00021 body; a match's participation window closes at the same moment
+-- match_report_window_open does (finished_at + window), not start + window.
+CREATE OR REPLACE FUNCTION recompute_member_score(p_group_id UUID, p_player_id UUID)
+RETURNS void AS $$
+DECLARE
+    v_settings JSONB;
+    v_membership public.group_memberships;
+    v_group_name TEXT;
+    v_window INTEGER;
+    v_min INTEGER;
+    v_enabled BOOLEAN;
+    v_threshold NUMERIC;
+    v_match_ids UUID[];
+    v_cancel_ids UUID[];
+    v_oldest TIMESTAMPTZ;
+    v_window_days INTEGER;
+    v_played INTEGER;
+    v_no_shows INTEGER;
+    v_early INTEGER;
+    v_late INTEGER;
+    v_late_arrivals INTEGER;
+    v_wrong_jersey INTEGER;
+    v_unpaid INTEGER;
+    v_flagged INTEGER;
+    v_eligible INTEGER;
+    v_participated INTEGER;
+    v_reported INTEGER;
+    v_rated INTEGER;
+    v_voted INTEGER;
+    v_newcomers_eligible INTEGER;
+    v_newcomers_rated INTEGER;
+    v_adj_points INTEGER;
+    v_raw_points INTEGER;
+    v_r_asistencia NUMERIC;
+    v_r_aviso NUMERIC;
+    v_r_puntualidad NUMERIC;
+    v_r_reglas NUMERIC;
+    v_r_participacion NUMERIC;
+    v_overall NUMERIC;
+    v_score DECIMAL(3,2);
+    v_is_new BOOLEAN;
+    v_breakdown JSONB;
+    v_prev NUMERIC;
+    v_next NUMERIC;
+BEGIN
+    SELECT * INTO v_membership
+    FROM public.group_memberships
+    WHERE group_id = p_group_id AND player_id = p_player_id
+    FOR UPDATE;
+    IF v_membership IS NULL THEN
+        RETURN;
+    END IF;
+
+    v_settings := member_scoring_settings(p_group_id);
+    v_window := GREATEST(1, COALESCE((v_settings->>'window_matches')::integer, 10));
+    v_min := GREATEST(0, COALESCE((v_settings->>'min_matches_for_score')::integer, 3));
+    v_enabled := COALESCE((v_settings->>'enabled')::boolean, false);
+    v_threshold := COALESCE((v_settings->'priority'->>'threshold')::numeric, 3.0);
+
+    SELECT COALESCE(ns.results_window_days, 7) INTO v_window_days
+    FROM public.notification_settings ns WHERE ns.group_id = p_group_id;
+    v_window_days := COALESCE(v_window_days, 7);
+
+    SELECT array_agg(w.id), MIN(w.date_time)
+    INTO v_match_ids, v_oldest
+    FROM (
+        SELECT m.id, m.date_time
+        FROM public.matches m
+        WHERE m.group_id = p_group_id AND m.status = 'finished'
+        ORDER BY m.date_time DESC
+        LIMIT v_window
+    ) w;
+    v_match_ids := COALESCE(v_match_ids, ARRAY[]::UUID[]);
+
+    -- Cancels also count on every later, not-cancelled match (upcoming ones included).
+    SELECT COALESCE(array_agg(m.id), ARRAY[]::UUID[]) INTO v_cancel_ids
+    FROM public.matches m
+    WHERE m.group_id = p_group_id AND m.status <> 'cancelled'
+    AND (v_oldest IS NULL OR m.date_time > v_oldest);
+
+    -- Attendance, cancels, conduct.
+    SELECT
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'attended'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'no_show'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'early_cancel'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'late_cancel'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'arrived_late'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'wrong_jersey'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'unpaid' AND NOT EXISTS (
+            SELECT 1 FROM public.member_events p
+            WHERE p.group_id = e.group_id AND p.player_id = e.player_id
+            AND p.match_id = e.match_id AND p.type = 'paid'
+        )),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'wrong_jersey' OR (e.type = 'unpaid' AND NOT EXISTS (
+            SELECT 1 FROM public.member_events p
+            WHERE p.group_id = e.group_id AND p.player_id = e.player_id
+            AND p.match_id = e.match_id AND p.type = 'paid'
+        ))),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'reported_result'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'rated_teammates'),
+        COUNT(DISTINCT e.match_id) FILTER (WHERE e.type = 'voted_mvp'),
+        COALESCE(SUM(e.points), 0)
+    INTO v_played, v_no_shows, v_early, v_late, v_late_arrivals, v_wrong_jersey, v_unpaid, v_flagged,
+         v_reported, v_rated, v_voted, v_raw_points
+    FROM public.member_events e
+    WHERE e.group_id = p_group_id AND e.player_id = p_player_id
+    AND (e.match_id = ANY(v_match_ids)
+         OR (e.type IN ('early_cancel', 'late_cancel') AND e.match_id = ANY(v_cancel_ids)));
+
+    -- Participación over played matches (§3.1).
+    SELECT
+        COUNT(*) FILTER (WHERE x.closed OR x.participated),
+        COUNT(*) FILTER (WHERE x.participated)
+    INTO v_eligible, v_participated
+    FROM (
+        SELECT m.id,
+               (COALESCE(m.finished_at, m.date_time + (m.duration_minutes || ' minutes')::interval)
+                    + (v_window_days || ' days')::interval) < now() AS closed,
+               EXISTS (
+                   SELECT 1 FROM public.member_events p
+                   WHERE p.group_id = p_group_id AND p.player_id = p_player_id AND p.match_id = m.id
+                   AND p.type IN ('reported_result', 'rated_teammates', 'voted_mvp')
+               ) AS participated
+        FROM public.matches m
+        WHERE m.id = ANY(v_match_ids)
+        AND EXISTS (
+            SELECT 1 FROM public.member_events a
+            WHERE a.group_id = p_group_id AND a.player_id = p_player_id AND a.match_id = m.id
+            AND a.type = 'attended'
+        )
+    ) x;
+
+    -- Newcomer opportunities inside the window span. Same rule as matches (§3.1,
+    -- §7): an opportunity enters the denominator once the member rated/skipped the
+    -- newcomer or once the 14-day deadline passed, never before.
+    IF v_oldest IS NOT NULL THEN
+        SELECT
+            COUNT(*) FILTER (WHERE x.rated OR x.expired),
+            COUNT(*) FILTER (WHERE x.rated)
+        INTO v_newcomers_eligible, v_newcomers_rated
+        FROM (
+            SELECT
+                EXISTS (
+                    SELECT 1 FROM public.peer_ratings pr
+                    WHERE pr.group_id = p_group_id
+                    AND pr.voter_player_id = p_player_id
+                    AND pr.rated_player_id::text = n.payload->>'player_id'
+                    AND pr.created_at >= n.created_at
+                    AND pr.created_at <= n.created_at + interval '14 days'
+                ) AS rated,
+                (n.created_at + interval '14 days' < now()) AS expired
+            FROM public.notifications n
+            WHERE n.group_id = p_group_id
+            AND n.type = 'rate_new_member'
+            AND n.created_at >= v_oldest AND n.created_at <= now()
+            AND n.payload->>'player_id' IS DISTINCT FROM p_player_id::text
+        ) x;
+    ELSE
+        v_newcomers_eligible := 0;
+        v_newcomers_rated := 0;
+    END IF;
+
+    -- Admin adjustments newer than the window's oldest match.
+    SELECT COALESCE(SUM(e.points), 0) INTO v_adj_points
+    FROM public.member_events e
+    WHERE e.group_id = p_group_id AND e.player_id = p_player_id
+    AND e.type = 'admin_adjustment'
+    AND (v_oldest IS NULL OR e.created_at >= v_oldest);
+    v_raw_points := v_raw_points + v_adj_points;
+
+    v_r_asistencia := CASE WHEN v_played + v_no_shows > 0 THEN v_played::numeric / (v_played + v_no_shows) ELSE 1 END;
+    v_r_aviso := CASE WHEN v_played + v_early + v_late > 0
+        THEN (v_played + v_early)::numeric / (v_played + v_early + v_late) ELSE 1 END;
+    v_r_puntualidad := CASE WHEN v_played > 0 THEN GREATEST(0, v_played - v_late_arrivals)::numeric / v_played ELSE 1 END;
+    v_r_reglas := CASE WHEN v_played > 0 THEN GREATEST(0, v_played - v_flagged)::numeric / v_played ELSE 1 END;
+    v_r_participacion := CASE WHEN v_eligible + v_newcomers_eligible > 0
+        THEN (v_participated + v_newcomers_rated)::numeric / (v_eligible + v_newcomers_eligible) ELSE 1 END;
+
+    v_overall := 1 + 4 * (
+        COALESCE((v_settings->'dimensions'->>'asistencia')::numeric, 0.40) * v_r_asistencia
+        + COALESCE((v_settings->'dimensions'->>'aviso')::numeric, 0.20) * v_r_aviso
+        + COALESCE((v_settings->'dimensions'->>'puntualidad')::numeric, 0.15) * v_r_puntualidad
+        + COALESCE((v_settings->'dimensions'->>'reglas')::numeric, 0.10) * v_r_reglas
+        + COALESCE((v_settings->'dimensions'->>'participacion')::numeric, 0.15) * v_r_participacion
+    );
+    v_overall := v_overall + v_adj_points::numeric / 20;
+    v_overall := GREATEST(1, LEAST(5, v_overall));
+
+    v_is_new := v_played < v_min;
+    v_score := CASE WHEN v_is_new THEN NULL ELSE ROUND(v_overall, 2)::DECIMAL(3,2) END;
+
+    v_breakdown := jsonb_build_object(
+        'window_matches', v_window,
+        'played', v_played,
+        'is_new', v_is_new,
+        'asistencia', jsonb_build_object('ratio', ROUND(v_r_asistencia, 4), 'played', v_played, 'no_shows', v_no_shows),
+        'aviso', jsonb_build_object('ratio', ROUND(v_r_aviso, 4), 'played', v_played, 'early', v_early, 'late', v_late),
+        'puntualidad', jsonb_build_object('ratio', ROUND(v_r_puntualidad, 4), 'late_arrivals', v_late_arrivals),
+        'reglas', jsonb_build_object('ratio', ROUND(v_r_reglas, 4), 'wrong_jersey', v_wrong_jersey, 'unpaid', v_unpaid),
+        'participacion', jsonb_build_object(
+            'ratio', ROUND(v_r_participacion, 4), 'eligible', v_eligible, 'participated', v_participated,
+            'reported', v_reported, 'rated', v_rated, 'voted_mvp', v_voted,
+            'newcomers_eligible', v_newcomers_eligible, 'newcomers_rated', v_newcomers_rated
+        ),
+        'adjustments', ROUND(v_adj_points::numeric / 20, 2),
+        'adjustment_points', v_adj_points,
+        'raw_points', v_raw_points
+    );
+
+    -- Threshold crossing (NULL counts as the threshold on both sides, §3 newcomers).
+    IF v_enabled THEN
+        v_prev := COALESCE(v_membership.member_score, v_threshold);
+        v_next := COALESCE(v_score, v_threshold);
+        IF v_prev >= v_threshold AND v_next < v_threshold THEN
+            SELECT name INTO v_group_name FROM public.groups WHERE id = p_group_id;
+            INSERT INTO public.notifications (group_id, match_id, recipient_player_id, type, payload)
+            VALUES (p_group_id, NULL, p_player_id, 'member_score_dropped', jsonb_build_object(
+                'group_id', p_group_id, 'group_name', v_group_name,
+                'score', v_score, 'previous_score', v_membership.member_score,
+                'threshold', v_threshold, 'breakdown', v_breakdown
+            ));
+        ELSIF v_prev < v_threshold AND v_next >= v_threshold THEN
+            SELECT name INTO v_group_name FROM public.groups WHERE id = p_group_id;
+            INSERT INTO public.notifications (group_id, match_id, recipient_player_id, type, payload)
+            VALUES (p_group_id, NULL, p_player_id, 'member_score_recovered', jsonb_build_object(
+                'group_id', p_group_id, 'group_name', v_group_name,
+                'score', v_score, 'previous_score', v_membership.member_score,
+                'threshold', v_threshold, 'breakdown', v_breakdown
+            ));
+        END IF;
+    END IF;
+
+    UPDATE public.group_memberships
+    SET member_score = v_score,
+        member_breakdown = v_breakdown,
+        member_score_at = now()
+    WHERE id = v_membership.id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- results_window_close jobs scheduled before this migration still run at
+-- date_time + window. Move the pending ones to the new anchor (only that job:
+-- re-running schedule_match_jobs would re-send results_request).
+UPDATE public.scheduled_jobs sj
+SET run_at = COALESCE(m.finished_at, m.date_time + (m.duration_minutes || ' minutes')::interval)
+    + (COALESCE(ns.results_window_days, 7) || ' days')::interval
+FROM public.matches m
+LEFT JOIN public.notification_settings ns ON ns.group_id = m.group_id
+WHERE sj.match_id = m.id
+  AND sj.job_type = 'results_window_close'
+  AND sj.status = 'pending'
+  AND m.status = 'finished'
+  AND m.result_status <> 'locked';
 
 -- ============================================
 -- 8. PRIVILEGES
