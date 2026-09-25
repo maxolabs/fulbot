@@ -1,14 +1,20 @@
 // T5 notifications: drains notification_outbox, sending each pending row over
 // its channel (only 'whatsapp_webhook' exists today) and recording the
-// outcome. Called from GET /api/cron/notifications. See docs/rework-plan.md §2.6.
+// outcome. Called from every scheduler tick (tick.ts: ticker, /api/cron/tick,
+// the daily cron, page loads) and GET /api/cron/notifications. See
+// docs/rework-plan.md §2.6.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderNotificationText } from './templates'
 import { sendWhatsappWebhook } from './channels/whatsapp-webhook'
 import type { NotificationEvent, NotificationType } from './types'
+import type { Database } from '@/types/database'
+import { DEFAULT_TIMEZONE } from '@/lib/utils/datetime'
 
 const MAX_ATTEMPTS = 5
-const BATCH_SIZE = 50
+// Each send may take up to 10s; keep a batch well inside the 10-minute stale
+// claim window of claim_notification_outbox (00026).
+const BATCH_SIZE = 20
 
 export interface DrainOutboxResult {
   processed: number
@@ -16,59 +22,60 @@ export interface DrainOutboxResult {
   failed: number
 }
 
+interface ClaimedOutboxRow {
+  id: string
+  lease_id: string
+  group_id: string
+  type: NotificationType
+  payload: unknown
+  channel: string
+  // Already includes this attempt: the claim counts it.
+  attempts: number
+  webhook_url: string | null
+  timezone: string | null
+}
+
+// Rows are claimed atomically (FOR UPDATE SKIP LOCKED, status 'sending'), so
+// the ticker, the daily cron and page-load ticks can drain at the same time
+// without sending a row twice. Every write back is fenced by lease_id: a row
+// whose claim went stale and was re-claimed elsewhere is left alone.
 export async function drainOutbox(): Promise<DrainOutboxResult> {
   const supabase = createAdminClient()
 
-  const { data: rows, error } = await supabase
-    .from('notification_outbox')
-    .select('id, group_id, type, payload, channel, attempts')
-    .eq('status', 'pending')
-    .lt('attempts', MAX_ATTEMPTS)
-    .order('created_at', { ascending: true })
-    .limit(BATCH_SIZE)
+  const { data, error } = await supabase.rpc('claim_notification_outbox', { p_limit: BATCH_SIZE })
 
   if (error) {
     throw new Error(`No se pudo leer la cola de notificaciones: ${error.message}`)
   }
 
-  if (!rows || rows.length === 0) {
+  const rows = (data ?? []) as unknown as ClaimedOutboxRow[]
+  if (rows.length === 0) {
     return { processed: 0, sent: 0, failed: 0 }
   }
 
   let sent = 0
   let failed = 0
 
+  const settle = async (row: ClaimedOutboxRow, update: Database['public']['Tables']['notification_outbox']['Update']) => {
+    await supabase
+      .from('notification_outbox')
+      .update({ ...update, claimed_at: null, lease_id: null })
+      .eq('id', row.id)
+      .eq('lease_id', row.lease_id)
+  }
+
   for (const row of rows) {
-    if (row.channel !== 'whatsapp_webhook') {
-      // No other channel implemented yet -- leave it pending rather than
-      // silently marking it failed.
-      continue
-    }
-
-    const { data: settings } = await supabase
-      .from('notification_settings')
-      .select('whatsapp_webhook_url')
-      .eq('group_id', row.group_id)
-      .single()
-
-    const webhookUrl = settings?.whatsapp_webhook_url
+    const webhookUrl = row.webhook_url
 
     if (!webhookUrl || webhookUrl.trim() === '') {
-      await supabase
-        .from('notification_outbox')
-        .update({
-          status: 'failed',
-          attempts: row.attempts + 1,
-          last_error: 'El grupo no tiene whatsapp_webhook_url configurada',
-        })
-        .eq('id', row.id)
+      await settle(row, { status: 'failed', last_error: 'El grupo no tiene whatsapp_webhook_url configurada' })
       failed++
       continue
     }
 
     try {
-      const event = { type: row.type as NotificationType, payload: row.payload } as unknown as NotificationEvent
-      const text = renderNotificationText(event)
+      const event = { type: row.type, payload: row.payload } as unknown as NotificationEvent
+      const text = renderNotificationText(event, row.timezone || DEFAULT_TIMEZONE)
 
       await sendWhatsappWebhook(webhookUrl, {
         text,
@@ -76,22 +83,14 @@ export async function drainOutbox(): Promise<DrainOutboxResult> {
         payload: row.payload,
       })
 
-      await supabase
-        .from('notification_outbox')
-        .update({ status: 'sent', sent_at: new Date().toISOString(), attempts: row.attempts + 1 })
-        .eq('id', row.id)
+      await settle(row, { status: 'sent', sent_at: new Date().toISOString(), last_error: null })
       sent++
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido'
-      const attempts = row.attempts + 1
-      await supabase
-        .from('notification_outbox')
-        .update({
-          status: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
-          attempts,
-          last_error: message,
-        })
-        .eq('id', row.id)
+      await settle(row, {
+        status: row.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
+        last_error: message,
+      })
       failed++
     }
   }
