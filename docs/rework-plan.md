@@ -127,7 +127,15 @@ rules manager, the generate route, and the generator read/write only these shape
 - Rotation: call `get_recent_match_history(group_id, 5)` and pass teammate-pair counts
   so the model rotates combinations.
 - `matches.ai_input_snapshot` stores `{ input, output, provider, model, generatedAt }`
-  with the full payload sent and received.
+  with the full payload sent and received. `input` carries the players summary,
+  rules, teammate-pair history, the previous lineup (on "Regenerar"), the output
+  language and the last prompt text (null when the fallback ran without calling
+  the model). A manual publish sets the snapshot to NULL on purpose: the
+  analysis describes the generated lineup, not a hand-edited one.
+- Goalkeeper minimum (Sep 24): "GK-willing" means `goalkeeper_willingness >= 1`.
+  The minimum (min_goalkeepers value, default 1 per team) is a hard constraint
+  only when at least 2 × that many players are GK-willing; otherwise it is a
+  soft preference and a warning says so. Guests default to not GK-willing.
 - Team generation sets match status to `teams_created` (a direct update in the route
   is fine in wave 1; T1's `admin_set_match_status` lands in the same wave).
 - Manual editing (`draggable-teams.tsx`): must support guests (keep

@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { generateFallbackTeams } from './fallback-balancer'
 import { POSITIONS } from '@/lib/teams/manual'
 import { tagLabel, type PlayerSkills } from '@/lib/ratings'
+import { getTranslation, type Language } from '@/i18n/core'
+import { goalkeeperPolicy, isDefenseCapable, isGoalkeeperWilling, sameSplit, type GoalkeeperPolicy } from './constraints'
 
 export interface PlayerInput {
   id: string
@@ -28,7 +30,9 @@ export interface PlayerInput {
 
 export const MEMBER_SCORE_NEUTRAL = 3.5
 
-// Sensible defaults for a guest player we don't have much history on.
+// Sensible defaults for a guest player we don't have much history on. Guests
+// are not GK-willing by default: we know nothing about them, and counting them
+// made a guest the "natural" keeper and hid the real goalkeeper shortage.
 export function guestPlayerDefaults(guest: {
   id: string
   displayName: string
@@ -49,7 +53,7 @@ export function guestPlayerDefaults(guest: {
     skills: null,
     tags: [],
     footedness: 'right',
-    goalkeeperWillingness: 1,
+    goalkeeperWillingness: 0,
     fitnessStatus: 'ok',
     memberScore: MEMBER_SCORE_NEUTRAL,
     matchesPlayed: 0,
@@ -81,9 +85,33 @@ export interface GeneratedTeams {
 
 export type Provider = 'openai' | 'fallback'
 
+export interface PairCountSummary {
+  names: [string, string]
+  count: number
+}
+
 export interface GenerateTeamsResult extends GeneratedTeams {
   provider: Provider
   model?: string
+  /** Last prompt sent to the model (null when none was), for ai_input_snapshot. */
+  prompt: string | null
+  /** Teammate-pair counts among this match's players, as given to the model. */
+  pairHistory: PairCountSummary[]
+}
+
+// The lineup currently published for the match, as player/guest ids per team.
+// Passed on "Regenerar" so the new proposal differs from it.
+export interface PreviousLineup {
+  dark: string[]
+  light: string[]
+}
+
+export interface GenerateOptions {
+  /** Language of reasoning, warnings and reasons (the requesting user's). */
+  language?: Language
+  previous?: PreviousLineup | null
+  /** Variation seed for the fallback balancer; omit for the plain deterministic split. */
+  seed?: number
 }
 
 // One row of get_recent_match_history(group_id, limit): who played together recently,
@@ -96,12 +124,7 @@ export interface MatchHistoryEntry {
   lightTeamPlayers: { player_id: string; name: string }[] | null
 }
 
-interface PairCount {
-  names: [string, string]
-  count: number
-}
-
-const DEFENDER_POSITIONS = ['CB', 'LB', 'RB']
+type PairCount = PairCountSummary
 
 function computeTeammatePairCounts(history: MatchHistoryEntry[]): Map<string, PairCount> {
   const counts = new Map<string, PairCount>()
@@ -140,15 +163,38 @@ const GeneratedTeamsSchema = z.object({
   dark: z.array(TeamAssignmentSchema),
   light: z.array(TeamAssignmentSchema),
   reasoning: z.string().default(''),
-  balanceScore: z.number().min(0).max(1).default(0.5),
+  // Documented range is 0..1; a model answering 1.2 or -0.1 gets clamped
+  // instead of burning an attempt over a cosmetic number.
+  balanceScore: z.number().default(0.5).transform((n) => Math.min(1, Math.max(0, n))),
   warnings: z.array(z.string()).default([]),
 })
+
+// Teammate-pair counts where both players are in this match, most repeated first.
+function relevantPairCounts(players: PlayerInput[], pairCounts: Map<string, PairCount>): PairCount[] {
+  const currentIds = new Set(players.map((p) => p.id))
+  return Array.from(pairCounts.entries())
+    .filter(([key]) => {
+      const [a, b] = key.split('|')
+      return currentIds.has(a) && currentIds.has(b)
+    })
+    .map(([, v]) => v)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15)
+}
+
+const OUTPUT_LANGUAGE: Record<Language, string> = {
+  es: 'Rioplatense Spanish (Argentina), using "vos" (e.g. "tenés", "jugá"), never "tú"',
+  en: 'English',
+}
 
 function buildPrompt(
   players: PlayerInput[],
   rules: RuleInput[],
   teamSize: number,
-  pairCounts: Map<string, PairCount>,
+  relevantPairs: PairCount[],
+  gk: GoalkeeperPolicy,
+  language: Language,
+  previous: PreviousLineup | null,
   violations?: string[]
 ): string {
   const playerDescriptions = players.map((p) => {
@@ -178,30 +224,35 @@ function buildPrompt(
           const names = r.playerIds.map((id) => players.find((p) => p.id === id)?.displayName || id)
           return `- FORCE ${names.join(' and ')} to be on the same team (hard constraint)`
         }
-        if (r.type === 'min_goalkeepers') {
-          return `- Each team must have at least ${r.value ?? 1} player(s) with goalkeeper willingness >= 1 (hard constraint)`
-        }
+        // min_goalkeepers is described once below, as hard or soft (goalkeeperPolicy)
         if (r.type === 'min_defenders') {
-          return `- Each team must have at least ${r.value ?? 1} player(s) capable of playing defense (CB/LB/RB)`
+          return `- Each team must have at least ${r.value ?? 1} player(s) capable of playing defense (CB/LB/RB) (hard constraint)`
         }
         return ''
-      }).filter(Boolean).join('\n')
+      }).filter(Boolean).join('\n') || 'No special rules'
     : 'No special rules'
 
-  // Relevant teammate-pair history (only pairs where both players are in this match)
-  const currentIds = new Set(players.map((p) => p.id))
-  const relevantPairs = Array.from(pairCounts.entries())
-    .filter(([key]) => {
-      const [a, b] = key.split('|')
-      return currentIds.has(a) && currentIds.has(b)
-    })
-    .map(([, v]) => v)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 15)
+  // "GK-willing" = goalkeeper willingness other than "never". The minimum is a
+  // hard constraint only when there are enough of them for both teams.
+  const gkDescription = gk.hard
+    ? `- Each team must have at least ${gk.required} GK-willing player(s), i.e. GK willingness other than "never" (hard constraint)`
+    : `- Goalkeepers: only ${gk.willing} GK-willing player(s) (GK willingness other than "never") in this match, not enough for ${gk.required} per team. This is a SOFT preference, not a hard constraint: put GK-willing players in goal where you can, otherwise the player with the best GK skill.`
 
   const historyDescription = relevantPairs.length > 0
     ? relevantPairs.map((p) => `- ${p.names[0]} and ${p.names[1]} have been teammates ${p.count} time(s) recently`).join('\n')
     : 'No recent match history available'
+
+  const nameOf = (id: string) => players.find((p) => p.id === id)?.displayName
+  const previousBlock = previous
+    ? `
+## Previous Proposal For This Match (the organizer asked for a DIFFERENT one)
+
+- Dark: ${previous.dark.map(nameOf).filter(Boolean).join(', ')}
+- Light: ${previous.light.map(nameOf).filter(Boolean).join(', ')}
+
+Produce a clearly different split: move several players to the other team (just swapping which side a whole team is on does not count), while keeping the hard constraints and a good balance.
+`
+    : ''
 
   const violationsBlock = violations && violations.length > 0
     ? `\n## Your Previous Attempt Had These Problems (FIX THEM)\n\n${violations.map((v) => `- ${v}`).join('\n')}\n`
@@ -216,11 +267,12 @@ ${playerDescriptions}
 ## Rules to Follow (hard constraints marked as such MUST be respected)
 
 ${rulesDescription}
+${gkDescription}
 
 ## Recent Teammate History (rotate combinations - avoid repeating the same pairs when possible, this is a soft preference)
 
 ${historyDescription}
-${violationsBlock}
+${previousBlock}${violationsBlock}
 ## Formation Context
 
 Teams are rendered with a fixed formation per team size; assign positions that fill it:
@@ -235,7 +287,7 @@ This match is ${teamSize}-a-side.
 ## Your Task
 
 Create two balanced teams (Dark and Light) considering:
-1. **Hard constraints first**: never violate avoid_pair/force_pair rules or the goalkeeper minimum
+1. **Hard constraints first**: never violate any rule marked as a hard constraint
 2. **Overall Rating Balance**: The average rating of both teams should be as close as possible
    - Also balance the DEF, ATT and PHY skill averages between the teams; don't stack all the attackers on one side
    - For the goalkeeper slot prefer players with a high GK skill, then GK willingness
@@ -262,6 +314,7 @@ Respond with ONLY a valid JSON object, no markdown, no code fences:
 }
 
 The balanceScore should be between 0 and 1, where 1 means perfectly balanced.
+Write "reasoning", every "warnings" item and every "reason" in ${OUTPUT_LANGUAGE[language]}. Keep player names exactly as given.
 Include ALL ${players.length} players EXACTLY ONCE, split as evenly as possible between the two teams (sizes may differ by at most 1).
 Use standard position abbreviations: GK, CB, LB, RB, CDM, CM, CAM, LM, RM, LW, RW, ST, CF`
 }
@@ -271,7 +324,9 @@ Use standard position abbreviations: GK, CB, LB, RB, CDM, CM, CAM, LM, RM, LW, R
 // - team sizes differ by at most 1
 // - avoid_pair never on the same team
 // - force_pair always on the same team
-// - each team has >= required goalkeeper-willing players when a min_goalkeepers rule exists (default 1)
+// - each team has >= required GK-willing players, only while goalkeeperPolicy()
+//   says the pool allows it (>= 2 GK-willing with the default of 1 per team)
+// - each team has >= required defense-capable players when a min_defenders rule exists
 export function validateHardConstraints(
   players: PlayerInput[],
   rules: RuleInput[],
@@ -337,16 +392,18 @@ export function validateHardConstraints(
     }
   }
 
-  // Goalkeeper minimum: always required (defaults to 1 even without an explicit rule row)
-  const minGkRule = rules.find((r) => r.type === 'min_goalkeepers')
-  const requiredGks = minGkRule?.value ?? 1
-  for (const [teamName, ids] of [['dark', darkIds], ['light', lightIds]] as const) {
-    const gkCount = ids.filter((id) => {
-      const player = players.find((p) => p.id === id)
-      return player && player.goalkeeperWillingness >= 1
-    }).length
-    if (gkCount < requiredGks) {
-      violations.push(`Team ${teamName} has only ${gkCount} goalkeeper-willing player(s), needs at least ${requiredGks}`)
+  // Goalkeeper minimum: hard only when there are enough GK-willing players for
+  // both teams, otherwise a soft preference (see goalkeeperPolicy)
+  const gk = goalkeeperPolicy(players, rules)
+  if (gk.hard) {
+    for (const [teamName, ids] of [['dark', darkIds], ['light', lightIds]] as const) {
+      const gkCount = ids.filter((id) => {
+        const player = players.find((p) => p.id === id)
+        return player && isGoalkeeperWilling(player)
+      }).length
+      if (gkCount < gk.required) {
+        violations.push(`Team ${teamName} has only ${gkCount} GK-willing player(s), needs at least ${gk.required}`)
+      }
     }
   }
 
@@ -357,9 +414,7 @@ export function validateHardConstraints(
     for (const [teamName, ids] of [['dark', darkIds], ['light', lightIds]] as const) {
       const defCount = ids.filter((id) => {
         const player = players.find((p) => p.id === id)
-        if (!player) return false
-        return DEFENDER_POSITIONS.includes(player.mainPosition) ||
-          player.preferredPositions.some((pos) => DEFENDER_POSITIONS.includes(pos))
+        return player ? isDefenseCapable(player) : false
       }).length
       if (defCount < required) {
         violations.push(`Team ${teamName} has only ${defCount} defense-capable player(s), needs at least ${required}`)
@@ -374,25 +429,42 @@ export async function generateTeams(
   players: PlayerInput[],
   rules: RuleInput[] = [],
   teamSize?: number,
-  history: MatchHistoryEntry[] = []
+  history: MatchHistoryEntry[] = [],
+  options: GenerateOptions = {}
 ): Promise<GenerateTeamsResult> {
   const apiKey = process.env.OPENAI_API_KEY
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
   const calculatedTeamSize = teamSize || Math.ceil(players.length / 2)
+  const language = options.language ?? 'es'
+  const previous = options.previous && options.previous.dark.length + options.previous.light.length > 0
+    ? options.previous
+    : null
+  const t = getTranslation(language)
+  const pairHistory = relevantPairCounts(players, computeTeammatePairCounts(history))
+  const gk = goalkeeperPolicy(players, rules)
 
-  if (!apiKey) {
-    return { ...generateFallbackTeams(players, rules, calculatedTeamSize), provider: 'fallback' }
+  // Said once, whichever provider answers: with too few GK-willing players the
+  // keeper minimum was only a preference.
+  const gkWarnings = gk.hard
+    ? []
+    : [gk.willing === 0 ? t('ui.teamsAi.gkNone') : t('ui.teamsAi.gkFew', { n: gk.willing })]
+  const fallback = (prompt: string | null): GenerateTeamsResult => {
+    const result = generateFallbackTeams(players, rules, calculatedTeamSize, { language, previous, seed: options.seed })
+    return { ...result, warnings: [...gkWarnings, ...result.warnings], provider: 'fallback', prompt, pairHistory }
   }
 
+  if (!apiKey) return fallback(null)
+
   const client = new OpenAI({ apiKey })
-  const pairCounts = computeTeammatePairCounts(history)
 
   let lastViolations: string[] = []
+  let lastPrompt: string | null = null
   const maxAttempts = 2
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const prompt = buildPrompt(players, rules, calculatedTeamSize, pairCounts, attempt > 0 ? lastViolations : undefined)
+      const prompt = buildPrompt(players, rules, calculatedTeamSize, pairHistory, gk, language, previous, attempt > 0 ? lastViolations : undefined)
+      lastPrompt = prompt
 
       const response = await client.chat.completions.create({
         model,
@@ -409,9 +481,15 @@ export async function generateTeams(
 
       const parsed = GeneratedTeamsSchema.parse(JSON.parse(textContent))
       const violations = validateHardConstraints(players, rules, parsed)
+      if (previous && sameSplit(previous, {
+        dark: parsed.dark.map((a) => a.playerId),
+        light: parsed.light.map((a) => a.playerId),
+      })) {
+        violations.push('The teams are identical to the previous proposal; the organizer asked for a different split')
+      }
 
       if (violations.length === 0) {
-        return { ...parsed, provider: 'openai', model }
+        return { ...parsed, warnings: [...gkWarnings, ...parsed.warnings], provider: 'openai', model, prompt, pairHistory }
       }
 
       lastViolations = violations
@@ -422,7 +500,7 @@ export async function generateTeams(
   }
 
   console.warn('Falling back to deterministic balancer after exhausting OpenAI attempts. Last violations:', lastViolations)
-  return { ...generateFallbackTeams(players, rules, calculatedTeamSize), provider: 'fallback' }
+  return fallback(lastPrompt)
 }
 
 // Helper to calculate team balance metrics

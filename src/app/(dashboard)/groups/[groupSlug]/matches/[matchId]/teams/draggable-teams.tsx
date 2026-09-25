@@ -153,6 +153,8 @@ export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedP
       const { error } = await createClient().rpc('publish_match_teams', {
         p_match_id: matchId,
         p_assignments: assignmentPayload(draft) as unknown as Json,
+        // Deliberately clears ai_input_snapshot: its analysis, balance and
+        // warnings describe the generated lineup, not a hand-edited one.
         p_snapshot: null,
       })
       if (error) throw error
