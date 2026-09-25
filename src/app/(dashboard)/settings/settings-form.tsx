@@ -87,6 +87,7 @@ export function SettingsForm({
     title: string
     desc: string
   }[] = [
+    { key: 'match_created', icon: Bell, title: t('devicePush.signupTitle'), desc: t('devicePush.signupDescription') },
     {
       key: 'waitlist_promoted',
       icon: Users,

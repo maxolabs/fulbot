@@ -95,9 +95,10 @@ export default async function MatchesListPage({ params }: PageProps) {
 
   const now = new Date()
   const upcoming = (matches || [])
-    .filter(m => new Date(m.date_time) >= now && m.status !== 'cancelled')
+    .filter(m => new Date(m.date_time) >= now && !['cancelled', 'finished'].includes(m.status))
     .sort((a, b) => a.date_time.localeCompare(b.date_time))
-  const past = (matches || []).filter(m => new Date(m.date_time) < now || m.status === 'cancelled')
+  const needsAttention = (matches || []).filter(m => new Date(m.date_time) < now && !['finished', 'cancelled'].includes(m.status))
+  const past = (matches || []).filter(m => m.status === 'finished' || m.status === 'cancelled')
 
   const scoreOf = (m: MatchResult): { dark: number; light: number } | null => {
     const dark = m.teams?.find(tm => tm.name === 'dark')
@@ -143,6 +144,20 @@ export default async function MatchesListPage({ params }: PageProps) {
         </p>
       ) : (
         <>
+          {isAdminOrCaptain && needsAttention.length > 0 && (
+            <section className="space-y-2 rounded-md border border-border bg-card p-4">
+              <Eyebrow as="h2">{t('ui.workflow.attention')}</Eyebrow>
+              <p className="text-sm text-muted-foreground">{t('ui.workflow.attentionBody')}</p>
+              <ul>
+                {needsAttention.map(m => (
+                  <li key={m.id}>
+                    <MatchRow href={`/groups/${groupSlug}/matches/${m.id}`} date={formatRowDate(t, m.date_time, timeZone)} meta={meta(m)} trailing={<MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="space-y-2">
             <Eyebrow as="h2">{t('ui.matchScreens.list.upcoming')}</Eyebrow>
             {upcoming.length === 0 ? (
@@ -170,11 +185,11 @@ export default async function MatchesListPage({ params }: PageProps) {
             )}
           </section>
 
-          {past.length > 0 && (
+          {(past.length > 0 || (!isAdminOrCaptain && needsAttention.length > 0)) && (
             <section className="space-y-2">
               <Eyebrow as="h2">{t('ui.matchScreens.list.past')}</Eyebrow>
               <ul className="[&>li:last-child>a]:border-b-0">
-                {past.map(m => {
+                {(isAdminOrCaptain ? past : [...needsAttention, ...past].sort((a, b) => b.date_time.localeCompare(a.date_time))).map(m => {
                   const score = m.status === 'finished' ? scoreOf(m) : null
                   return (
                     <li key={m.id}>

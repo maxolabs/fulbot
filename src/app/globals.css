@@ -6,6 +6,7 @@
   /* Light palette · "Papel" (default — no .dark class on <html>).
      Values from docs/ui-rework/01-brand.md §1. */
   :root {
+    color-scheme: light;
     --background: 46 35% 93%;
     --foreground: 162 36% 14%;
     --card: 45 50% 97%;
@@ -28,13 +29,14 @@
     --warning-foreground: 0 0% 10%;
     --border: 43 16% 79%;
     --input: 43 16% 79%;
-    --ring: 24 87% 55%;
+    --ring: 24 87% 42%; /* deeper cone: 3.8:1 on paper (WCAG 1.4.11) */
     --radius: 0.25rem;
   }
 
   /* Dark palette · "Pizarra" — applied when <html> carries the .dark class
      (set server-side from the fulbot_theme cookie, see root layout). */
   .dark {
+    color-scheme: dark;
     --background: 162 36% 14%;
     --foreground: 46 35% 93%;
     --card: 159 34% 17%;
@@ -70,6 +72,31 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+  html {
+    scroll-padding-top: 5rem;
+    scroll-padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+  }
+  :where(a, button, input, select, textarea) {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  /* Keep form text readable without triggering iOS's automatic zoom. */
+  @media (max-width: 1023px) {
+    /* The :not()s lift specificity above `.text-sm` utilities. */
+    input:not([type='checkbox']):not([type='radio']),
+    select:not([multiple]):not([hidden]),
+    textarea:not([hidden]):not([data-_]) {
+      font-size: 1rem;
+    }
   }
   /* Chalk dust on the board (01-brand.md §3). Cards sit flat on top of it.
      `.chalk-dust` is the same texture for the PublicFrame, which is always

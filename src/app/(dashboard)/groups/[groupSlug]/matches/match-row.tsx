@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils/cn'
 
 // Match rows (docs/ui-rework/03-screens.md §2, §5; 06-principles.md §3):
 // full-width, solid border-b, the whole row is the link. Date in the display
-// face at 16px, time and location in mono, a status badge or the score on
-// the right. Server-safe: no hooks.
+// face at 16px, readable venue metadata, and status/counts below on phones
+// or to the right on larger screens. Server-safe: no hooks.
 //
 // Lists drop the last border with `<ul className="[&>li:last-child>a]:border-b-0">`.
 
@@ -53,7 +53,7 @@ export interface MatchRowProps {
   href: string
   /** "Lunes 14 sep" */
   date: string
-  /** "20:00 · Cancha Los Pinos" (mono) */
+  /** "20:00 · Cancha Los Pinos" */
   meta?: string
   /** Status badge, score, count… */
   trailing?: React.ReactNode
@@ -65,18 +65,18 @@ export function MatchRow({ href, date, meta, trailing, className }: MatchRowProp
     <Link
       href={href}
       className={cn(
-        'flex min-h-14 w-full items-center gap-3 border-b border-border py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        'group grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border px-2 py-4 text-left transition-colors duration-100 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex',
         className
       )}
     >
       <span className="min-w-0 flex-1 space-y-1">
-        <span className="block truncate font-display text-base font-bold leading-tight">{date}</span>
+        <span className="block font-display text-base font-bold leading-tight">{date}</span>
         {meta && (
-          <span className="block truncate font-mono text-xs tabular-nums text-muted-foreground">{meta}</span>
+          <span className="block break-words text-xs tabular-nums text-muted-foreground">{meta}</span>
         )}
       </span>
-      {trailing !== undefined && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+      {trailing !== undefined && <span className="col-start-1 row-start-2 flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">{trailing}</span>}
+      <ChevronRight className="col-start-2 row-span-2 row-start-1 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" strokeWidth={1.75} aria-hidden="true" />
     </Link>
   )
 }

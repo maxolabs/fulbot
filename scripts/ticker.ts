@@ -78,9 +78,13 @@ async function tickOnce(url: string, secret: string): Promise<void> {
       outbox && 'error' in outbox
         ? `outbox error: ${String(outbox.error)}`
         : `outbox sent=${String(outbox?.sent ?? 0)} failed=${String(outbox?.failed ?? 0)}`
+    const push = body.push as Record<string, unknown> | undefined
+    const pushText = push && 'error' in push
+      ? `push error: ${String(push.error)}`
+      : `push sent=${String(push?.sent ?? 0)} failed=${String(push?.failed ?? 0)} configured=${String(push?.configured ?? false)}`
     console.log(
       `[ticker] ${stamp()} ok in ${elapsed}ms: claimed=${String(body.claimed ?? 0)} ` +
-        `done=${String(body.done ?? 0)} failed=${String(body.failed ?? 0)} ${outboxText}`
+        `done=${String(body.done ?? 0)} failed=${String(body.failed ?? 0)} ${outboxText} ${pushText}`
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

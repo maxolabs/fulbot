@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
+import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { CreateOrJoinButton } from './create-or-join-button'
@@ -228,6 +229,8 @@ export default async function GroupsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <TopBarConfig title={t('groups.title')} />
+      <p className="text-sm text-muted-foreground lg:hidden">{t('ui.polish.groupsIntro')}</p>
       {/* Result report nudge: the one dashed card on this screen */}
       {resultNudge && (
         <Link
@@ -254,6 +257,7 @@ export default async function GroupsPage() {
 
       <PageHeader
         title={t('groups.title')}
+        subtitle={t('ui.polish.groupsIntro')}
         actions={
           <>
             <Button asChild variant="outline">
@@ -284,13 +288,13 @@ export default async function GroupsPage() {
               <li key={group.id}>
                 <Link href={`/groups/${group.slug}`} className={rowClassName}>
                   <span className="min-w-0 flex-1 space-y-1">
-                    <span className="flex items-center gap-2">
+                    <span className="flex flex-wrap items-center gap-2">
                       <span className="truncate font-display text-base font-bold leading-tight">{group.name}</span>
                       <Badge variant={group.role === 'member' ? 'outline' : 'secondary'}>
                         {t(`groups.roles.${group.role}`)}
                       </Badge>
                     </span>
-                    <span className="block truncate font-mono text-xs tabular-nums text-muted-foreground">
+                    <span className="block font-mono text-xs tabular-nums text-muted-foreground">
                       {nextMatch
                         ? t('ui.matchScreens.groups.nextMatchLine', {
                             day: t(`ui.matchScreens.daysShort.${DAY_KEYS[weekdayIndexInTimezone(nextMatch.date_time, groupTimezone)]}`),

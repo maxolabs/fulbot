@@ -214,6 +214,11 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
                   nickname={player.nickname}
                   href={`${basePath}/${player.id}`}
                   language={language}
+                  description={player.fitness_status !== 'ok' ? (
+                    <Badge className="sm:hidden" variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
+                      {player.fitness_status === 'injured' ? t('players.injured') : t('players.limited')}
+                    </Badge>
+                  ) : undefined}
                   trailing={
                     <>
                       {player.role !== 'member' && (
@@ -222,7 +227,7 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
                         </Badge>
                       )}
                       {player.fitness_status !== 'ok' && (
-                        <Badge variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
+                        <Badge className="hidden sm:inline-flex" variant={player.fitness_status === 'injured' ? 'destructive' : 'warning'}>
                           {player.fitness_status === 'injured' ? t('players.injured') : t('players.limited')}
                         </Badge>
                       )}

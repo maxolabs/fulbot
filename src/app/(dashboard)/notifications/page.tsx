@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { getT } from '@/i18n/server'
 import { createClient } from '@/lib/supabase/server'
 import { NotificationList } from './notification-list'
 import type { NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
@@ -17,10 +19,11 @@ export default async function NotificationsPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('notification_prefs')
+    .select('notification_prefs, preferred_language')
     .eq('id', user.id)
-    .single() as { data: { notification_prefs: Record<string, boolean> | null } | null }
+    .single() as { data: { notification_prefs: Record<string, boolean> | null; preferred_language: 'es' | 'en' } | null }
 
+  const t = getT(userData?.preferred_language ?? 'es')
   const prefs = (userData?.notification_prefs ?? {}) as Record<string, boolean>
 
   const { data: playerProfile } = await supabase
@@ -78,7 +81,16 @@ export default async function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <NotificationList items={items} prefs={prefs} currentPlayerId={playerProfile?.id ?? null} />
+      <NotificationList
+        items={items}
+        prefs={prefs}
+        currentPlayerId={playerProfile?.id ?? null}
+        extraActions={
+          <Link href="/settings" className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary lg:min-h-9">
+            {t('devicePush.inboxLink')}
+          </Link>
+        }
+      />
     </div>
   )
 }

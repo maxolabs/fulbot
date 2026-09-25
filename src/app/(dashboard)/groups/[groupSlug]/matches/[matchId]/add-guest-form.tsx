@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Copy, Link2, MessageCircle, Star, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -84,6 +84,7 @@ export function AddGuestForm({
   const router = useRouter()
   const supabase = createClient()
   const [mode, setMode] = useState<Mode>('closed')
+  const uid = useId()
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [name, setName] = useState('')
@@ -204,9 +205,9 @@ export function AddGuestForm({
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="guest-name">Nombre *</Label>
+              <Label htmlFor={`${uid}-name`}>Nombre *</Label>
               <Input
-                id="guest-name"
+                id={`${uid}-name`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Nombre del invitado"
@@ -216,9 +217,9 @@ export function AddGuestForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="guest-notes">Descripción</Label>
+              <Label htmlFor={`${uid}-notes`}>Descripción</Label>
               <Input
-                id="guest-notes"
+                id={`${uid}-notes`}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Ej: amigo de Juan, juega de delantero"
@@ -226,8 +227,8 @@ export function AddGuestForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="guest-rating">Nivel</Label>
-              <div id="guest-rating" role="radiogroup" aria-label="Nivel del invitado" className="flex items-center gap-1">
+              <Label htmlFor={`${uid}-rating`}>Nivel</Label>
+              <div id={`${uid}-rating`} role="radiogroup" aria-label="Nivel del invitado" className="flex items-center gap-1">
                 {RATING_VALUES.map((value) => {
                   const active = value <= rating
                   return (
@@ -251,9 +252,9 @@ export function AddGuestForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="guest-position">Posición</Label>
+              <Label htmlFor={`${uid}-position`}>Posición</Label>
               <select
-                id="guest-position"
+                id={`${uid}-position`}
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
                 disabled={loading}

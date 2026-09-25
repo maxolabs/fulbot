@@ -2,11 +2,12 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, Share2, SlidersHorizontal } from 'lucide-react'
+import { Share2, SlidersHorizontal } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Popover } from '@/components/ui/popover'
 import { Sheet } from '@/components/ui/sheet'
 import { TopBarAction, useTopBar } from '@/components/layout/top-bar'
+import { ShareActions } from '@/components/share-actions'
 import { useT } from '@/i18n/provider'
 
 // "Gestionar" on the match screen (docs/ui-rework/02-shell.md §2, 03-screens.md
@@ -19,11 +20,13 @@ export function MatchTopBar({
   groupName,
   groupHref,
   shareUrl,
+  shareText,
   manageContent,
 }: {
   groupName: string
   groupHref: string
   shareUrl: string
+  shareText?: string
   /** Admin only: what the sheet shows. Members get the share action instead. */
   manageContent?: React.ReactNode
 }) {
@@ -34,7 +37,16 @@ export function MatchTopBar({
   React.useEffect(() => {
     if (!manageContent) return
     const hash = window.location.hash
-    if (hash === '#invitado' || hash === '#gestionar') setOpen(true)
+    if (hash === '#gestionar') setOpen(true)
+    if (hash === '#invitado') {
+      // The form is rendered twice (mobile disclosure, desktop aside).
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        document.getElementById('invitado-lg')?.scrollIntoView()
+      } else {
+        const section = document.getElementById('invitado')
+        if (section instanceof HTMLDetailsElement) section.open = true
+      }
+    }
   }, [manageContent])
 
   const title = React.useMemo(
@@ -56,9 +68,9 @@ export function MatchTopBar({
           <SlidersHorizontal className="h-5 w-5" strokeWidth={1.75} />
         </TopBarAction>
       ) : (
-        <ShareMatchButton shareUrl={shareUrl} iconOnly />
+        <ShareMatchButton shareUrl={shareUrl} shareText={shareText} iconOnly />
       ),
-    [manageContent, shareUrl, t]
+    [manageContent, shareUrl, shareText, t]
   )
 
   useTopBar({ title, back: groupHref, action })
@@ -93,49 +105,29 @@ export function ManagePopover({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** "Compartir": native share sheet when there is one, otherwise copies the public link. */
-export function ShareMatchButton({ shareUrl, iconOnly = false }: { shareUrl: string; iconOnly?: boolean }) {
+/** Use the same WhatsApp/copy flow for the match link on phones and desktop. */
+export function ShareMatchButton({ shareUrl, shareText, iconOnly = false }: { shareUrl: string; shareText?: string; iconOnly?: boolean }) {
   const t = useT()
-  const [copied, setCopied] = React.useState(false)
-
-  const handleShare = async () => {
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ url: shareUrl })
-        return
-      } catch {
-        // cancelled or unsupported: fall through to the clipboard
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // clipboard blocked: nothing else to do
-    }
-  }
-
-  if (iconOnly) {
-    return (
-      <TopBarAction onClick={handleShare} label={copied ? t('ui.matchScreens.match.shareCopied') : t('ui.matchScreens.match.share')}>
-        {copied ? (
-          <Check className="h-5 w-5 text-success" strokeWidth={2} />
-        ) : (
-          <Share2 className="h-5 w-5" strokeWidth={1.75} />
-        )}
-      </TopBarAction>
-    )
-  }
-
+  const [open, setOpen] = React.useState(false)
+  const text = shareText || shareUrl
   return (
-    <Button type="button" variant="outline" onClick={handleShare} aria-live="polite">
-      {copied ? (
-        <Check className="h-4 w-4 text-success" strokeWidth={2} aria-hidden="true" />
+    <>
+      {iconOnly ? (
+        <TopBarAction onClick={() => setOpen(true)} label={t('ui.matchScreens.match.share')}>
+          <Share2 className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+        </TopBarAction>
       ) : (
-        <Share2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+          <Share2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {t('ui.matchScreens.match.share')}
+        </Button>
       )}
-      {copied ? t('ui.matchScreens.match.shareCopied') : t('ui.matchScreens.match.share')}
-    </Button>
+      <Sheet open={open} onOpenChange={setOpen} title={t('ui.matchScreens.match.share')}>
+        <div className="space-y-4">
+          <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-sans text-sm">{text}</pre>
+          <ShareActions text={text} />
+        </div>
+      </Sheet>
+    </>
   )
 }

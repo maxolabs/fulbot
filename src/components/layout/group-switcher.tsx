@@ -25,7 +25,7 @@ export interface GroupSwitcherProps {
 }
 
 const rowClassName =
-  'flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
+  'flex min-h-11 w-full items-center gap-3 px-3 text-left text-sm text-foreground [@media(hover:hover)]:hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
 
 function roleVariant(role: ShellGroup['role']): 'secondary' | 'outline' {
   return role === 'member' ? 'outline' : 'secondary'
@@ -93,7 +93,7 @@ export function GroupSwitcher({ groups, current, presentation, className }: Grou
         align="left"
         aria-label={t('ui.shell.switchGroup')}
         triggerClassName={cn(
-          'flex h-10 w-full items-center gap-2 rounded-[3px] border border-border px-3 text-left text-sm font-semibold text-foreground hover:bg-accent',
+          'flex h-10 w-full items-center gap-2 rounded-[3px] border border-border px-3 text-left text-sm font-semibold text-foreground [@media(hover:hover)]:hover:bg-accent',
           className
         )}
         className="w-64"
@@ -118,7 +118,7 @@ export function GroupSwitcher({ groups, current, presentation, className }: Grou
         aria-expanded={open}
         aria-label={t('ui.shell.switchGroup')}
         className={cn(
-          '-ml-2 flex h-10 min-w-0 max-w-full items-center gap-1 rounded-[3px] px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          '-ml-2 flex h-11 min-w-0 max-w-full items-center gap-1 rounded-[3px] px-2 text-left [@media(hover:hover)]:hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           className
         )}
       >

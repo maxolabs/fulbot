@@ -25,8 +25,10 @@ export function ActionBar({ children, public: isPublic = false, className, ...pr
   return (
     <div
       className={cn(
-        'sticky z-30 -mx-4 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-6',
-        isPublic ? 'bottom-0' : 'bottom-14 lg:hidden',
+        'z-30 bg-gradient-to-t from-background via-background to-transparent px-4 pb-3 pt-6',
+        isPublic
+          ? 'sticky -mx-4 bottom-0 pb-[calc(.75rem+env(safe-area-inset-bottom))]'
+          : 'fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] lg:hidden',
         className
       )}
       {...props}

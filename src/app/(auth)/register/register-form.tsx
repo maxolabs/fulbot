@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
@@ -32,6 +33,8 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
   const [language, setLanguage] = useState<Language>(initialLanguage)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [passwordError, setPasswordError] = useState(false)
+  const confirmRef = useRef<HTMLInputElement>(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -44,9 +47,12 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setPasswordError(false)
 
     if (password !== confirmPassword) {
       setError(t('auth.passwordMismatch'))
+      setPasswordError(true)
+      confirmRef.current?.focus()
       return
     }
 
@@ -97,12 +103,13 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
         <p className="text-sm text-muted-foreground">{t('auth.registerSubtitle')}</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <FormNotice kind="error">{error}</FormNotice>}
+      <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-5">
+        {error && !passwordError && <FormNotice kind="error">{error}</FormNotice>}
         <div className="space-y-1.5">
           <Label htmlFor="name">{t('auth.name')}</Label>
           <Input
             id="name"
+            name="name"
             type="text"
             autoComplete="name"
             placeholder={t('ui.screens.auth.namePlaceholder')}
@@ -116,6 +123,9 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
           <Label htmlFor="email">{t('auth.email')}</Label>
           <Input
             id="email"
+            name="email"
+            spellCheck={false}
+            autoCapitalize="none"
             type="email"
             autoComplete="email"
             placeholder="tu@email.com"
@@ -127,9 +137,11 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">{t('auth.password')}</Label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
+            name="password"
+            minLength={6}
+            aria-describedby="password-hint"
             autoComplete="new-password"
             placeholder={t('ui.screens.auth.passwordPlaceholder')}
             value={password}
@@ -137,24 +149,37 @@ export function RegisterForm({ initialLanguage }: RegisterFormProps) {
             required
             disabled={loading}
           />
+          <p id="password-hint" className="text-xs text-muted-foreground">{t('auth.passwordHint')}</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="confirmPassword">{t('auth.confirmPassword')}</Label>
-          <Input
+          <PasswordInput
             id="confirmPassword"
-            type="password"
+            name="confirmPassword"
+            ref={confirmRef}
+            minLength={6}
+            aria-invalid={passwordError || undefined}
+            aria-describedby={passwordError ? 'confirm-password-error' : undefined}
             autoComplete="new-password"
             placeholder={t('ui.screens.auth.confirmPlaceholder')}
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value)
+              if (passwordError) {
+                setPasswordError(false)
+                setError(null)
+              }
+            }}
             required
             disabled={loading}
           />
+          {passwordError && <p id="confirm-password-error" role="alert" className="text-sm text-destructive">{t('auth.passwordMismatch')}</p>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="language">{t('auth.language')}</Label>
           <NativeSelect
             id="language"
+            name="language"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value as Language)}
             disabled={loading}

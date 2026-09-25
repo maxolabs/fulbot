@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
+import { DeviceNotifications } from '@/components/device-notifications'
 import { SettingsForm } from './settings-form'
 import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
@@ -39,10 +40,12 @@ export default async function SettingsPage() {
       <PageHeader title={t('ui.shell.preferences')} subtitle={t('settings.subtitle')} />
       <p className="text-sm text-muted-foreground lg:hidden">{t('settings.subtitle')}</p>
 
+      <DeviceNotifications />
       <SettingsForm
         initialLanguage={userData.preferred_language}
         initialTheme={theme}
         initialNotificationPrefs={{
+          match_created: prefs.match_created ?? true,
           waitlist_promoted: prefs.waitlist_promoted ?? true,
           teams_created: prefs.teams_created ?? true,
           match_reminder: prefs.match_reminder ?? true,

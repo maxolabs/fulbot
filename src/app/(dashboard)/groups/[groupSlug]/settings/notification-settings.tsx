@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 import { FormNotice, Toggle } from '@/components/form-controls'
 
 interface NotificationSettingsProps {
@@ -34,6 +35,7 @@ function toInt(value: string, fallback: number): number {
 }
 
 export function NotificationSettings({ groupId, settings: initialSettings }: NotificationSettingsProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
 
@@ -109,9 +111,9 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <MessageCircle className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-sm font-medium">Enviar link de inscripción</p>
+            <p className="text-sm font-medium">{t('sharing.signupNoticeTitle')}</p>
             <p className="text-sm text-muted-foreground">
-              Al crear un partido, copiar automáticamente el link de inscripción
+              {t('sharing.signupNoticeDescription')}
             </p>
           </div>
         </div>
@@ -310,31 +312,22 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         </div>
       </div>
 
-      {/* WhatsApp webhook */}
-      <div className="space-y-3 pt-4 border-t">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-secondary">
-            <MessageCircle className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+      <div className="space-y-3 border-t pt-4">
+        <p className="flex items-center gap-2 text-sm font-medium"><MessageCircle className="h-4 w-4" aria-hidden="true" />WhatsApp</p>
+        <p className="text-sm text-muted-foreground">{t('sharing.noSetup')}</p>
+        <details className="rounded-md border border-border p-3">
+          <summary className="cursor-pointer py-3 text-sm text-muted-foreground">{t('sharing.advancedDelivery')}</summary>
+          <div className="mt-3 space-y-2">
+            <Label htmlFor="whatsapp_webhook_url">{t('sharing.webhookUrl')}</Label>
+            <Input
+              id="whatsapp_webhook_url" type="url" placeholder="https://..."
+              value={settings.whatsapp_webhook_url || ''}
+              onChange={(e) => setSettings((prev) => ({ ...prev, whatsapp_webhook_url: e.target.value }))}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">{t('sharing.advancedHint')}</p>
           </div>
-          <div>
-            <p className="text-sm font-medium">Webhook de WhatsApp (opcional)</p>
-            <p className="text-sm text-muted-foreground">
-              URL para enviar notificaciones automáticas a WhatsApp
-            </p>
-          </div>
-        </div>
-        <Input
-          type="url"
-          placeholder="https://..."
-          value={settings.whatsapp_webhook_url || ''}
-          onChange={(e) =>
-            setSettings((prev) => ({ ...prev, whatsapp_webhook_url: e.target.value }))
-          }
-          className="font-mono text-sm"
-        />
-        <p className="text-xs text-muted-foreground">
-          Compatible con servicios como Twilio, WhatsApp Business API, o webhooks personalizados.
-        </p>
+        </details>
       </div>
 
       {/* Save button */}

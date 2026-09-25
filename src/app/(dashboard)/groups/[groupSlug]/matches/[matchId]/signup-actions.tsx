@@ -114,6 +114,7 @@ export interface MatchActionBarProps {
   /** Finished match: "Reportar resultado" until the viewer has reported. */
   reportHref?: string
   reportLabel?: string
+  allowSignup?: boolean
 }
 
 /** The mobile action bar, placed as the last element of the page content. */
@@ -124,6 +125,7 @@ export function MatchActionBar({
   viewTeamsLabel,
   reportHref,
   reportLabel,
+  allowSignup = true,
 }: MatchActionBarProps) {
   const action = useSignup()
 
@@ -141,7 +143,7 @@ export function MatchActionBar({
   const { primary, secondary, error } = action
 
   // The signup action as a secondary: whichever of the two is actionable.
-  const signupAsSecondary = secondary ?? (primary.tone === 'action' ? primary : null)
+  const signupAsSecondary = allowSignup ? secondary ?? (primary.tone === 'action' ? primary : null) : null
 
   // "Armar equipos" (no teams yet, admin) and "Ver equipos" (teams exist,
   // everyone) are mutually exclusive and take the same slot: the primary.
@@ -171,6 +173,8 @@ export function MatchActionBar({
       </ActionBar>
     )
   }
+
+  if (!allowSignup) return null
 
   return (
     <ActionBar>

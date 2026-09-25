@@ -90,7 +90,7 @@ export function Segmented<T extends string = string>({
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
               'inline-flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-sm px-3 font-mono uppercase tracking-[.08em] transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
-              size === 'sm' ? 'h-7 text-[10px]' : 'h-9 text-xs lg:h-8',
+              size === 'sm' ? 'min-h-11 text-[10px] lg:min-h-7' : 'min-h-11 text-xs lg:min-h-8',
               checked
                 ? 'bg-accent font-medium text-foreground'
                 : 'text-muted-foreground hover:text-foreground'

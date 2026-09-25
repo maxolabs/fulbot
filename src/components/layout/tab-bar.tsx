@@ -35,10 +35,11 @@ export function TabBar({ currentGroup, unread: unreadProp, className }: TabBarPr
 
   if (isTabBarHidden(pathname)) return null
 
-  const groupBase = currentGroup ? `/groups/${currentGroup.slug}` : null
+  const activeGroup = shell?.currentGroup ?? currentGroup
+  const groupBase = activeGroup ? `/groups/${activeGroup.slug}` : null
   const matchHref = groupBase
-    ? currentGroup?.nextMatchId
-      ? `${groupBase}/matches/${currentGroup.nextMatchId}`
+    ? activeGroup?.nextMatchId
+      ? `${groupBase}/matches/${activeGroup.nextMatchId}`
       : `${groupBase}/matches`
     : '/groups'
   const groupHref = groupBase ?? '/groups'
@@ -70,8 +71,8 @@ export function TabBar({ currentGroup, unread: unreadProp, className }: TabBarPr
               href={href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-full flex-col items-center justify-center gap-1 text-[10px] leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
-                active ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                'flex h-full flex-col items-center justify-center gap-1 border-t-2 text-[11px] leading-none [@media(hover:hover)]:hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+                active ? 'border-primary bg-accent/40 font-semibold text-foreground' : 'border-transparent text-muted-foreground'
               )}
             >
               <span className={cn('relative', active && 'text-primary')}>

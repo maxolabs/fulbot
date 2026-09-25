@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Bot, Calculator, Check, CircleAlert, Copy, Sparkles } from 'lucide-react'
+import { AlertTriangle, Bot, Calculator, Check, CircleAlert, Copy, Sparkles, Users, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,11 +11,13 @@ import { Pitch, type PitchPlayer } from '@/components/ui/pitch'
 import { PlayerRow } from '@/components/ui/player-row'
 import { PageHeader } from '@/components/layout/page-header'
 import { ActionBar } from '@/components/layout/action-bar'
-import { getFormationSlots, placePlayersInFormation, type PlacedPlayer } from '@/lib/formations'
+import { placePlayersInFormation, type PlacedPlayer } from '@/lib/formations'
 import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { useLanguage, useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
+import { Sheet } from '@/components/ui/sheet'
 import { DraggableTeams } from './draggable-teams'
+import { normalizePosition } from '@/lib/teams/manual'
 import { WhatsAppShare, generateShareMessage, shareName } from './whatsapp-share'
 
 // Teams screen (docs/ui-rework/03-screens.md §4). Browser: PageHeader, two
@@ -24,7 +26,7 @@ import { WhatsAppShare, generateShareMessage, shareName } from './whatsapp-share
 // so it fits a phone screen without scrolling; ratings hidden there,
 // 06-principles.md §1.4), ActionBar with "Enviar al grupo" as the one primary.
 // The draggable editor is a separate mode: it replaces the pitches in the
-// browser and appears below the combined pitch on mobile.
+// browser and on mobile.
 
 interface Player {
   id: string
@@ -78,9 +80,9 @@ interface TeamsViewProps {
 
 // "1-3-2-1": players per line from the keeper up, read off the formation
 // slots so the badge always matches what the pitch draws.
-function formationShape(size: number): string {
+function formationShape(placed: PlacedPlayer<PitchPlayer>[]): string {
   const lines = new Map<number, number>()
-  for (const slot of getFormationSlots(size)) lines.set(slot.y, (lines.get(slot.y) ?? 0) + 1)
+  for (const { slot } of placed) lines.set(slot.y, (lines.get(slot.y) ?? 0) + 1)
   return Array.from(lines.entries())
     .sort((a, b) => b[0] - a[0])
     .map(([, count]) => count)
@@ -116,13 +118,14 @@ export function TeamsView({
   const t = useT()
   const language = useLanguage()
   const router = useRouter()
-  const canEditTeams = isAdminOrCaptain && matchStatus !== 'finished' && matchStatus !== 'cancelled'
+  const canEditTeams = isAdminOrCaptain && ['signup_open', 'full', 'signup_closed', 'teams_created'].includes(matchStatus ?? '')
+  const [refreshing, startRefresh] = useTransition()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const editorRef = useRef<HTMLDivElement>(null)
+  const [regenerateOpen, setRegenerateOpen] = useState(false)
 
   const handleGenerateTeams = async () => {
     setLoading(true)
@@ -133,12 +136,11 @@ export function TeamsView({
         headers: { 'Content-Type': 'application/json' },
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || t('ui.teamsScreen.generateError'))
-      setEditing(false)
-      router.refresh()
+      if (!response.ok) throw new Error(t('ui.teamsScreen.generateError'))
+      startRefresh(() => { setEditing(false); router.refresh() })
     } catch (err) {
       console.error('Error generating teams:', err)
-      setError(err instanceof Error ? err.message : t('ui.teamsScreen.generateError'))
+      setError(t('ui.teamsScreen.generateError'))
     } finally {
       setLoading(false)
     }
@@ -146,7 +148,7 @@ export function TeamsView({
 
   // Players by team (matched by player_id or guest_player_id), carrying both ids
   // through so manual edits (drag/drop, position changes) can be saved via
-  // save_team_assignments without losing track of whether it's a player or a guest.
+  // publish_match_teams without losing track of whether it's a player or a guest.
   const resolve = (assignments: Assignment[]): TeamPlayer[] =>
     assignments
       .map((a) => {
@@ -155,7 +157,7 @@ export function TeamsView({
         if (!player) return null
         return {
           ...player,
-          position: a.position,
+          position: normalizePosition(a.position),
           assignmentId: a.id,
           playerId: a.player_id,
           guestPlayerId: a.guest_player_id,
@@ -174,15 +176,16 @@ export function TeamsView({
   ])
   const unassignedPlayers = players.filter((p) => !assignedIds.has(p.id))
 
-  const darkShape = formationShape(darkPlayers.length)
-  const lightShape = formationShape(lightPlayers.length)
+  const darkShape = formationShape(darkPlaced)
+  const lightShape = formationShape(lightPlaced)
   const shape = darkShape === lightShape ? darkShape : `${darkShape} / ${lightShape}`
   const teamNames = { dark: t('ui.teamsScreen.dark'), light: t('ui.teamsScreen.light') }
   const countLabel = (n: number) =>
     n === 1 ? t('ui.teamsScreen.playersOne') : t('ui.teamsScreen.players', { n })
   const levelLabel = (list: TeamPlayer[]) => t('ui.teamsScreen.level', { n: average(list).toFixed(1) })
 
-  const shareInput = { groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers }
+  const shareInput = { matchUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
+    copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing') } }
 
   const copySimple = async () => {
     try {
@@ -194,22 +197,15 @@ export function TeamsView({
     }
   }
 
-  const toggleEditor = () => {
-    const next = !editing
-    setEditing(next)
-    if (next) {
-      // The editor mounts below the combined pitch on mobile; bring it into view.
-      requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-    }
-  }
+  const toggleEditor = () => setEditing(true)
 
   const generateButton = (size: 'default' | 'xl', variant: 'default' | 'outline') => (
     <Button
       type="button"
       size={size}
       variant={variant}
-      onClick={handleGenerateTeams}
-      disabled={loading || players.length < 4}
+      onClick={() => hasTeams ? setRegenerateOpen(true) : handleGenerateTeams()}
+      disabled={loading || refreshing || players.length < 4}
     >
       {loading ? <Spinner size="sm" /> : <Sparkles className="h-4 w-4" strokeWidth={1.75} />}
       {loading
@@ -221,8 +217,8 @@ export function TeamsView({
   )
 
   const editButton = (size: 'default' | 'xl') => (
-    <Button type="button" size={size} variant="outline" onClick={toggleEditor} aria-pressed={editing}>
-      {editing ? t('ui.teamsScreen.viewPitch') : t('ui.teamsScreen.edit')}
+    <Button type="button" size={size} variant="outline" onClick={toggleEditor} disabled={loading || refreshing}>
+      {t('ui.matchScreens.match.editTeams')}
     </Button>
   )
 
@@ -231,13 +227,35 @@ export function TeamsView({
   // One orange per screen: while the editor is open its "Guardar cambios" is
   // the primary, so "Enviar al grupo" steps down to a chalk outline.
   const sendButton = (size: 'default' | 'xl') => (
-    <Button type="button" size={size} variant={editing ? 'outline' : 'default'} onClick={() => setShareOpen(true)}>
+    <Button type="button" size={size} variant={editing ? 'outline' : 'default'} onClick={() => setShareOpen(true)} disabled={loading || refreshing}>
       {t('ui.teamsScreen.send')}
     </Button>
   )
 
+  if (editing && canEditTeams) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t('ui.builder.title')} subtitle={`${groupName} · ${dateLabel}`} />
+        <DraggableTeams
+          matchId={matchId}
+          darkPlayers={darkPlayers}
+          lightPlayers={lightPlayers}
+          unassignedPlayers={unassignedPlayers.map((player) => ({
+            ...player,
+            playerId: player.isGuest ? null : player.id,
+            guestPlayerId: player.isGuest ? player.id : null,
+            position: normalizePosition(player.mainPosition),
+          }))}
+          hasTeams={hasTeams}
+          onSaved={() => startRefresh(() => { setEditing(false); router.refresh() })}
+          onCancel={() => setEditing(false)}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28 lg:pb-0">
       {/* The subtitle is a <p>, so the formation Badge (a div) sits in the actions slot. */}
       <PageHeader
         title={t('ui.teamsScreen.title')}
@@ -246,11 +264,8 @@ export function TeamsView({
           hasTeams ? (
             <>
               <span className="mr-2">{formationBadge}</span>
-              {canEditTeams && editButton('default')}
               {sendButton('default')}
             </>
-          ) : canEditTeams ? (
-            generateButton('default', 'default')
           ) : undefined
         }
       />
@@ -273,6 +288,47 @@ export function TeamsView({
           <AlertTriangle className="h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />
           {t('ui.teamsScreen.needPlayers', { n: players.length })}
         </p>
+      )}
+
+      {canEditTeams && !hasTeams && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="font-display text-xl font-bold">{t('ui.builder.chooseTitle')}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{t('ui.builder.chooseBody')}</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <Sparkles className="mb-2 h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+                <CardTitle>{t('ui.builder.automatic')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t('ui.builder.automaticBody')}</p>
+                {generateButton('default', 'default')}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Users className="mb-2 h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+                <CardTitle>{t('ui.builder.manual')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{t('ui.builder.manualBody')}</p>
+                <Button type="button" variant="outline" disabled={loading || refreshing || players.length < 4} onClick={() => setEditing(true)}>
+                  {t('ui.builder.startManual')}<ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+          <p className="text-xs text-muted-foreground">{t('ui.builder.publishHint')}</p>
+        </section>
+      )}
+
+      {hasTeams && canEditTeams && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-4">
+          <div><h2 className="text-sm font-semibold">{t('ui.builder.lineupReady')}</h2><p className="mt-1 text-xs text-muted-foreground">{t('ui.builder.lineupReadyBody')}</p></div>
+          <div className="flex flex-wrap gap-2">{editButton('default')}{generateButton('default', 'outline')}</div>
+        </div>
       )}
 
       {hasTeams ? (
@@ -310,7 +366,7 @@ export function TeamsView({
           </div>
 
           {/* Browser: one dashed card per team. Hidden while the editor is open. */}
-          <div className={cn('hidden gap-6 lg:grid lg:grid-cols-2', editing && 'lg:hidden')}>
+          <div className="hidden gap-6 lg:grid lg:grid-cols-2">
             {(['dark', 'light'] as const).map((team) => {
               const list = team === 'dark' ? darkPlayers : lightPlayers
               const placed = team === 'dark' ? darkPlaced : lightPlaced
@@ -337,20 +393,6 @@ export function TeamsView({
               )
             })}
           </div>
-
-          {editing && canEditTeams && (
-            <div ref={editorRef} className="scroll-mt-16">
-              <DraggableTeams
-                matchId={matchId}
-                darkTeamId={darkTeam.id!}
-                lightTeamId={lightTeam.id!}
-                darkPlayers={darkPlayers}
-                lightPlayers={lightPlayers}
-                isAdminOrCaptain={isAdminOrCaptain}
-                onUpdate={() => router.refresh()}
-              />
-            </div>
-          )}
 
           {unassignedPlayers.length > 0 && (
             <Card>
@@ -437,12 +479,6 @@ export function TeamsView({
                 <span className="font-mono text-sm tabular-nums">{Math.round(balanceScore * 100)}%</span>
               </div>
             )}
-            {canEditTeams && (
-              <div className="border-t border-border pt-3">
-                <p className="mb-2 text-xs text-muted-foreground">{t('ui.teamsScreen.generateHint')}</p>
-                {generateButton('default', 'outline')}
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
@@ -467,6 +503,13 @@ export function TeamsView({
         </Card>
       )}
 
+      <Sheet open={regenerateOpen} onOpenChange={setRegenerateOpen} title={t('ui.teamsScreen.regenerate')} description={t('ui.builder.regenerateConfirm')}>
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button type="button" disabled={loading} onClick={() => { setRegenerateOpen(false); void handleGenerateTeams() }}>{t('ui.teamsScreen.regenerate')}</Button>
+          <Button type="button" variant="outline" onClick={() => setRegenerateOpen(false)}>{t('common.cancel')}</Button>
+        </div>
+      </Sheet>
+
       {hasTeams && (
         <WhatsAppShare open={shareOpen} onOpenChange={setShareOpen} {...shareInput} />
       )}
@@ -487,8 +530,6 @@ export function TeamsView({
             </Button>
           )}
         </ActionBar>
-      ) : canEditTeams ? (
-        <ActionBar>{generateButton('xl', 'default')}</ActionBar>
       ) : null}
     </div>
   )

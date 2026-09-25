@@ -8,6 +8,7 @@ import type { Json } from '@/types/database'
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export interface NotificationPrefsInput {
+  match_created: boolean
   waitlist_promoted: boolean
   teams_created: boolean
   match_reminder: boolean

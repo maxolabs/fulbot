@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, CircleAlert, Copy, Download, MessageCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CircleAlert } from 'lucide-react'
+import { ShareActions } from '@/components/share-actions'
 import { Button } from '@/components/ui/button'
 import { Sheet } from '@/components/ui/sheet'
 import { Segmented } from '@/components/ui/segmented'
@@ -24,18 +25,25 @@ export type MessageFormat = 'simple' | 'detailed' | 'emoji'
 
 export interface ShareInput {
   groupName: string
+  matchUrl?: string
   /** Pre-formatted in the group's timezone, e.g. "Lunes 14/9 - 20:00". */
   dateLabel: string
   darkPlayers: SharePlayer[]
   lightPlayers: SharePlayer[]
+  /** Localized copy; defaults to Spanish for callers without i18n. */
+  copy?: ShareCopy
 }
+
+export interface ShareCopy { dark: string; light: string; closing: string }
+const DEFAULT_COPY: ShareCopy = { dark: 'Equipo Oscuro', light: 'Equipo Claro', closing: '¡Nos vemos en la cancha!' }
 
 export function shareName(player: SharePlayer): string {
   return player.nickname || player.displayName.split(' ')[0]
 }
 
 export function generateShareMessage(format: MessageFormat, input: ShareInput): string {
-  const { groupName, dateLabel: dateStr, darkPlayers, lightPlayers } = input
+  const link = input.matchUrl ? `\n\n${input.matchUrl}` : ''
+  const { groupName, dateLabel: dateStr, darkPlayers, lightPlayers, copy = DEFAULT_COPY } = input
 
   if (format === 'simple') {
     const darkNames = darkPlayers.map(shareName).join(', ')
@@ -44,9 +52,9 @@ export function generateShareMessage(format: MessageFormat, input: ShareInput): 
     return `*${groupName}*
 ${dateStr}
 
-*Equipo Oscuro:* ${darkNames}
+*${copy.dark}:* ${darkNames}
 
-*Equipo Claro:* ${lightNames}`
+*${copy.light}:* ${lightNames}${link}`
   }
 
   if (format === 'detailed') {
@@ -56,11 +64,11 @@ ${dateStr}
     return `*${groupName}*
 ${dateStr}
 
-*EQUIPO OSCURO* (${darkPlayers.length})
+*${copy.dark.toUpperCase()}* (${darkPlayers.length})
 ${darkList}
 
-*EQUIPO CLARO* (${lightPlayers.length})
-${lightList}`
+*${copy.light.toUpperCase()}* (${lightPlayers.length})
+${lightList}${link}`
   }
 
   const darkList = darkPlayers.map((p) => `⚫ ${shareName(p)} (${p.position})`).join('\n')
@@ -69,13 +77,13 @@ ${lightList}`
   return `⚽ *${groupName}* ⚽
 📅 ${dateStr}
 
-🖤 *EQUIPO OSCURO*
+🖤 *${copy.dark.toUpperCase()}*
 ${darkList}
 
-🤍 *EQUIPO CLARO*
+🤍 *${copy.light.toUpperCase()}*
 ${lightList}
 
-¡Nos vemos en la cancha! 🏟️`
+${copy.closing} 🏟️${link}`
 }
 
 export interface WhatsAppShareProps extends ShareInput {
@@ -87,59 +95,35 @@ export function WhatsAppShare({ open, onOpenChange, ...input }: WhatsAppSharePro
   const t = useT()
   const language = useLanguage()
   const [format, setFormat] = useState<MessageFormat>('simple')
-  const [copied, setCopied] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
+  const [prepared, setPrepared] = useState<{ key: string; file: File } | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
   const message = generateShareMessage(format, input)
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(message)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy:', err)
-    }
-  }
-
-  const shareViaWhatsApp = () => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
-  }
-
-  const downloadLineupImage = async () => {
-    setDownloading(true)
-    setError(null)
-    try {
-      // No scores here: the image is shared with the whole group and ratings are
-      // visible to admins and captains only.
-      const data = {
-        groupName: input.groupName,
-        matchDate: input.dateLabel,
-        lang: language,
-        darkTeam: input.darkPlayers.map((p) => ({ name: shareName(p), position: p.position })),
-        lightTeam: input.lightPlayers.map((p) => ({ name: shareName(p), position: p.position })),
-      }
-      const params = new URLSearchParams({ data: encodeURIComponent(JSON.stringify(data)) })
-      const response = await fetch(`/api/export/lineup-image?${params}`)
-      if (!response.ok) throw new Error('Failed to generate image')
-
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `equipos-${input.groupName.toLowerCase().replace(/\s+/g, '-')}.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('Failed to download image:', err)
-      setError(t('ui.teamsScreen.imageError'))
-    } finally {
-      setDownloading(false)
-    }
-  }
+  const imageKey = JSON.stringify({
+    groupName: input.groupName, matchDate: input.dateLabel, lang: language,
+    darkTeam: input.darkPlayers.map((p) => ({ name: shareName(p), position: p.position })),
+    lightTeam: input.lightPlayers.map((p) => ({ name: shareName(p), position: p.position })),
+  })
+  const file = prepared?.key === imageKey ? prepared.file : null
+  const error = !file && failure === `${imageKey}:${retry}`
+  const preparedKey = useRef<string | null>(null)
+  useEffect(() => {
+    // Reopening the sheet reuses the image already built for this lineup.
+    if (!open || preparedKey.current === imageKey) return
+    const controller = new AbortController()
+    const params = new URLSearchParams({ data: encodeURIComponent(imageKey) })
+    fetch(`/api/export/lineup-image?${params}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Image export failed')
+        const blob = await response.blob()
+        if (!controller.signal.aborted) {
+          preparedKey.current = imageKey
+          setPrepared({ key: imageKey, file: new File([blob], 'fulbot-equipos.png', { type: 'image/png' }) })
+        }
+      })
+      .catch(() => { if (!controller.signal.aborted) setFailure(`${imageKey}:${retry}`) })
+    return () => controller.abort()
+  }, [open, imageKey, retry])
 
   return (
     <Sheet
@@ -165,32 +149,15 @@ export function WhatsAppShare({ open, onOpenChange, ...input }: WhatsAppSharePro
         </pre>
 
         {error && (
-          <p className="flex items-center gap-2 text-sm text-destructive">
-            <CircleAlert className="h-4 w-4" strokeWidth={1.75} />
-            {error}
+          <p role="alert" className="flex items-center gap-2 text-sm text-destructive">
+            <CircleAlert className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {t('ui.teamsScreen.imageError')}
           </p>
         )}
 
-        <div className="flex flex-col gap-2">
-          <Button type="button" size="xl" onClick={shareViaWhatsApp}>
-            <MessageCircle className="h-4 w-4" strokeWidth={1.75} />
-            {t('ui.teamsScreen.openWhatsApp')}
-          </Button>
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" onClick={copyToClipboard}>
-              {copied ? (
-                <Check className="h-4 w-4" strokeWidth={1.75} />
-              ) : (
-                <Copy className="h-4 w-4" strokeWidth={1.75} />
-              )}
-              {copied ? t('ui.teamsScreen.copied') : t('ui.teamsScreen.copyText')}
-            </Button>
-            <Button type="button" variant="outline" onClick={downloadLineupImage} disabled={downloading}>
-              {downloading ? <Spinner size="sm" /> : <Download className="h-4 w-4" strokeWidth={1.75} />}
-              {t('ui.teamsScreen.downloadImage')}
-            </Button>
-          </div>
-        </div>
+        {!file && !error && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner size="sm" />{t('sharing.preparingImage')}</p>}
+        {error && <Button type="button" variant="outline" onClick={() => setRetry((n) => n + 1)}>{t('sharing.retryImage')}</Button>}
+        <ShareActions text={message} file={file} />
       </div>
     </Sheet>
   )

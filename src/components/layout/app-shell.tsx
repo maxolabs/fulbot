@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { ShellProvider } from './shell-context'
+import { SkipLink } from './skip-link'
 import { Sidebar } from './sidebar'
 import { TabBar } from './tab-bar'
 import { TopBar, TopBarProvider } from './top-bar'
@@ -28,10 +29,11 @@ export function AppShell({ user, groups, currentGroup, unreadCount, children }: 
     <ShellProvider user={user} groups={groups} currentGroup={currentGroup} unreadCount={unreadCount}>
       <TopBarProvider>
         <div className="min-h-dvh bg-background lg:flex">
+          <SkipLink />
           <Sidebar user={user} groups={groups} currentGroup={currentGroup} unreadCount={unreadCount} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar />
-            <main className="w-full min-w-0 flex-1 px-4 pb-20 pt-4 lg:max-w-6xl lg:px-8 lg:py-8">
+            <main id="main-content" tabIndex={-1} className="mx-auto w-full min-w-0 flex-1 px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 focus:outline-none lg:max-w-6xl lg:px-8 lg:py-10">
               {children}
             </main>
           </div>

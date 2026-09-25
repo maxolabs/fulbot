@@ -1,410 +1,234 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Star, Save, ArrowLeftRight } from 'lucide-react'
+import { Sheet } from '@/components/ui/sheet'
+import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, closestCenter, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { GripVertical, Save, Search, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Avatar } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice, NativeSelect } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
 import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { useT } from '@/i18n/provider'
+import { cn } from '@/lib/utils/cn'
+import { assignmentPayload, draftProblem, movePlayer, POSITIONS, syncRoster, type BuilderPlayer, type TeamDraft, type TeamSlot } from '@/lib/teams/manual'
 import type { Json } from '@/types/database'
 
-// Pizarra pass (docs/ui-rework/05-plan.md §4): tokens only, no redesign. Team
-// identity lives in the card headers (fixed team colours from brand.ts); the
-// rows themselves are plain surfaces so the controls keep their token styles.
-
-// Standard position abbreviations used across the app (AI prompt, fallback balancer, lineup field)
-export const POSITION_OPTIONS = [
-  'GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF',
-] as const
-
-interface Player {
-  id: string // player_profiles.id or guest_players.id - stable key across drag/drop
-  playerId: string | null
-  guestPlayerId: string | null
-  displayName: string
-  nickname: string | null
-  mainPosition: string
-  overallRating: number
-  position: string
-  assignmentId: string
-}
-
-interface DraggableTeamsProps {
-  matchId: string
-  darkTeamId: string
-  lightTeamId: string
-  darkPlayers: Player[]
-  lightPlayers: Player[]
-  isAdminOrCaptain: boolean
-  onUpdate: () => void
-}
-
-interface SortablePlayerProps {
-  player: Player
-  teamColor: 'dark' | 'light'
-  onMoveTeam: () => void
-  onPositionChange: (position: string) => void
-}
-
-function SortablePlayer({ player, teamColor, onMoveTeam, onPositionChange }: SortablePlayerProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: player.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
-  const isDark = teamColor === 'dark'
+function PlayerCard({ player, team, disabled, onMove, onPosition }: {
+  player: BuilderPlayer; team: TeamSlot; disabled: boolean
+  onMove: (team: TeamSlot) => void; onPosition: (position: string) => void
+}) {
   const t = useT()
-
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: player.id, disabled })
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex flex-wrap items-center gap-2 sm:gap-3 p-3 rounded-md border border-border bg-card text-card-foreground ${
-        isDragging ? 'z-50' : ''
-      }`}
-    >
-      <button
-        className="cursor-grab touch-none shrink-0 rounded-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        {...attributes}
-        {...listeners}
-        aria-label="Arrastrar jugador"
-      >
-        <GripVertical className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
-      </button>
-
-      <Avatar fallback={player.displayName} size="sm" />
-
-      <div className="flex-1 min-w-[120px]">
-        <p className="text-sm font-medium truncate">
-          {player.displayName}
-          {player.nickname && (
-            <span className="ml-1 text-muted-foreground">
-              ({player.nickname})
-            </span>
-          )}
-        </p>
-        <p className="text-xs flex items-center gap-1 font-mono tabular-nums text-muted-foreground">
-          <Star className="h-3 w-3 text-primary fill-primary" strokeWidth={1.75} />
-          {player.overallRating.toFixed(1)}
-        </p>
+    <li ref={setNodeRef} className={cn('rounded-md border border-border bg-card p-3', isDragging && 'opacity-30')}>
+      <div className="flex items-start gap-2">
+        <button type="button" {...attributes} {...listeners} disabled={disabled}
+          aria-label={t('ui.builder.drag', { name: player.displayName })}
+          className="-ml-2 -mt-2 flex h-11 w-8 shrink-0 touch-none items-center justify-center rounded-sm text-muted-foreground hover:bg-accent active:cursor-grabbing">
+          <GripVertical className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm font-semibold">{player.displayName}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{player.guestPlayerId ? t('ui.guest') : player.nickname && player.nickname !== player.displayName ? player.nickname : player.mainPosition} · {player.overallRating.toFixed(1)}</p>
+        </div>
       </div>
-
-      <select
-        value={player.position}
-        onChange={(e) => onPositionChange(e.target.value)}
-        aria-label="Posición"
-        className="h-9 rounded-[3px] border border-border bg-background px-2 text-xs font-mono text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        {POSITION_OPTIONS.map((pos) => (
-          <option key={pos} value={pos}>{pos}</option>
-        ))}
-      </select>
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={onMoveTeam}
-        className="h-9 text-xs shrink-0"
-      >
-        <ArrowLeftRight className="h-3 w-3" strokeWidth={1.75} />
-        {isDark ? `→ ${t('ui.teamsScreen.light')}` : `→ ${t('ui.teamsScreen.dark')}`}
-      </Button>
-    </div>
+      {team === 'pool' ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {(['dark', 'light'] as const).map((destination) => (
+            <Button key={destination} type="button" size="sm" variant="outline" disabled={disabled} onClick={() => onMove(destination)} aria-label={t('ui.builder.assignTo', { name: player.displayName, team: t(`ui.teamsScreen.${destination}`) })}>
+              {t(`ui.teamsScreen.${destination}`)}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <NativeSelect value={player.position} disabled={disabled} wrapperClassName="min-w-0 flex-1" className="h-10 px-2 text-xs" aria-label={t('ui.builder.positionFor', { name: player.displayName })} onChange={(e) => onPosition(e.target.value)}>
+            {POSITIONS.map((position) => <option key={position} value={position}>{position}</option>)}
+          </NativeSelect>
+          <NativeSelect value={team} disabled={disabled} wrapperClassName="min-w-0 flex-1 basis-24" className="h-10 text-xs" aria-label={t('ui.builder.teamFor', { name: player.displayName })} onChange={(e) => onMove(e.target.value as TeamSlot)}>
+            <option value="dark">{t('ui.teamsScreen.dark')}</option>
+            <option value="light">{t('ui.teamsScreen.light')}</option>
+            <option value="pool">{t('ui.teamsScreen.unassigned')}</option>
+          </NativeSelect>
+        </div>
+      )}
+    </li>
   )
 }
 
-function PlayerOverlay({ player }: { player: Player }) {
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-md border border-primary bg-card text-card-foreground shadow-lg shadow-black/40">
-      <GripVertical className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
-      <Badge variant="outline" className="font-mono text-xs">
-        {player.position}
-      </Badge>
-      <Avatar fallback={player.displayName} size="sm" />
-      <span className="text-sm font-medium">{player.displayName}</span>
-    </div>
-  )
-}
-
-export function DraggableTeams({
-  matchId,
-  darkTeamId,
-  lightTeamId,
-  darkPlayers: initialDarkPlayers,
-  lightPlayers: initialLightPlayers,
-  isAdminOrCaptain,
-  onUpdate,
-}: DraggableTeamsProps) {
-  const router = useRouter()
-  const supabase = createClient()
+function TeamZone({ team, players, children, disabled, activeSlot }: { team: TeamSlot; players: BuilderPlayer[]; children: React.ReactNode; disabled: boolean; activeSlot: TeamSlot }) {
   const t = useT()
+  const { setNodeRef, isOver } = useDroppable({ id: team, disabled })
+  const average = players.length ? players.reduce((sum, p) => sum + p.overallRating, 0) / players.length : 0
+  return (
+    <section ref={setNodeRef} aria-label={t(team === 'pool' ? 'ui.teamsScreen.unassigned' : `ui.teamsScreen.${team}`)} className={cn('min-w-0 rounded-md border border-border bg-card lg:block', activeSlot !== team && 'hidden', isOver && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-md border-b border-border p-3" style={team === 'pool' ? undefined : { backgroundColor: team === 'dark' ? TEAM_DARK : TEAM_LIGHT, color: team === 'dark' ? TEAM_LIGHT : TEAM_LIGHT_INK }}>
+        <h3 className="font-display text-base font-bold">{t(team === 'pool' ? 'ui.teamsScreen.unassigned' : `ui.teamsScreen.${team}`)}</h3>
+        <span className="font-mono text-xs tabular-nums">{players.length}</span>
+        {team !== 'pool' && <p className="w-full text-xs">{t('ui.teamsScreen.level', { n: average.toFixed(1) })}</p>}
+      </div>
+      <div className="min-h-28 space-y-3 p-2 sm:p-3">{children}</div>
+    </section>
+  )
+}
 
-  const [darkPlayers, setDarkPlayers] = useState(initialDarkPlayers)
-  const [lightPlayers, setLightPlayers] = useState(initialLightPlayers)
-  const [activePlayer, setActivePlayer] = useState<Player | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
+export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedPlayers, hasTeams, onSaved, onCancel }: {
+  matchId: string; darkPlayers: BuilderPlayer[]; lightPlayers: BuilderPlayer[]; unassignedPlayers: BuilderPlayer[]
+  hasTeams: boolean; onSaved: () => void; onCancel: () => void
+}) {
+  const t = useT()
+  const router = useRouter()
+  const [discardTarget, setDiscardTarget] = useState<string | null>(null)
+  const [draft, setDraft] = useState<TeamDraft>({ pool: unassignedPlayers, dark: darkPlayers, light: lightPlayers })
+  const [activeSlot, setActiveSlot] = useState<TeamSlot>(unassignedPlayers.length ? 'pool' : 'dark')
+  const [active, setActive] = useState<BuilderPlayer | null>(null)
+  const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [announcement, setAnnouncement] = useState('')
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor))
+  const total = draft.pool.length + draft.dark.length + draft.light.length
+  const problem = draftProblem(draft)
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  )
+  // The editor replaces the button that opened it; keep keyboard focus here.
+  useEffect(() => { headingRef.current?.focus() }, [])
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event
-    const player =
-      darkPlayers.find((p) => p.id === active.id) ||
-      lightPlayers.find((p) => p.id === active.id)
-    setActivePlayer(player || null)
-  }
+  // A refresh after a failed save may bring a changed confirmed roster:
+  // merge it instead of discarding the captain's work.
+  const roster = [...unassignedPlayers, ...darkPlayers, ...lightPlayers]
+  const rosterKey = roster.map((p) => p.id).sort().join(',')
+  const seenRoster = useRef(rosterKey)
+  useEffect(() => {
+    if (seenRoster.current === rosterKey) return
+    seenRoster.current = rosterKey
+    setDraft((current) => syncRoster(current, roster))
+    // `roster` is rebuilt every render; its identity is captured by rosterKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosterKey])
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    setActivePlayer(null)
-
-    if (!over) return
-
-    const activeId = active.id as string
-    const overId = over.id as string
-
-    // Find which team the active player is in
-    const isActiveInDark = darkPlayers.some((p) => p.id === activeId)
-    const isActiveInLight = lightPlayers.some((p) => p.id === activeId)
-
-    // Find which team the over target is in (or is the team container)
-    const isOverDark = overId === 'dark-team' || darkPlayers.some((p) => p.id === overId)
-    const isOverLight = overId === 'light-team' || lightPlayers.some((p) => p.id === overId)
-
-    // Moving between teams
-    if (isActiveInDark && isOverLight) {
-      const player = darkPlayers.find((p) => p.id === activeId)!
-      setDarkPlayers(darkPlayers.filter((p) => p.id !== activeId))
-      setLightPlayers([...lightPlayers, player])
-      setHasChanges(true)
-    } else if (isActiveInLight && isOverDark) {
-      const player = lightPlayers.find((p) => p.id === activeId)!
-      setLightPlayers(lightPlayers.filter((p) => p.id !== activeId))
-      setDarkPlayers([...darkPlayers, player])
-      setHasChanges(true)
+  useEffect(() => {
+    if (!dirty) return
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    const beforeNavigate = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank' || link.hasAttribute('download')) return
+      const destination = new URL(link.href, window.location.href)
+      if (destination.pathname === window.location.pathname && destination.search === window.location.search) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDiscardTarget(destination.href)
     }
-  }
-
-  // Touch-friendly fallback for drag and drop: move a player with a button tap
-  const moveToTeam = (playerId: string, from: 'dark' | 'light') => {
-    if (from === 'dark') {
-      const player = darkPlayers.find((p) => p.id === playerId)
-      if (!player) return
-      setDarkPlayers(darkPlayers.filter((p) => p.id !== playerId))
-      setLightPlayers([...lightPlayers, player])
-    } else {
-      const player = lightPlayers.find((p) => p.id === playerId)
-      if (!player) return
-      setLightPlayers(lightPlayers.filter((p) => p.id !== playerId))
-      setDarkPlayers([...darkPlayers, player])
+    window.addEventListener('beforeunload', beforeUnload)
+    document.addEventListener('click', beforeNavigate, true)
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload)
+      document.removeEventListener('click', beforeNavigate, true)
     }
-    setHasChanges(true)
-  }
+  }, [dirty, t])
 
-  const changePosition = (playerId: string, team: 'dark' | 'light', position: string) => {
-    const updater = (list: Player[]) => list.map((p) => (p.id === playerId ? { ...p, position } : p))
-    if (team === 'dark') setDarkPlayers(updater(darkPlayers))
-    else setLightPlayers(updater(lightPlayers))
-    setHasChanges(true)
+  const move = (id: string, destination: TeamSlot) => {
+    if (saving) return
+    const player = [...draft.pool, ...draft.dark, ...draft.light].find((p) => p.id === id)
+    setDraft((current) => movePlayer(current, id, destination))
+    setDirty(true)
+    // Assigning the last unplaced player leaves an empty pool tab on mobile.
+    if (activeSlot === 'pool' && destination !== 'pool' && draft.pool.length === 1) setActiveSlot(destination)
+    if (player) setAnnouncement(t('ui.builder.moved', { name: player.displayName, team: t(destination === 'pool' ? 'ui.teamsScreen.unassigned' : `ui.teamsScreen.${destination}`) }))
   }
-
-  const handleSave = async () => {
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    setActive(null)
+    if (over && ['pool', 'dark', 'light'].includes(String(over.id))) move(String(active.id), over.id as TeamSlot)
+  }
+  const save = async () => {
+    if (problem || saving) return
     setSaving(true)
     setError(null)
-
     try {
-      const assignments = [
-        ...darkPlayers.map((p, i) => ({
-          team: 'dark' as const,
-          player_id: p.playerId,
-          guest_player_id: p.guestPlayerId,
-          position: p.position,
-          order_index: i,
-        })),
-        ...lightPlayers.map((p, i) => ({
-          team: 'light' as const,
-          player_id: p.playerId,
-          guest_player_id: p.guestPlayerId,
-          position: p.position,
-          order_index: i,
-        })),
-      ]
-
-      const { error: saveError } = await supabase.rpc('save_team_assignments', {
+      const { error } = await createClient().rpc('publish_match_teams', {
         p_match_id: matchId,
-        p_assignments: assignments as unknown as Json,
+        p_assignments: assignmentPayload(draft) as unknown as Json,
+        p_snapshot: null,
       })
-
-      if (saveError) throw saveError
-
-      setHasChanges(false)
-      onUpdate()
+      if (error) throw error
+      setDirty(false)
+      onSaved()
+    } catch (error) {
+      console.error('Error publishing teams:', error)
+      // Database messages are Spanish-only; the most common cause is a
+      // roster change, so refresh it and let the captain review and retry.
+      setError(t('ui.builder.saveError'))
       router.refresh()
-    } catch (err) {
-      console.error('Error saving teams:', err)
-      setError('No se pudieron guardar los cambios. Probá de nuevo.')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
-
-  // Calculate team stats
-  const darkAvg = darkPlayers.length > 0
-    ? darkPlayers.reduce((sum, p) => sum + p.overallRating, 0) / darkPlayers.length
-    : 0
-  const lightAvg = lightPlayers.length > 0
-    ? lightPlayers.reduce((sum, p) => sum + p.overallRating, 0) / lightPlayers.length
-    : 0
-
-  if (!isAdminOrCaptain) {
-    return null
+  const cancel = () => {
+    if (dirty) setDiscardTarget('cancel')
+    else onCancel()
   }
-
-  const teamHeader = (team: 'dark' | 'light', count: number, avg: number) => (
-    <CardHeader
-      className="flex-row items-baseline justify-between space-y-0 rounded-t-md py-3 lg:py-3"
-      style={
-        team === 'dark'
-          ? { backgroundColor: TEAM_DARK, color: TEAM_LIGHT }
-          : { backgroundColor: TEAM_LIGHT, color: TEAM_LIGHT_INK }
-      }
-    >
-      <CardTitle className="text-base">{t(`ui.teamsScreen.${team}`)}</CardTitle>
-      <span className="font-mono text-xs tabular-nums">
-        {t('ui.teamsScreen.level', { n: avg.toFixed(1) })} · {count}
-      </span>
-    </CardHeader>
-  )
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-
-      {/* Save button */}
-      {hasChanges && (
-        <Card variant="solid" className="border-primary">
-          <CardContent className="py-3 lg:py-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <p className="text-sm">Hay cambios sin guardar</p>
-              <Button onClick={handleSave} disabled={saving} size="sm">
-                {saving ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <Save className="h-4 w-4" strokeWidth={1.75} />
-                )}
-                Guardar cambios
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Dark Team */}
-          <Card variant="solid">
-            {teamHeader('dark', darkPlayers.length, darkAvg)}
-            <CardContent className="pt-4 lg:pt-4" id="dark-team">
-              <SortableContext
-                items={darkPlayers.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2 min-h-[100px]">
-                  {darkPlayers.map((player) => (
-                    <SortablePlayer
-                      key={player.id}
-                      player={player}
-                      teamColor="dark"
-                      onMoveTeam={() => moveToTeam(player.id, 'dark')}
-                      onPositionChange={(position) => changePosition(player.id, 'dark', position)}
-                    />
-                  ))}
-                  {darkPlayers.length === 0 && (
-                    <p className="text-center text-sm text-muted-foreground py-8">
-                      Arrastra jugadores aquí
-                    </p>
-                  )}
-                </div>
-              </SortableContext>
-            </CardContent>
-          </Card>
-
-          {/* Light Team */}
-          <Card variant="solid">
-            {teamHeader('light', lightPlayers.length, lightAvg)}
-            <CardContent className="pt-4 lg:pt-4" id="light-team">
-              <SortableContext
-                items={lightPlayers.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2 min-h-[100px]">
-                  {lightPlayers.map((player) => (
-                    <SortablePlayer
-                      key={player.id}
-                      player={player}
-                      teamColor="light"
-                      onMoveTeam={() => moveToTeam(player.id, 'light')}
-                      onPositionChange={(position) => changePosition(player.id, 'light', position)}
-                    />
-                  ))}
-                  {lightPlayers.length === 0 && (
-                    <p className="text-center text-sm text-muted-foreground py-8">
-                      Arrastra jugadores aquí
-                    </p>
-                  )}
-                </div>
-              </SortableContext>
-            </CardContent>
-          </Card>
+    <div className="space-y-5 pb-28" aria-busy={saving}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 ref={headingRef} tabIndex={-1} className="font-display text-xl font-bold focus:outline-none lg:sr-only">{t('ui.builder.title')}</h2>
+          <p className="max-w-xl text-sm text-muted-foreground">{t('ui.builder.instructions')}</p>
         </div>
-
-        <DragOverlay>
-          {activePlayer && <PlayerOverlay player={activePlayer} />}
-        </DragOverlay>
+        <Button type="button" variant="outline" onClick={cancel} disabled={saving}><X className="h-4 w-4" aria-hidden="true" />{t('common.cancel')}</Button>
+      </div>
+      <p className="sr-only" role="status">{announcement}</p>
+      {error && <FormNotice kind="error">{error}</FormNotice>}
+      <div className="sticky top-12 z-20 -mx-4 grid grid-cols-3 gap-1 border-y border-border bg-background px-4 py-2 lg:hidden" role="group" aria-label={t('ui.builder.title')}>
+        {(['pool', 'dark', 'light'] as const).map((slot) => (
+          <button key={slot} type="button" aria-pressed={activeSlot === slot} onClick={() => setActiveSlot(slot)} className={cn('min-h-12 rounded-sm px-1 py-2 text-xs transition-colors', activeSlot === slot ? 'bg-accent font-semibold text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent')}>
+            {t(slot === 'pool' ? 'ui.teamsScreen.unassigned' : `ui.teamsScreen.${slot}`)} <span className="ml-1 font-mono tabular-nums">{draft[slot].length}</span>
+          </button>
+        ))}
+      </div>
+      <DndContext accessibility={{ announcements: {
+        onDragStart: ({ active }) => t('ui.builder.drag', { name: [...draft.pool, ...draft.dark, ...draft.light].find((p) => p.id === active.id)?.displayName ?? '' }),
+        onDragOver: () => undefined,
+        onDragEnd: () => undefined,
+        onDragCancel: () => t('common.cancel'),
+      } }} sensors={sensors} collisionDetection={closestCenter} onDragStart={({ active }) => setActive([...draft.pool, ...draft.dark, ...draft.light].find((p) => p.id === active.id) ?? null)} onDragEnd={onDragEnd} onDragCancel={() => setActive(null)}>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          {(['pool', 'dark', 'light'] as const).map((team) => {
+            const list = draft[team].filter((player) => team !== 'pool' || `${player.displayName} ${player.nickname ?? ''}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+            return (
+              <TeamZone key={team} team={team} players={draft[team]} disabled={saving} activeSlot={activeSlot}>
+                {team === 'pool' && draft.pool.length > 0 && <div className="relative"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input value={search} onChange={(e) => setSearch(e.target.value)} aria-label={t('ui.builder.search')} placeholder={t('ui.builder.search')} className="pl-9" /></div>}
+                <ul className="space-y-2">
+                  {list.map((player) => <PlayerCard key={player.id} player={player} team={team} disabled={saving} onMove={(destination) => move(player.id, destination)} onPosition={(position) => { setDraft((current) => ({ ...current, [team]: current[team].map((p) => p.id === player.id ? { ...p, position } : p) })); setDirty(true) }} />)}
+                </ul>
+                {list.length === 0 && <p className="px-2 py-5 text-center text-sm text-muted-foreground">{t(team === 'pool' ? draft.pool.length ? 'ui.builder.noResults' : 'ui.builder.allAssigned' : 'ui.builder.dropHere')}</p>}
+              </TeamZone>
+            )
+          })}
+        </div>
+        <DragOverlay dropAnimation={null}>{active && <div className="rounded-md border-2 border-primary bg-card p-4 text-sm font-semibold">{active.displayName}</div>}</DragOverlay>
       </DndContext>
+      <Sheet open={discardTarget !== null} onOpenChange={(open) => { if (!open) setDiscardTarget(null) }} title={t('ui.builder.unsavedTitle')} description={t('ui.builder.discardConfirm')}>
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button variant="outline" onClick={() => setDiscardTarget(null)}>{t('ui.builder.keepEditing')}</Button>
+          <Button variant="destructive" onClick={() => { const target = discardTarget; setDirty(false); setDiscardTarget(null); if (target === 'cancel') onCancel(); else if (target) router.push(target) }}>{t('ui.builder.discard')}</Button>
+        </div>
+      </Sheet>
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t border-border bg-card px-4 py-3 lg:left-60 lg:bottom-0">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <div aria-live="polite" className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4" aria-hidden="true" />{t('ui.builder.assigned', { n: total - draft.pool.length, total })}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{problem ? t(`ui.builder.${problem}`) : t('ui.builder.ready', { dark: draft.dark.length, light: draft.light.length })}</p>
+          </div>
+          <Button type="button" onClick={save} disabled={!!problem || saving || (hasTeams && !dirty)}>
+            {saving ? <Spinner size="sm" /> : <Save className="h-4 w-4" aria-hidden="true" />}
+            {t(saving ? 'ui.builder.saving' : hasTeams ? 'common.save' : 'ui.builder.publish')}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

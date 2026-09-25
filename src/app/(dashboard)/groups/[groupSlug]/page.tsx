@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -136,7 +137,8 @@ export default async function GroupDetailPage({ params }: PageProps) {
     await supabase.rpc('generate_recurring_matches', { p_group_id: group.id })
     // Emit match_created (§2.6) for whatever that just created (or a racing
     // cron sweep already did); see src/lib/notifications/match-created.ts.
-    await emitPendingMatchCreatedNotifications(supabase, group.id)
+    // emit_notification is service-role only; membership was checked above.
+    await emitPendingMatchCreatedNotifications(createAdminClient(), group.id)
   } catch {
     // ignore
   }
@@ -154,7 +156,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .limit(6) as { data: MatchRowData[] | null }
 
   const upcoming = upcomingRows || []
-  const nextMatch = upcoming.find(m => m.status !== 'draft') ?? null
+  const nextMatch = upcoming.find(m => m.status !== 'draft') ?? (isAdminOrCaptain ? upcoming[0] ?? null : null)
   const otherUpcoming = upcoming.filter(m => m.id !== nextMatch?.id)
 
   // Confirmed counts for the upcoming rows, in one query
@@ -354,11 +356,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
   // One orange per screen (docs/ui-rework/01-brand.md §1): while the next
   // match is full / closed and has no teams, arming the teams is the thing
   // to do, so it takes the primary and "Crear partido" goes outline.
-  const teamsPending =
-    isAdminOrCaptain &&
-    !!nextMatch &&
-    !nextHasTeams &&
-    (nextMatch.status === 'full' || nextMatch.status === 'signup_closed')
   const showBuildTeams =
     isAdminOrCaptain &&
     !!nextMatch &&
@@ -367,7 +364,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     confirmed.length >= 4
   // Teams already armed: everyone gets "Ver equipos" in the same slot.
   const showViewTeams = !!nextMatch && nextHasTeams
-  const createIsPrimary = !teamsPending
+  const createIsPrimary = !showBuildTeams && !showViewTeams && nextMatch?.status !== 'draft'
 
   const matchHref = (id: string) => `/groups/${groupSlug}/matches/${id}`
   const waitlistNames = waitlist
@@ -461,8 +458,22 @@ export default async function GroupDetailPage({ params }: PageProps) {
         }
       />
 
-      {/* Mobile: the top bar already shows the group name; only the meta line here */}
-      <p className="text-sm text-muted-foreground text-pretty lg:hidden">{subtitle}</p>
+      {/* Mobile: keep the group context and its everyday actions within reach. */}
+      <div className="space-y-4 lg:hidden">
+        <h1 className="sr-only">{group.name}</h1>
+        <p className="text-sm text-muted-foreground text-pretty">{subtitle}</p>
+        <div className="flex flex-wrap gap-2">
+          {isAdminOrCaptain && (
+            <Button asChild variant={createIsPrimary && !nextMatch ? 'default' : 'outline'}>
+              <Link href={`/groups/${groupSlug}/matches/new`}>
+                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('ui.matchScreens.dashboard.createMatch')}
+              </Link>
+            </Button>
+          )}
+          <InviteButton inviteUrl={inviteUrl} />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Main column */}
@@ -470,13 +481,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
           {/* Próximo partido */}
           <Card>
             <CardHeader className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Eyebrow>{t('ui.matchScreens.dashboard.nextMatch')}</Eyebrow>
                 {nextMatch && <MatchStatusBadge status={nextMatch.status} label={t(`matches.status.${nextMatch.status}`)} />}
               </div>
               {nextMatch ? (
-                <div className="space-y-1">
-                  <CardTitle className="text-xl lg:text-2xl">
+                <div className="space-y-2">
+                  <CardTitle className="text-2xl lg:text-3xl">
                     <Link
                       href={matchHref(nextMatch.id)}
                       className="rounded-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
@@ -488,15 +499,32 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-pretty">
-                  {isAdminOrCaptain
-                    ? t('ui.matchScreens.dashboard.noNextMatchAdmin')
-                    : t('ui.matchScreens.dashboard.noNextMatch')}
+                  {otherUpcoming.length > 0
+                    ? t('ui.polish.noOpenMatch')
+                    : isAdminOrCaptain
+                      ? t('ui.matchScreens.dashboard.noNextMatchAdmin')
+                      : t('ui.matchScreens.dashboard.noNextMatch')}
                 </p>
               )}
             </CardHeader>
 
             {nextMatch && (
               <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {(showBuildTeams || showViewTeams) && (
+                    <Button asChild variant="default">
+                      <Link href={`${matchHref(nextMatch.id)}/teams`}>
+                        <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        {showViewTeams
+                          ? t('ui.matchScreens.match.viewTeams')
+                          : t('ui.matchScreens.dashboard.buildTeams')}
+                      </Link>
+                    </Button>
+                  )}
+                  {nextMatch.status === 'draft' && (
+                    <Button asChild><Link href={matchHref(nextMatch.id)}>{t('ui.workflow.reviewDraft')}</Link></Button>
+                  )}
+                </div>
                 <SpotsMeter
                   confirmed={confirmed.length}
                   max={nextMatch.max_players}
@@ -505,25 +533,30 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 />
 
                 {confirmed.length > 0 && (
-                  <ol className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-6 [&>li:last-child>*]:border-b-0 lg:[&>li:nth-last-child(2):nth-child(odd)>*]:border-b-0">
-                    {confirmed.map((s, i) => {
-                      const player = s.player_profiles
-                      const guest = s.guest_players
-                      const name = player?.display_name || guest?.display_name || '—'
-                      return (
-                        <li key={s.id}>
-                          <PlayerRow
-                            index={i + 1}
-                            name={name}
-                            nickname={player?.nickname}
-                            position={player?.main_position || guest?.preferred_positions?.[0] || null}
-                            guest={!player && !!guest}
-                            language={language}
-                          />
-                        </li>
-                      )
-                    })}
-                  </ol>
+                  <details className="border-t border-border pt-3">
+                    <summary className="-mt-3 cursor-pointer py-3 text-sm font-semibold">{t('ui.workflow.roster', { n: confirmed.length })}</summary>
+                    <div className="pt-3">
+                      <ol className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-6 [&>li:last-child>*]:border-b-0 lg:[&>li:nth-last-child(2):nth-child(odd)>*]:border-b-0">
+                        {confirmed.map((s, i) => {
+                          const player = s.player_profiles
+                          const guest = s.guest_players
+                          const name = player?.display_name || guest?.display_name || '—'
+                          return (
+                            <li key={s.id}>
+                              <PlayerRow
+                                index={i + 1}
+                                name={name}
+                                nickname={player?.nickname}
+                                position={player?.main_position || guest?.preferred_positions?.[0] || null}
+                                guest={!player && !!guest}
+                                language={language}
+                              />
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    </div>
+                  </details>
                 )}
 
                 {waitlistNames.length > 0 && (
@@ -533,16 +566,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 )}
 
                 <div className="flex flex-wrap gap-2">
-                  {(showBuildTeams || showViewTeams) && (
-                    <Button asChild variant={teamsPending ? 'default' : 'outline'}>
-                      <Link href={`${matchHref(nextMatch.id)}/teams`}>
-                        <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                        {showViewTeams
-                          ? t('ui.matchScreens.match.viewTeams')
-                          : t('ui.matchScreens.dashboard.buildTeams')}
-                      </Link>
-                    </Button>
-                  )}
                   {(nextMatch.status === 'signup_open' || nextMatch.status === 'full') && (
                     <Button asChild variant="outline">
                       <a href={waUrl} target="_blank" rel="noopener noreferrer">
@@ -561,10 +584,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
                   )}
                 </div>
 
-                {/* Mobile tap target for the whole match */}
+                {/* Keep the match's signup/details entry point visible at every width. */}
                 <Link
                   href={matchHref(nextMatch.id)}
-                  className="-mx-4 -mb-4 flex min-h-11 items-center justify-between border-t border-border px-4 text-sm font-semibold hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset lg:hidden"
+                  className="-mx-4 -mb-4 flex min-h-12 items-center justify-between border-t border-border bg-accent/30 px-4 text-sm font-semibold hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset lg:-mx-5 lg:-mb-5 lg:px-5"
                 >
                   {t('ui.matchScreens.dashboard.viewMatch')}
                   <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />

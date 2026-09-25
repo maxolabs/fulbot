@@ -11,6 +11,9 @@
 // It is deliberately idempotent and cheap when nothing is due, so it can be
 // called from anywhere and as often as you like: the ticker script, the daily
 // Vercel cron, or opportunistically from page renders (see opportunistic-tick.ts).
+import { emitPendingMatchCreatedNotifications } from './match-created'
+import { emitMatchReminders } from './reminders'
+import { drainPushOutbox } from './push'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { drainOutbox, type DrainOutboxResult } from './dispatch'
 
@@ -33,6 +36,8 @@ export interface TickResult {
   failed: number
   jobs: TickJobResult[]
   outbox: DrainOutboxResult | { error: string }
+  sweeps: { recurringError?: string; remindersError?: string }
+  push: Awaited<ReturnType<typeof drainPushOutbox>> | { error: string }
 }
 
 function errorMessage(error: unknown): string {
@@ -41,6 +46,16 @@ function errorMessage(error: unknown): string {
 
 export async function runTick(): Promise<TickResult> {
   const supabase = createAdminClient()
+  const sweeps: TickResult['sweeps'] = {}
+  // The minute ticker must open recurring signups and emit reminders even
+  // when nobody has the app open. The daily cron is only a fallback.
+  try {
+    const { error } = await supabase.rpc('generate_recurring_matches', {})
+    if (error) throw new Error(error.message)
+    await emitPendingMatchCreatedNotifications(supabase)
+  } catch (error) { sweeps.recurringError = errorMessage(error) }
+  try { await emitMatchReminders(supabase) }
+  catch (error) { sweeps.remindersError = errorMessage(error) }
   const jobs: TickJobResult[] = []
   let claimed = 0
   let done = 0
@@ -75,13 +90,11 @@ export async function runTick(): Promise<TickResult> {
     if (rows.length < CLAIM_BATCH) break
   }
 
-  let outbox: TickResult['outbox']
-  try {
-    outbox = await drainOutbox()
-  } catch (error) {
-    console.error('Error draining notification outbox after tick:', error)
-    outbox = { error: errorMessage(error) }
-  }
-
-  return { claimed, done, failed, jobs, outbox }
+  // A slow legacy bridge must not hold up device alerts.
+  const [outboxResult, pushResult] = await Promise.allSettled([drainOutbox(), drainPushOutbox()])
+  const outbox: TickResult['outbox'] = outboxResult.status === 'fulfilled'
+    ? outboxResult.value : { error: errorMessage(outboxResult.reason) }
+  const push: TickResult['push'] = pushResult.status === 'fulfilled'
+    ? pushResult.value : { error: errorMessage(pushResult.reason) }
+  return { claimed, done, failed, jobs, outbox, push, sweeps }
 }

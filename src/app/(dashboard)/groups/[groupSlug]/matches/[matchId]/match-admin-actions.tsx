@@ -18,6 +18,7 @@ interface MatchAdminActionsProps {
   currentStatus: string
   hasEnoughPlayers: boolean
   /** Teams exist for this match; without them the status can never reach 'finished'. */
+  secondaryOnly?: boolean
   hasTeams?: boolean
   /** Called after a navigation so the popover / sheet can close. */
   onNavigate?: () => void
@@ -33,6 +34,7 @@ export function MatchAdminActions({
   currentStatus,
   hasEnoughPlayers,
   hasTeams = true,
+  secondaryOnly = false,
   onNavigate,
 }: MatchAdminActionsProps) {
   const router = useRouter()
@@ -97,7 +99,7 @@ export function MatchAdminActions({
 
   return (
     <div className="space-y-2">
-      {!hasTeams &&
+      {!secondaryOnly && !hasTeams &&
         (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
           <p className="text-xs text-muted-foreground text-pretty">
             Sin equipos no se puede cerrar el partido: armá los equipos primero.
@@ -115,7 +117,7 @@ export function MatchAdminActions({
       )}
 
       {/* Open signup */}
-      {currentStatus === 'draft' && (
+      {!secondaryOnly && currentStatus === 'draft' && (
         <Button
           variant="outline"
           className="w-full justify-start"
@@ -132,7 +134,7 @@ export function MatchAdminActions({
       )}
 
       {/* Close signup */}
-      {(currentStatus === 'signup_open' || currentStatus === 'full') && (
+      {!secondaryOnly && (currentStatus === 'signup_open' || currentStatus === 'full') && (
         <Button
           variant="outline"
           className="w-full justify-start"
@@ -149,7 +151,7 @@ export function MatchAdminActions({
       )}
 
       {/* Reopen signup */}
-      {currentStatus === 'signup_closed' && (
+      {!secondaryOnly && currentStatus === 'signup_closed' && (
         <Button
           variant="outline"
           className="w-full justify-start"
@@ -166,7 +168,7 @@ export function MatchAdminActions({
       )}
 
       {/* Generate teams — or, once they exist, go and edit them */}
-      {hasTeams ? (
+      {!secondaryOnly && (hasTeams ? (
         currentStatus !== 'cancelled' && (
           <Button asChild variant="outline" className="w-full justify-start">
             <Link href={`/groups/${groupSlug}/matches/${matchId}/teams`} onClick={onNavigate}>
@@ -184,10 +186,10 @@ export function MatchAdminActions({
             </Link>
           </Button>
         )
-      )}
+      ))}
 
       {/* Mark as finished */}
-      {currentStatus === 'teams_created' && (
+      {!secondaryOnly && currentStatus === 'teams_created' && (
         <Button
           variant="outline"
           className="w-full justify-start"
@@ -208,7 +210,7 @@ export function MatchAdminActions({
         <Button
           variant="outline"
           className="w-full justify-start text-destructive hover:text-destructive"
-          onClick={() => updateStatus('cancelled')}
+          onClick={() => { if (window.confirm(t('ui.workflow.cancelConfirm'))) void updateStatus('cancelled') }}
           disabled={loading !== null}
         >
           {loading === 'cancelled' ? (

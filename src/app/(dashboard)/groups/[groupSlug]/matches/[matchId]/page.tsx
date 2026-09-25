@@ -12,10 +12,12 @@ import { SignupList } from './signup-list'
 import { MatchActionBar, SignupActions, SignupDetail, SignupProvider } from './signup-actions'
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { MatchAdminActions } from './match-admin-actions'
+import { MatchWorkflow } from './match-workflow'
 import { AddGuestForm } from './add-guest-form'
 import { PostMatchVoting } from './post-match-voting'
 import { RulesManager } from './rules-manager'
 import { RealtimeWrapper } from './realtime-wrapper'
+import { ShareActions } from '@/components/share-actions'
 import { MatchResults } from './match-results'
 import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
@@ -482,6 +484,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const matchHref = `${groupHref}/matches/${matchId}`
   const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
 
+  const shareText = `${group.name} · ${heroDate}\n${match.location || ''}\n${shareUrl}`
+
   // Finished: the score replaces the count once the viewer may see it (blind rule).
   const darkTeam = matchTeams.find(tm => tm.name === 'dark')
   const lightTeam = matchTeams.find(tm => tm.name === 'light')
@@ -492,19 +496,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // Action bar (mobile): one primary. Admin extra while the match is full or
   // closed without teams; "Reportar resultado" after the match until reported.
   const buildTeamsHref =
-    isLive && isAdminOrCaptain && !hasTeams && confirmedSignups.length >= 4 &&
-    (match.status === 'full' || match.status === 'signup_closed')
+    isAdminOrCaptain && !hasTeams && confirmedSignups.length >= 4 &&
+    ['signup_open', 'full', 'signup_closed'].includes(match.status)
       ? `${matchHref}/teams`
       : undefined
   // Once the teams exist, the teams screen is where everyone goes (03-screens
   // §4: "the screenshot people send"), members included.
   const viewTeamsHref = hasTeams && match.status !== 'cancelled' ? `${matchHref}/teams` : undefined
   const reportHref = isFinished && viewerCanReport && !ownReport && reportTeams.length > 0 ? '#reportar' : undefined
-  const showActionBar = (isLive && match.status !== 'draft') || !!reportHref
+  const showActionBar = (isLive && match.status !== 'draft') || !!buildTeamsHref || !!viewTeamsHref || !!reportHref
 
   const showAnnouncement = match.status === 'signup_open' || match.status === 'full'
   const showAddGuest = isAdminOrCaptain && !isFinished && match.status !== 'cancelled'
-  const showRules = isAdminOrCaptain && (match.status === 'signup_open' || match.status === 'full')
+  const showRules = isAdminOrCaptain && ['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)
 
   // MatchAdminActions renders nothing once the match is finished; without
   // actions there is no "Gestionar" (the sheet would be empty too).
@@ -512,6 +516,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   const adminActions = hasAdminActions ? (
     <MatchAdminActions
+      secondaryOnly
       hasTeams={hasTeams}
       matchId={match.id}
       groupSlug={groupSlug}
@@ -550,13 +555,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
     <RulesManager groupId={group.id} matchId={match.id} players={rulePlayers} />
   ) : null
 
-  // Mobile sheet: admin actions + announcement + add guest + rules (03-screens §3)
+  // Secondary settings and sharing live in the sheet; core match actions stay visible.
   const sheetContent = hasAdminActions ? (
     <>
       {adminActions}
       {announcement && <div className="border-t border-border pt-6">{announcement}</div>}
-      {addGuest && <div className="border-t border-border pt-6">{addGuest}</div>}
-      {rules && <div className="border-t border-border pt-6">{rules}</div>}
     </>
   ) : undefined
 
@@ -580,6 +583,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             groupName={group.name}
             groupHref={groupHref}
             shareUrl={shareUrl}
+            shareText={shareText}
             manageContent={sheetContent}
           />
 
@@ -604,7 +608,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
             }
             actions={
               <>
-                {viewTeamsHref && (
+                {/* Organizers and reporters get this link in the workflow panel. */}
+                {viewTeamsHref && !isAdminOrCaptain && !reportHref && (
                   <Button asChild variant="outline">
                     <Link href={viewTeamsHref}>
                       <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -612,7 +617,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                     </Link>
                   </Button>
                 )}
-                <ShareMatchButton shareUrl={shareUrl} />
+                <ShareMatchButton shareUrl={shareUrl} shareText={shareText} />
                 {adminActions && <ManagePopover>{adminActions}</ManagePopover>}
               </>
             }
@@ -645,6 +650,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
               </p>
             )}
           </div>
+
+          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} />
+
+          {heroScore && (
+            <details className="rounded-md border border-border bg-card p-4">
+              <summary className="-my-3 cursor-pointer py-3 text-sm font-semibold">{t('sharing.resultsTitle')}</summary>
+              <div className="mt-3"><ShareActions text={`${group.name} · ${heroDate}\n${t('ui.matchScreens.dashboard.dark')} ${heroScore.dark} – ${heroScore.light} ${t('ui.matchScreens.dashboard.light')}\n${shareUrl}`} /></div>
+            </details>
+          )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             {/* Main column */}
@@ -679,6 +693,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
                     language={language}
                   />
                   {isLive && <SignupDetail />}
+                </div>
+              )}
+
+              {isAdminOrCaptain && !isFinished && match.status !== 'cancelled' && (
+                <div className="space-y-3 lg:hidden">
+                  {addGuest && <details id="invitado" className="rounded-md border border-border bg-card p-4"><summary className="-my-3 cursor-pointer py-3 text-sm font-semibold">{t('ui.matchScreens.dashboard.addGuest')}</summary><div className="pt-4">{addGuest}</div></details>}
+                  {rules && <details className="rounded-md border border-border bg-card p-4"><summary className="-my-3 cursor-pointer py-3 text-sm font-semibold">{t('ui.workflow.rules')}</summary><div className="pt-4">{rules}</div></details>}
                 </div>
               )}
 
@@ -824,7 +845,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 />
               )}
 
-              {addGuest && <div id="invitado">{addGuest}</div>}
+              {addGuest && <div id="invitado-lg">{addGuest}</div>}
 
               {rules}
 
@@ -853,6 +874,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
           {showActionBar && (
             <MatchActionBar
+              allowSignup={isLive}
               buildTeamsHref={buildTeamsHref}
               buildTeamsLabel={t('ui.matchScreens.dashboard.buildTeams')}
               viewTeamsHref={viewTeamsHref}

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Bell, CalendarDays, Home, LogOut, Settings, Star, User, Users } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { Popover } from '@/components/ui/popover'
+import { disableDevicePush } from '@/lib/notifications/device-client'
 import { createClient } from '@/lib/supabase/client'
 import { groupSlugFromPathname } from '@/lib/group-cookie'
 import { useT } from '@/i18n/provider'
@@ -73,6 +74,7 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
 
   const handleSignOut = async () => {
     const supabase = createClient()
+    await disableDevicePush().catch(() => {})
     await supabase.auth.signOut()
     router.push('/login')
   }
@@ -80,7 +82,8 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
   const slug = groupSlugFromPathname(pathname)
   const routeGroup = slug ? groups.find((g) => g.slug === slug) : undefined
   const groupBase = routeGroup ? `/groups/${routeGroup.slug}` : null
-  const groupData = routeGroup && currentGroup?.slug === routeGroup.slug ? currentGroup : undefined
+  const selectedGroup = shell?.currentGroup ?? currentGroup
+  const groupData = routeGroup && selectedGroup?.slug === routeGroup.slug ? selectedGroup : undefined
   const isAdmin = routeGroup?.role === 'admin'
   const isAdminOrCaptain = isAdmin || routeGroup?.role === 'captain'
   const pendingRatings = groupData?.pendingRatings ?? 0
@@ -116,11 +119,11 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
   return (
     <aside
       className={cn(
-        'sticky top-0 z-30 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-card lg:flex',
+        'sticky top-0 z-30 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-card lg:flex',
         className
       )}
     >
-      <div className="flex h-14 shrink-0 items-center px-4">
+      <div className="flex h-20 shrink-0 items-center px-6">
         <Link
           href="/groups"
           className="rounded-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
@@ -157,6 +160,7 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
 
       <nav aria-label={t('ui.shell.globalNav')} className="px-3 pb-2">
         <ul className="space-y-0.5">
+          {navItem('/groups', t('ui.shell.myGroups'), Users, isActive('/groups', true))}
           {navItem(
             '/notifications',
             t('ui.shell.notifications'),

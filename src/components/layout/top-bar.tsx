@@ -19,9 +19,9 @@ export type { TopBarConfigValue } from './top-bar-slot'
 // props are the fallback for a page that renders its own TopBar.
 
 const iconButtonClassName =
-  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[3px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[3px] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
 
-/** A 40px icon control for the top bar's right slot (link or button). */
+/** A 44px touch target for the top bar's right slot (link or button). */
 export function TopBarAction({
   href,
   onClick,

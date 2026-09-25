@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { disableDevicePush } from '@/lib/notifications/device-client'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
@@ -20,6 +21,7 @@ export function SignOutButton({ className }: { className?: string }) {
     setBusy(true)
     try {
       const supabase = createClient()
+      await disableDevicePush().catch(() => {})
       await supabase.auth.signOut()
       router.push('/login')
       router.refresh()

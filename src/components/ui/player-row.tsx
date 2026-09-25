@@ -23,6 +23,7 @@ export interface PlayerRowProps {
   avatarUrl?: string | null
   position?: string | null
   guest?: boolean
+  description?: React.ReactNode
   trailing?: React.ReactNode
   href?: string
   language?: Language
@@ -36,6 +37,7 @@ export function PlayerRow({
   avatarUrl,
   position,
   guest = false,
+  description,
   trailing,
   href,
   language = 'es',
@@ -58,11 +60,12 @@ export function PlayerRow({
         </span>
       )}
       <Avatar src={avatarUrl} fallback={name} size="xs" aria-hidden="true" />
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="truncate text-sm font-medium">{name}</span>
-        {nickname && (
-          <span className="truncate text-xs text-muted-foreground">({nickname})</span>
+      <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-1.5">
+        <span className="max-w-full break-words text-sm font-medium">{name}</span>
+        {nickname && nickname !== name && (
+          <span className="max-w-full truncate text-xs text-muted-foreground">({nickname})</span>
         )}
+        {description}
         {guest && (
           <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
             {t('ui.guest')}

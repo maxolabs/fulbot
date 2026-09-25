@@ -38,6 +38,7 @@ export const metadata: Metadata = {
   title: 'fulbot — Organizá tus partidos',
   description: 'Organizá partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más.',
   manifest: '/manifest.json',
+  icons: { apple: '/icons/icon-192.png' },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -49,7 +50,6 @@ export const viewport: Viewport = {
   themeColor: '#173129',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default async function RootLayout({

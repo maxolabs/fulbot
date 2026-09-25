@@ -97,10 +97,12 @@ export function NotificationList({
   items,
   prefs,
   currentPlayerId = null,
+  extraActions,
 }: {
   items: NotificationItem[]
   prefs: Record<string, boolean>
   currentPlayerId?: string | null
+  extraActions?: React.ReactNode
 }) {
   const t = useT()
   const shell = useShell()
@@ -115,8 +117,7 @@ export function NotificationList({
   const [marking, setMarking] = useState(false)
 
   // Respect users.notification_prefs client-side -- never filter in SQL
-  // (see docs/rework-plan.md §2.6). match_created has no per-user toggle
-  // (it's a group-level setting), so it's always shown.
+  // including the signup-opened preference, also used by device push.
   const visibleItems = items.filter((n) => prefs[n.type] !== false && isVisibleTo(n, currentPlayerId))
   const unreadIds = visibleItems.filter((n) => !readIds.has(n.id)).map((n) => n.id)
   const canMark = !marking && unreadIds.length > 0
@@ -162,10 +163,13 @@ export function NotificationList({
         title={title}
         subtitle={t('ui.screens.notifications.subtitle')}
         actions={
-          <Button variant="outline" size="sm" onClick={markAllRead} disabled={!canMark}>
-            <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {markLabel}
-          </Button>
+          <>
+            {extraActions}
+            <Button variant="outline" size="sm" onClick={markAllRead} disabled={!canMark}>
+              <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              {markLabel}
+            </Button>
+          </>
         }
       />
 

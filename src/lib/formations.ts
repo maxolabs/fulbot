@@ -41,25 +41,6 @@ const LINE_RANK: Record<string, number> = {
 const GK_Y = 86
 const FWD_Y = 14
 
-// Position families used to place a player whose assigned position has no
-// exact slot in the formation (e.g. an AI-assigned CAM in a formation without one).
-const FAMILY: Record<string, string> = {
-  GK: 'gk',
-  CB: 'def', LB: 'def', RB: 'def',
-  CDM: 'dm',
-  CM: 'mid', CAM: 'mid', LM: 'mid', RM: 'mid',
-  ST: 'fwd', CF: 'fwd', LW: 'fwd', RW: 'fwd',
-}
-
-// Second-choice families, in preference order, when the player's own family is full.
-const NEIGHBOURS: Record<string, string[]> = {
-  gk: ['def'],
-  def: ['dm', 'mid'],
-  dm: ['def', 'mid'],
-  mid: ['dm', 'fwd', 'def'],
-  fwd: ['mid', 'dm'],
-}
-
 export interface FormationSlot {
   position: string
   x: number
@@ -75,7 +56,10 @@ function spreadX(count: number, index: number): number {
 // Coordinates for every slot in a formation, spreading slots on the same line
 // evenly across the field.
 export function getFormationSlots(size: number): FormationSlot[] {
-  const positions = getFormation(size)
+  return slotsForPositions(getFormation(size))
+}
+
+function slotsForPositions(positions: readonly string[]): FormationSlot[] {
   const ranks = Array.from(new Set(positions.map((pos) => LINE_RANK[pos] ?? 3))).sort((a, b) => a - b)
   const lineY = new Map<number, number>()
   ranks.forEach((rank, i) => {
@@ -97,7 +81,9 @@ export function getFormationSlots(size: number): FormationSlot[] {
     y: lineY.get(LINE_RANK[position] ?? 3) ?? 50,
   }))
   byLine.forEach((indices) => {
-    // Listed right-to-left: first slot on the line gets the highest x.
+    // Keep right/left roles on their actual side, even after manual moves.
+    const side = (position: string) => position.startsWith('R') ? -1 : position.startsWith('L') ? 1 : 0
+    indices.sort((a, b) => side(positions[a]) - side(positions[b]))
     indices.forEach((slotIndex, i) => {
       slots[slotIndex].x = spreadX(indices.length, indices.length - 1 - i)
     })
@@ -110,47 +96,9 @@ export interface PlacedPlayer<T> {
   slot: FormationSlot
 }
 
-// Assign players to formation slots: exact position first, then same family,
-// then neighbouring families, then whatever is left. Every player gets a slot
-// because the formation always has exactly players.length slots.
+// Draw the saved positions, including manually chosen formations. A fixed
+// size-based shape must never silently turn an assigned forward into a keeper.
 export function placePlayersInFormation<T extends { position: string }>(players: T[]): PlacedPlayer<T>[] {
-  const slots = getFormationSlots(players.length)
-  const taken = new Array<boolean>(slots.length).fill(false)
-  const placed = new Array<PlacedPlayer<T> | null>(players.length).fill(null)
-
-  const claim = (playerIndex: number, slotIndex: number) => {
-    taken[slotIndex] = true
-    placed[playerIndex] = { player: players[playerIndex], slot: slots[slotIndex] }
-  }
-  const findSlot = (pred: (position: string) => boolean) =>
-    slots.findIndex((s, i) => !taken[i] && pred(s.position))
-
-  // Pass 1: exact position match
-  players.forEach((p, i) => {
-    const slotIndex = findSlot((pos) => pos === p.position)
-    if (slotIndex !== -1) claim(i, slotIndex)
-  })
-
-  // Pass 2: same family, then neighbouring families
-  players.forEach((p, i) => {
-    if (placed[i]) return
-    const family = FAMILY[p.position]
-    if (!family) return
-    for (const candidate of [family, ...(NEIGHBOURS[family] ?? [])]) {
-      const slotIndex = findSlot((pos) => FAMILY[pos] === candidate)
-      if (slotIndex !== -1) {
-        claim(i, slotIndex)
-        return
-      }
-    }
-  })
-
-  // Pass 3: fill remaining slots in order
-  players.forEach((p, i) => {
-    if (placed[i]) return
-    const slotIndex = findSlot(() => true)
-    if (slotIndex !== -1) claim(i, slotIndex)
-  })
-
-  return placed.filter((p): p is PlacedPlayer<T> => p !== null)
+  const slots = slotsForPositions(players.map((player) => player.position))
+  return players.map((player, index) => ({ player, slot: slots[index] }))
 }
