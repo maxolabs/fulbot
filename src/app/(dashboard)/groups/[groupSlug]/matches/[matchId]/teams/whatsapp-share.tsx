@@ -19,6 +19,7 @@ export interface SharePlayer {
   displayName: string
   nickname: string | null
   position: string
+  isGuest?: boolean
 }
 
 export type MessageFormat = 'simple' | 'detailed' | 'emoji'
@@ -34,7 +35,7 @@ export interface ShareInput {
   copy?: ShareCopy
 }
 
-export interface ShareCopy { dark: string; light: string; closing: string }
+export interface ShareCopy { dark: string; light: string; closing: string; guest?: string }
 const DEFAULT_COPY: ShareCopy = { dark: 'Equipo Oscuro', light: 'Equipo Claro', closing: '¡Nos vemos en la cancha!' }
 
 export function shareName(player: SharePlayer): string {
@@ -44,10 +45,12 @@ export function shareName(player: SharePlayer): string {
 export function generateShareMessage(format: MessageFormat, input: ShareInput): string {
   const link = input.matchUrl ? `\n\n${input.matchUrl}` : ''
   const { groupName, dateLabel: dateStr, darkPlayers, lightPlayers, copy = DEFAULT_COPY } = input
+  // Guests are marked so the group knows who is coming from outside
+  const nameOf = (p: SharePlayer) => p.isGuest && copy.guest ? `${shareName(p)} (${copy.guest})` : shareName(p)
 
   if (format === 'simple') {
-    const darkNames = darkPlayers.map(shareName).join(', ')
-    const lightNames = lightPlayers.map(shareName).join(', ')
+    const darkNames = darkPlayers.map(nameOf).join(', ')
+    const lightNames = lightPlayers.map(nameOf).join(', ')
 
     return `*${groupName}*
 ${dateStr}
@@ -58,8 +61,8 @@ ${dateStr}
   }
 
   if (format === 'detailed') {
-    const darkList = darkPlayers.map((p) => `  ${p.position} - ${shareName(p)}`).join('\n')
-    const lightList = lightPlayers.map((p) => `  ${p.position} - ${shareName(p)}`).join('\n')
+    const darkList = darkPlayers.map((p) => `  ${p.position} - ${nameOf(p)}`).join('\n')
+    const lightList = lightPlayers.map((p) => `  ${p.position} - ${nameOf(p)}`).join('\n')
 
     return `*${groupName}*
 ${dateStr}
@@ -71,8 +74,8 @@ ${darkList}
 ${lightList}${link}`
   }
 
-  const darkList = darkPlayers.map((p) => `⚫ ${shareName(p)} (${p.position})`).join('\n')
-  const lightList = lightPlayers.map((p) => `⚪ ${shareName(p)} (${p.position})`).join('\n')
+  const darkList = darkPlayers.map((p) => `⚫ ${nameOf(p)} (${p.position})`).join('\n')
+  const lightList = lightPlayers.map((p) => `⚪ ${nameOf(p)} (${p.position})`).join('\n')
 
   return `⚽ *${groupName}* ⚽
 📅 ${dateStr}
@@ -101,8 +104,8 @@ export function WhatsAppShare({ open, onOpenChange, ...input }: WhatsAppSharePro
   const message = generateShareMessage(format, input)
   const imageKey = JSON.stringify({
     groupName: input.groupName, matchDate: input.dateLabel, lang: language,
-    darkTeam: input.darkPlayers.map((p) => ({ name: shareName(p), position: p.position })),
-    lightTeam: input.lightPlayers.map((p) => ({ name: shareName(p), position: p.position })),
+    darkTeam: input.darkPlayers.map((p) => ({ name: shareName(p), position: p.position, ...(p.isGuest ? { guest: true } : {}) })),
+    lightTeam: input.lightPlayers.map((p) => ({ name: shareName(p), position: p.position, ...(p.isGuest ? { guest: true } : {}) })),
   })
   const file = prepared?.key === imageKey ? prepared.file : null
   const error = !file && failure === `${imageKey}:${retry}`

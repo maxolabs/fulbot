@@ -4,6 +4,7 @@ import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
 import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
+import { guestPlayerDefaults } from '@/lib/ai/team-generator'
 import { TeamsView } from './teams-view'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
@@ -97,6 +98,8 @@ export default async function TeamsPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
+      estimated_rating: number | null
+      preferred_positions: string[] | null
     } | null
   }
 
@@ -114,7 +117,9 @@ export default async function TeamsPage({ params }: PageProps) {
       ),
       guest_players (
         id,
-        display_name
+        display_name,
+        estimated_rating,
+        preferred_positions
       )
     `)
     .eq('match_id', matchId)
@@ -146,12 +151,19 @@ export default async function TeamsPage({ params }: PageProps) {
           isGuest: false,
         }
       }
-      return {
+      // Same rating and position the generator uses (guestPlayerDefaults)
+      const guest = guestPlayerDefaults({
         id: s.guest_players!.id,
         displayName: s.guest_players!.display_name,
+        preferredPositions: s.guest_players!.preferred_positions,
+        estimatedRating: s.guest_players!.estimated_rating,
+      })
+      return {
+        id: guest.id,
+        displayName: guest.displayName,
         nickname: null,
-        mainPosition: 'CM',
-        overallRating: 2.5,
+        mainPosition: guest.mainPosition,
+        overallRating: guest.overallRating,
         isGuest: true,
       }
     })
