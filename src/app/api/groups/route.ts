@@ -42,20 +42,6 @@ export async function POST(request: NextRequest) {
     const { name, slug, description, defaultMatchDay, defaultMatchTime, defaultMaxPlayers } =
       validationResult.data
 
-    // Check if slug is already taken
-    const { data: existingGroup } = await supabase
-      .from('groups')
-      .select('id')
-      .eq('slug', slug)
-      .single()
-
-    if (existingGroup) {
-      return NextResponse.json(
-        { error: 'Este URL ya está en uso. Elige otro.' },
-        { status: 400 }
-      )
-    }
-
     // Create group with admin membership via RPC (bypasses RLS)
      
     const { data: group, error: groupError } = await (supabase as any)
@@ -69,6 +55,14 @@ export async function POST(request: NextRequest) {
       })
 
     if (groupError) {
+      // groups is readable by members only, so a slug taken by another group
+      // only shows up as the unique violation on insert.
+      if (groupError.code === '23505') {
+        return NextResponse.json(
+          { error: 'Este URL ya está en uso. Elige otro.' },
+          { status: 400 }
+        )
+      }
       console.error('Error creating group:', groupError)
       return NextResponse.json(
         { error: 'Error al crear el grupo' },
@@ -77,82 +71,6 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ group, slug: group.slug }, { status: 201 })
-  } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET() {
-  try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-
-    // Get user's player profile
-    const { data: playerProfile } = (await supabase
-      .from('player_profiles')
-      .select('id')
-      .eq('user_id', user.id)
-      .single()) as { data: { id: string } | null }
-
-    if (!playerProfile) {
-      return NextResponse.json({ groups: [] })
-    }
-
-    // Get user's groups
-    type MembershipWithGroup = {
-      role: string
-      groups: {
-        id: string
-        name: string
-        slug: string
-        description: string | null
-        default_match_day: number | null
-        default_match_time: string | null
-        default_max_players: number
-        invite_code: string
-      } | null
-    }
-
-    const { data: memberships } = await supabase
-      .from('group_memberships')
-      .select(
-        `
-        role,
-        groups (
-          id,
-          name,
-          slug,
-          description,
-          default_match_day,
-          default_match_time,
-          default_max_players,
-          invite_code
-        )
-      `
-      )
-      .eq('player_id', playerProfile.id)
-      .eq('is_active', true) as { data: MembershipWithGroup[] | null }
-
-    const groups =
-      memberships
-        ?.filter((m) => m.groups !== null)
-        .map((m) => ({
-          ...(m.groups as Record<string, unknown>),
-          role: m.role,
-        })) || []
-
-    return NextResponse.json({ groups })
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json(

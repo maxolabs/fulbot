@@ -1127,6 +1127,12 @@ export type Database = {
         }
         Returns: Json
       }
+      get_match_join_info: {
+        Args: {
+          p_match_id: string
+        }
+        Returns: Json
+      }
       admin_finalize_match_results: {
         Args: {
           p_match_id: string

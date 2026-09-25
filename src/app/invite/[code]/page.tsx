@@ -30,6 +30,8 @@ interface PublicGroup {
   default_match_time: string | null
   timezone: string | null
   member_count: number
+  // The visitor's own membership: a removed member's row is invisible to them under RLS
+  viewer_membership: 'active' | 'inactive' | null
   next_match: {
     id: string
     date_time: string
@@ -92,8 +94,8 @@ export default async function InvitePage({ params }: PageProps) {
     : null
   const isFull = match ? match.confirmed_count >= match.max_players : false
 
-  let playerId: string | null = null
-  let wasInactive = false
+  let hasProfile = false
+  const wasInactive = group.viewer_membership === 'inactive'
 
   if (user) {
     const { data: playerProfile } = await supabase
@@ -111,19 +113,11 @@ export default async function InvitePage({ params }: PageProps) {
         />
       )
     }
-    playerId = playerProfile.id
+    hasProfile = true
 
-    const { data: existingMembership } = await supabase
-      .from('group_memberships')
-      .select('id, is_active')
-      .eq('group_id', group.id)
-      .eq('player_id', playerProfile.id)
-      .single() as { data: { id: string; is_active: boolean } | null }
-
-    if (existingMembership?.is_active) {
+    if (group.viewer_membership === 'active') {
       redirect(`/groups/${group.slug}`)
     }
-    wasInactive = existingMembership !== null && !existingMembership.is_active
   }
 
   return (
@@ -165,12 +159,11 @@ export default async function InvitePage({ params }: PageProps) {
               </div>
             </dl>
 
-            {user && playerId ? (
+            {user && hasProfile ? (
               <>
                 <JoinGroupButton
-                  groupId={group.id}
+                  inviteCode={code}
                   groupSlug={group.slug}
-                  playerId={playerId}
                   wasInactive={wasInactive}
                 />
                 <p className="text-center text-xs text-muted-foreground">{t('ui.screens.invite.joinHint')}</p>
