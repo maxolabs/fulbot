@@ -134,20 +134,19 @@ export default async function PublicMatchPage({ params }: PageProps) {
 
     if (profile) {
       profileId = profile.id
-      const { data: groupRow } = await supabase
-        .from('groups')
-        .select('id, invite_code')
-        .eq('slug', match.group_slug)
-        .single() as { data: { id: string; invite_code: string } | null }
+      // groups is readable by members only; this RPC gives a signed-in visitor
+      // the group id and invite code the join-and-sign-up flow needs.
+      const { data: joinInfo } = await supabase.rpc('get_match_join_info', { p_match_id: matchId })
+      const groupRow = joinInfo as { group_id: string; invite_code: string } | null
 
       if (groupRow) {
         inviteCode = groupRow.invite_code
-        groupId = groupRow.id
+        groupId = groupRow.group_id
 
         const { data: membership } = await supabase
           .from('group_memberships')
           .select('id')
-          .eq('group_id', groupRow.id)
+          .eq('group_id', groupRow.group_id)
           .eq('player_id', profile.id)
           .eq('is_active', true)
           .single() as { data: { id: string } | null }
