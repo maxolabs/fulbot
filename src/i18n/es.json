@@ -452,6 +452,8 @@
       "webhookInvalid": "La URL del webhook no es válida.",
       "webhookHttps": "La URL del webhook tiene que empezar con https://.",
       "webhookCredentials": "La URL del webhook no puede llevar usuario ni contraseña.",
+      "prefMatchCancelledTitle": "Partido suspendido",
+      "prefMatchCancelledDesc": "Cuando se suspende un partido en el que estás anotado",
       "webhookHost": "La URL del webhook no puede apuntar a una red local o privada."
     },
     "guest": "invitado",
@@ -984,6 +986,7 @@
       "closedShortBody": "Las inscripciones están cerradas y faltan {n} confirmados. Reabrilas o sumá invitados para armar los equipos."
     },
     "lifecycle": {
+      "deleteError": "No se pudo eliminar el partido. Probá de nuevo.",
       "maxPlayersBelowConfirmed": "El cupo no puede ser menor que la cantidad de confirmados.",
       "timezoneRequired": "Ingresá una zona horaria.",
       "invalidTimezone": "Esa zona horaria no existe. Usá un nombre como America/Argentina/Cordoba.",

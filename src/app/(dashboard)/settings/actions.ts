@@ -12,6 +12,7 @@ export interface NotificationPrefsInput {
   waitlist_promoted: boolean
   teams_created: boolean
   match_reminder: boolean
+  match_cancelled: boolean
   results_posted: boolean
   results_request: boolean
   results_reminder: boolean

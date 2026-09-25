@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Play, Pause, RotateCcw, Users, CheckCircle, XCircle, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 import type { Database } from '@/types/database'
@@ -44,9 +45,11 @@ export function MatchAdminActions({
   const supabase = createClient()
   const t = useT()
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const updateStatus = async (newStatus: MatchStatus) => {
     setLoading(newStatus)
+    setError(null)
 
     try {
       const args: Database['public']['Functions']['admin_set_match_status']['Args'] = {
@@ -59,7 +62,7 @@ export function MatchAdminActions({
       router.refresh()
     } catch (err) {
       console.error('Error updating status:', err)
-      alert('Error al actualizar el estado')
+      setError(t('ui.workflow.statusError'))
     } finally {
       setLoading(null)
     }
@@ -71,6 +74,7 @@ export function MatchAdminActions({
     }
 
     setLoading('delete')
+    setError(null)
 
     try {
       const { error } = await (supabase as any)
@@ -83,7 +87,7 @@ export function MatchAdminActions({
       router.refresh()
     } catch (err) {
       console.error('Error deleting match:', err)
-      alert('Error al eliminar el partido')
+      setError(t('ui.lifecycle.deleteError'))
     } finally {
       setLoading(null)
     }
@@ -102,6 +106,7 @@ export function MatchAdminActions({
 
   return (
     <div className="space-y-2">
+      {error && <FormNotice kind="error">{error}</FormNotice>}
       {!secondaryOnly && !hasTeams &&
         (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
           <p className="text-xs text-muted-foreground text-pretty">

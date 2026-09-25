@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock } from 'lucide-react'
+import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock, CalendarX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -109,6 +109,12 @@ export function SettingsForm({
       icon: CalendarClock,
       title: t('settings.notifMatchReminderTitle'),
       desc: t('settings.notifMatchReminderDesc'),
+    },
+    {
+      key: 'match_cancelled',
+      icon: CalendarX,
+      title: t('ui.notify.prefMatchCancelledTitle'),
+      desc: t('ui.notify.prefMatchCancelledDesc'),
     },
     {
       key: 'results_posted',

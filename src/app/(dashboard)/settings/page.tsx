@@ -49,6 +49,7 @@ export default async function SettingsPage() {
           waitlist_promoted: prefs.waitlist_promoted ?? true,
           teams_created: prefs.teams_created ?? true,
           match_reminder: prefs.match_reminder ?? true,
+          match_cancelled: prefs.match_cancelled ?? true,
           results_posted: prefs.results_posted ?? true,
           results_request: prefs.results_request ?? true,
           results_reminder: prefs.results_reminder ?? true,

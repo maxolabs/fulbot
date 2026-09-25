@@ -452,6 +452,8 @@
       "webhookInvalid": "The webhook URL is not valid.",
       "webhookHttps": "The webhook URL must start with https://.",
       "webhookCredentials": "The webhook URL can't include a username or password.",
+      "prefMatchCancelledTitle": "Match cancelled",
+      "prefMatchCancelledDesc": "When a match you signed up for is cancelled",
       "webhookHost": "The webhook URL can't point to a local or private network."
     },
     "guest": "guest",
@@ -984,6 +986,7 @@
       "closedShortBody": "Signups are closed and {n} more confirmed players are needed. Reopen signups or add guests to build the teams."
     },
     "lifecycle": {
+      "deleteError": "Could not delete the match. Try again.",
       "maxPlayersBelowConfirmed": "The player limit can't be lower than the number of confirmed players.",
       "timezoneRequired": "Enter a time zone.",
       "invalidTimezone": "That time zone doesn't exist. Use a name like America/Argentina/Cordoba.",
