@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Check, Pause, Play, Users, Flag, ArrowRight } from 'lucide-react'
+import { AlertTriangle, Check, Pause, Play, Users, Flag, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
@@ -15,8 +15,10 @@ import type { Database } from '@/types/database'
 
 type Status = Database['public']['Enums']['match_status']
 
-export function MatchWorkflow({ matchId, matchHref, status, confirmed, hasTeams, canManage, reportHref }: {
+export function MatchWorkflow({ matchId, matchHref, status, confirmed, hasTeams, canManage, reportHref, lineupStale = false }: {
   matchId: string; matchHref: string; status: string; confirmed: number; hasTeams: boolean; canManage: boolean; reportHref?: string
+  /** The confirmed list changed after the teams were published (00029): warn before finishing. */
+  lineupStale?: boolean
 }) {
   const t = useT()
   const router = useRouter()
@@ -77,7 +79,16 @@ export function MatchWorkflow({ matchId, matchHref, status, confirmed, hasTeams,
       </div>
       {error && <div className="px-4 pb-4"><FormNotice kind="error">{error}</FormNotice></div>}
       <Sheet open={finishOpen} onOpenChange={setFinishOpen} title={t('ui.workflow.finish')} description={t('ui.workflow.finishConfirm')}>
-        <div className="flex flex-wrap gap-3 pt-4"><Button disabled={busy} onClick={() => updateStatus('finished')}>{busy && <Spinner size="sm" />}{t('ui.workflow.finish')}</Button><Button variant="outline" disabled={busy} onClick={() => setFinishOpen(false)}>{t('common.cancel')}</Button></div>
+        {lineupStale && (
+          <div className="mt-4 space-y-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm" role="status">
+            <p className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
+              <span className="text-pretty">{t('ui.matchLifecycle.finishStale')}</span>
+            </p>
+            <Button asChild variant="outline" size="sm"><Link href={`${matchHref}/teams`}>{t('ui.matchLifecycle.reviewTeams')}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link></Button>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 pt-4"><Button variant={lineupStale ? 'outline' : 'default'} disabled={busy} onClick={() => updateStatus('finished')}>{busy && <Spinner size="sm" />}{t('ui.workflow.finish')}</Button><Button variant="outline" disabled={busy} onClick={() => setFinishOpen(false)}>{t('common.cancel')}</Button></div>
       </Sheet>
     </section>
   )

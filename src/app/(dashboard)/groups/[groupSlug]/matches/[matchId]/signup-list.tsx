@@ -8,11 +8,12 @@ import { Sheet } from '@/components/ui/sheet'
 import { FormNotice } from '@/components/form-controls'
 import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { Spinner } from '@/components/ui/spinner'
-import { Star, X, UserX, RotateCcw } from 'lucide-react'
+import { Pencil, Star, X, UserX, RotateCcw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Database, WaitlistReason } from '@/types/database'
 import { useLanguage, useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
+import { signupErrorKey } from './use-signup-action'
 
 interface Signup {
   id: string
@@ -34,7 +35,8 @@ interface Signup {
     id: string
     display_name: string
     notes?: string | null
-    estimated_rating?: number
+    /** Only sent to admins/captains (the page strips it for members). */
+    estimated_rating?: number | null
     preferred_positions?: string[]
   } | null
 }
@@ -58,6 +60,12 @@ const REASON_BADGE_VARIANT: Record<WaitlistReason, 'warning' | 'destructive' | '
   cooldown: 'destructive',
   full: 'outline',
 }
+
+const LEVEL_VALUES = [1, 2, 3, 4, 5] as const
+
+// admin_set_guest_rating (00029) is not in the generated Database type yet.
+type GuestRatingRpc = (fn: 'admin_set_guest_rating', args: { p_guest_player_id: string; p_rating: number }) =>
+  PromiseLike<{ error: { message: string } | null }>
 
 const iconButtonClassName =
   'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50'
@@ -84,8 +92,37 @@ export function SignupList({
   const [pendingToggle, setPendingToggle] = useState<{ id: string; status: string; name: string } | null>(null)
   // Signup waiting for the removal confirmation (same Sheet pattern).
   const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null)
+  // Guest whose estimated level is being edited ("Editar nivel", admins/captains).
+  const [pendingLevel, setPendingLevel] = useState<{ guestId: string; name: string; rating: number } | null>(null)
+  const [savingLevel, setSavingLevel] = useState(false)
+  const [levelError, setLevelError] = useState<string | null>(null)
 
   const canToggleNoShow = isAdminOrCaptain && matchStatus === 'finished'
+  // The list is frozen once the match is over (00029 rejects the removal too).
+  const listOpen = matchStatus !== 'finished' && matchStatus !== 'cancelled'
+  const canRemove = !!isAdminOrCaptain && listOpen
+  const canEditLevel = !!isAdminOrCaptain && listOpen
+
+  const handleSaveLevel = async () => {
+    if (!pendingLevel) return
+    setSavingLevel(true)
+    setLevelError(null)
+    try {
+      const rpc = supabase.rpc.bind(supabase) as unknown as GuestRatingRpc
+      const { error } = await rpc('admin_set_guest_rating', {
+        p_guest_player_id: pendingLevel.guestId,
+        p_rating: pendingLevel.rating,
+      })
+      if (error) throw error
+      setPendingLevel(null)
+      router.refresh()
+    } catch (err) {
+      console.error('Error saving guest level:', err)
+      setLevelError(t('ui.matchLifecycle.levelSaveError'))
+    } finally {
+      setSavingLevel(false)
+    }
+  }
 
   const handleRemove = async (signupId: string, displayName: string) => {
     setRemovingId(signupId)
@@ -102,7 +139,9 @@ export function SignupList({
       router.refresh()
     } catch (err) {
       console.error('Error removing signup:', err)
-      setError(t('ui.postMatch.removeError', { name: displayName }))
+      const key = signupErrorKey(err)
+      setError(key ? t(key) : t('ui.postMatch.removeError', { name: displayName }))
+      if (key) router.refresh()
     } finally {
       setPendingRemoval(null)
       setRemovingId(null)
@@ -156,7 +195,9 @@ export function SignupList({
           const isCurrentUser = !isGuest && player?.id === currentPlayerId
           const isNoShow = signup.status === 'did_not_show'
           const position = player?.main_position || guest?.preferred_positions?.[0] || null
-          const rating = player ? ratingsById?.[player.id] : guest?.estimated_rating
+          // Levels are for organizers only: ratingsById is only passed to them,
+          // and a guest's estimated level is hidden from members too.
+          const rating = player ? ratingsById?.[player.id] : isAdminOrCaptain ? guest?.estimated_rating : undefined
           const ratingTitle = player ? undefined : t('ui.matchScreens.match.estimatedLevel')
 
           return (
@@ -212,7 +253,26 @@ export function SignupList({
                       </button>
                     )}
 
-                    {isAdminOrCaptain && !isNoShow && (
+                    {canEditLevel && isGuest && guest && (
+                      <button
+                        type="button"
+                        className={iconButtonClassName}
+                        onClick={() => {
+                          setLevelError(null)
+                          setPendingLevel({
+                            guestId: guest.id,
+                            name: displayName,
+                            rating: Math.min(5, Math.max(1, Math.round(guest.estimated_rating ?? 3))),
+                          })
+                        }}
+                        aria-label={`${t('ui.matchLifecycle.editLevel')}: ${displayName}`}
+                        title={t('ui.matchLifecycle.editLevel')}
+                      >
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                      </button>
+                    )}
+
+                    {canRemove && !isNoShow && (
                       <button
                         type="button"
                         className={cn(iconButtonClassName, 'hover:text-destructive')}
@@ -254,7 +314,51 @@ export function SignupList({
           </div>
         </Sheet>
       )}
-      {isAdminOrCaptain && (
+      {canEditLevel && (
+        <Sheet
+          open={pendingLevel !== null}
+          onOpenChange={(open) => { if (!open && !savingLevel) setPendingLevel(null) }}
+          title={pendingLevel ? t('ui.matchLifecycle.editLevelTitle', { name: pendingLevel.name }) : ''}
+          description={t('ui.matchLifecycle.editLevelBody')}
+        >
+          <div className="space-y-4 pt-4">
+            <div className="space-y-1.5">
+              <p id="guest-level-label" className="text-sm font-medium">{t('ui.matchLifecycle.levelLabel')}</p>
+              <div role="radiogroup" aria-labelledby="guest-level-label" className="flex items-center gap-1">
+                {LEVEL_VALUES.map((value) => {
+                  const active = !!pendingLevel && value <= pendingLevel.rating
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={pendingLevel?.rating === value}
+                      aria-label={`${value} / 5`}
+                      disabled={savingLevel}
+                      onClick={() => setPendingLevel((current) => current && { ...current, rating: value })}
+                      className="rounded-sm p-1 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50"
+                    >
+                      <Star className={cn('h-5 w-5', active ? 'fill-primary text-primary' : 'text-muted-foreground')} strokeWidth={1.75} />
+                    </button>
+                  )
+                })}
+                <span className="ml-2 font-mono text-sm tabular-nums text-muted-foreground">{pendingLevel?.rating ?? ''}/5</span>
+              </div>
+            </div>
+            {levelError && <FormNotice kind="error">{levelError}</FormNotice>}
+            <div className="flex flex-wrap gap-3">
+              <Button disabled={savingLevel} onClick={() => { void handleSaveLevel() }}>
+                {savingLevel && <Spinner size="sm" />}
+                {t('common.save')}
+              </Button>
+              <Button variant="outline" disabled={savingLevel} onClick={() => setPendingLevel(null)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+      {canRemove && (
         <Sheet
           open={pendingRemoval !== null}
           onOpenChange={(open) => { if (!open && removingId === null) setPendingRemoval(null) }}

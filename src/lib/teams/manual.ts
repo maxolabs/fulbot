@@ -64,3 +64,46 @@ export function assignmentPayload(draft: TeamDraft) {
     source: 'manual' as const,
   })))
 }
+
+export interface PairRule {
+  type: 'avoid_pair' | 'force_pair'
+  playerIds: [string, string]
+}
+
+export type LineupWarning =
+  | { kind: 'noKeeper'; team: 'dark' | 'light' }
+  | { kind: 'manyKeepers'; team: 'dark' | 'light'; count: number }
+  | { kind: 'avoidPairBroken' | 'forcePairBroken'; names: [string, string] }
+
+// Non-blocking checks for the manual builder: each team should have exactly
+// one GK, and the group's pair rules should hold. Rules about players who are
+// not in this draft are ignored; a player still in the pool doesn't count as
+// placed yet.
+export function lineupWarnings(draft: TeamDraft, rules: PairRule[] = []): LineupWarning[] {
+  const warnings: LineupWarning[] = []
+  for (const team of ['dark', 'light'] as const) {
+    if (draft[team].length === 0) continue
+    const keepers = draft[team].filter((p) => p.position === 'GK').length
+    if (keepers === 0) warnings.push({ kind: 'noKeeper', team })
+    else if (keepers > 1) warnings.push({ kind: 'manyKeepers', team, count: keepers })
+  }
+
+  const teamOf = new Map<string, 'dark' | 'light'>()
+  const nameOf = new Map<string, string>()
+  for (const team of ['dark', 'light'] as const) {
+    for (const p of draft[team]) {
+      teamOf.set(p.id, team)
+      nameOf.set(p.id, p.displayName)
+    }
+  }
+  for (const rule of rules) {
+    const [a, b] = rule.playerIds
+    const teamA = teamOf.get(a)
+    const teamB = teamOf.get(b)
+    if (!teamA || !teamB) continue
+    const names: [string, string] = [nameOf.get(a) ?? a, nameOf.get(b) ?? b]
+    if (rule.type === 'avoid_pair' && teamA === teamB) warnings.push({ kind: 'avoidPairBroken', names })
+    if (rule.type === 'force_pair' && teamA !== teamB) warnings.push({ kind: 'forcePairBroken', names })
+  }
+  return warnings
+}

@@ -64,7 +64,8 @@ export default async function TeamsPage({ params }: PageProps) {
   // Get match details
   const { data: match } = await supabase
     .from('matches')
-    .select('id, date_time, status, max_players, ai_input_snapshot')
+    // '*' so a database without 00029's lineup_needs_review still renders.
+    .select('*')
     .eq('id', matchId)
     .eq('group_id', group.id)
     .single() as { data: {
@@ -72,6 +73,7 @@ export default async function TeamsPage({ params }: PageProps) {
       date_time: string
       status: string
       max_players: number
+      lineup_needs_review?: boolean
       ai_input_snapshot: {
         output?: {
           reasoning?: string
@@ -246,6 +248,7 @@ export default async function TeamsPage({ params }: PageProps) {
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}
         matchStatus={match.status}
+        lineupStale={match.status === 'teams_created' && !!match.lineup_needs_review}
       />
     </>
   )
