@@ -754,7 +754,28 @@
         "recurring": "Recurring match",
         "recurringHint": "Set up the match that creates itself every week",
         "danger": "Danger zone",
-        "dangerHint": "Irreversible actions"
+        "dangerHint": "Irreversible actions",
+        "nameLabel": "Group name",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Optional",
+        "defaultDay": "Usual day",
+        "defaultTime": "Usual time",
+        "maxPlayers": "Max players",
+        "timezone": "Time zone",
+        "timezoneHint": "Every time in the group is shown in this zone.",
+        "weightsTitle": "Weight of result reports",
+        "weightsHint": "When players report the result, each report weighs according to the role. A bit more for admins and captains; the majority still decides. Default 1.5 / 1.25 / 1.",
+        "weightsInvalid": "Weights must be numbers between 0.05 and 10.",
+        "save": "Save changes",
+        "saved": "Changes saved.",
+        "saveError": "Couldn't save the changes. Try again.",
+        "invite": "Invite link",
+        "inviteHint": "Anyone with this link can join the group.",
+        "regenerate": "Regenerate link",
+        "regenerateConfirm": "Regenerate the invite link?",
+        "regenerateBody": "The current link stops working right away. Members stay in the group; send the new link to anyone still missing.",
+        "regenerated": "Done, this is the new link.",
+        "regenerateError": "Couldn't regenerate the link. Try again."
       },
       "members": {
         "you": "(you)",
@@ -768,7 +789,8 @@
         "removeError": "Couldn't remove the member. Try again.",
         "adminHint": "Manages the group, members and matches",
         "captainHint": "Creates matches and builds teams",
-        "memberHint": "Signs up and votes"
+        "memberHint": "Signs up and votes",
+        "removeBody": "Their signups for upcoming matches are cancelled and the next player on the waitlist gets the spot. They can rejoin with the invite link until you regenerate it."
       },
       "profile": {
         "infoTitle": "Player information",
@@ -796,7 +818,17 @@
         "createError": "Error creating the group",
         "networkError": "Connection error. Try again.",
         "slugTaken": "This URL is already taken. Pick another one.",
-        "invalidData": "Check the group details."
+        "invalidData": "Check the group details.",
+        "timezone": "Time zone",
+        "timezoneHint": "Match times are shown in this zone.",
+        "nameTooShort": "The name must be at least 2 characters.",
+        "nameTooLong": "The name can be up to 50 characters.",
+        "slugLength": "The URL must be 2 to 30 characters.",
+        "slugInvalid": "Use lowercase letters, numbers and hyphens only.",
+        "slugReserved": "That URL is reserved. Pick another one.",
+        "descriptionTooLong": "The description can be up to 200 characters.",
+        "maxPlayersRange": "Pick between 4 and 30 players.",
+        "unauthorized": "Your session expired. Sign in again."
       },
       "auth": {
         "namePlaceholder": "Your name",
@@ -1042,7 +1074,8 @@
         "customTimezone": "Other (type it)…",
         "customTimezonePlaceholder": "E.g. America/Cordoba",
         "deactivate": "Deactivate",
-        "activate": "Activate"
+        "activate": "Activate",
+        "timezoneDiffers": "The group uses {zone}. Matches will be shown in that time, so check that the time matches."
       },
       "deleteError": "Could not delete the match. Try again.",
       "maxPlayersBelowConfirmed": "The player limit can't be lower than the number of confirmed players.",
@@ -1185,6 +1218,17 @@
       "inviteTitle": "Join {group}",
       "inviteDescription": "You're invited to {group} on fulbot to organize the weekly match.",
       "inviteFallback": "fulbot invite"
+    },
+    "membership": {
+      "leave": "Leave group",
+      "leaveHint": "Your spots in upcoming matches are freed.",
+      "leaveConfirm": "Leave {name}?",
+      "leaveBody": "Your signups for upcoming matches are cancelled and, if there is a waitlist, the next player gets the spot. You can come back with the invite link.",
+      "leaveError": "Couldn't leave the group. Try again.",
+      "lastAdmin": "You're the only admin. Hand the admin role to another member first, or delete the group.",
+      "profilePrompt": "Tell us where you play",
+      "profilePromptBody": "Your position and whether you would play in goal help build even teams.",
+      "profilePromptDismiss": "Hide notice"
     }
   },
   "devicePush": {

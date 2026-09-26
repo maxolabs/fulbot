@@ -70,10 +70,11 @@ export function MembersManager({ members }: MembersManagerProps) {
     setLoading(membershipId)
     setError(null)
     try {
-      const { error } = await (supabase as any)
-        .from('group_memberships')
-        .update({ is_active: false })
-        .eq('id', membershipId)
+      // admin_remove_member (00028) deactivates the membership and cancels the
+      // member's signups on upcoming matches, so the waitlist promotes.
+      const { error } = await (supabase as any).rpc('admin_remove_member', {
+        p_membership_id: membershipId,
+      })
 
       if (error) throw error
       router.refresh()
@@ -216,6 +217,7 @@ export function MembersManager({ members }: MembersManagerProps) {
         open={pendingRemoval !== null}
         onOpenChange={(open) => { if (!open && loading === null) setPendingRemoval(null) }}
         title={pendingRemoval ? t('ui.screens.members.removeConfirm', { name: pendingRemoval.displayName }) : ''}
+        description={t('ui.screens.members.removeBody')}
       >
         <div className="flex flex-wrap gap-3 pt-4">
           <Button

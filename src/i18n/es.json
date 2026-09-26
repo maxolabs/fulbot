@@ -754,7 +754,28 @@
         "recurring": "Partido recurrente",
         "recurringHint": "Configurá el partido que se arma solo cada semana",
         "danger": "Zona de peligro",
-        "dangerHint": "Acciones irreversibles"
+        "dangerHint": "Acciones irreversibles",
+        "nameLabel": "Nombre del grupo",
+        "descriptionLabel": "Descripción",
+        "descriptionPlaceholder": "Opcional",
+        "defaultDay": "Día habitual",
+        "defaultTime": "Hora habitual",
+        "maxPlayers": "Jugadores máx.",
+        "timezone": "Zona horaria",
+        "timezoneHint": "Todos los horarios del grupo se muestran en esta zona.",
+        "weightsTitle": "Peso de los reportes de resultado",
+        "weightsHint": "Cuando los jugadores reportan el resultado, cada reporte pesa según el rol. Un poco más para admins y capitanes; la mayoría manda igual. Por defecto 1.5 / 1.25 / 1.",
+        "weightsInvalid": "Los pesos tienen que ser números entre 0.05 y 10.",
+        "save": "Guardar cambios",
+        "saved": "Cambios guardados.",
+        "saveError": "No se pudieron guardar los cambios. Probá de nuevo.",
+        "invite": "Link de invitación",
+        "inviteHint": "Cualquiera con este link puede unirse al grupo.",
+        "regenerate": "Regenerar link",
+        "regenerateConfirm": "¿Regenerar el link de invitación?",
+        "regenerateBody": "El link actual deja de funcionar al instante. Los miembros siguen en el grupo; a los que falten mandales el link nuevo.",
+        "regenerated": "Listo, este es el link nuevo.",
+        "regenerateError": "No se pudo regenerar el link. Probá de nuevo."
       },
       "members": {
         "you": "(vos)",
@@ -768,7 +789,8 @@
         "removeError": "No se pudo eliminar al miembro. Probá de nuevo.",
         "adminHint": "Puede gestionar el grupo, miembros y partidos",
         "captainHint": "Puede crear partidos y armar equipos",
-        "memberHint": "Puede anotarse y votar"
+        "memberHint": "Puede anotarse y votar",
+        "removeBody": "Se cancelan sus inscripciones a los próximos partidos y entra el siguiente de la lista de espera. Puede volver a unirse con el link de invitación mientras no lo regeneres."
       },
       "profile": {
         "infoTitle": "Información del jugador",
@@ -796,7 +818,17 @@
         "createError": "Error al crear el grupo",
         "networkError": "Error de conexión. Probá de nuevo.",
         "slugTaken": "Esta URL ya está en uso. Elegí otra.",
-        "invalidData": "Revisá los datos del grupo."
+        "invalidData": "Revisá los datos del grupo.",
+        "timezone": "Zona horaria",
+        "timezoneHint": "Los horarios de los partidos se muestran en esta zona.",
+        "nameTooShort": "El nombre tiene que tener al menos 2 caracteres.",
+        "nameTooLong": "El nombre puede tener hasta 50 caracteres.",
+        "slugLength": "La URL tiene que tener entre 2 y 30 caracteres.",
+        "slugInvalid": "Usá solo letras minúsculas, números y guiones.",
+        "slugReserved": "Esa URL está reservada. Elegí otra.",
+        "descriptionTooLong": "La descripción puede tener hasta 200 caracteres.",
+        "maxPlayersRange": "Elegí entre 4 y 30 jugadores.",
+        "unauthorized": "Tu sesión expiró. Volvé a iniciar sesión."
       },
       "auth": {
         "namePlaceholder": "Tu nombre",
@@ -1042,7 +1074,8 @@
         "customTimezone": "Otra (escribir)…",
         "customTimezonePlaceholder": "Ej: America/Cordoba",
         "deactivate": "Desactivar",
-        "activate": "Activar"
+        "activate": "Activar",
+        "timezoneDiffers": "El grupo usa {zone}. Los partidos se van a mostrar en ese horario, así que revisá que la hora coincida."
       },
       "deleteError": "No se pudo eliminar el partido. Probá de nuevo.",
       "maxPlayersBelowConfirmed": "El cupo no puede ser menor que la cantidad de confirmados.",
@@ -1185,6 +1218,17 @@
       "inviteTitle": "Unite a {group}",
       "inviteDescription": "Te invitaron a {group} en fulbot para organizar el partido de la semana.",
       "inviteFallback": "Invitación a fulbot"
+    },
+    "membership": {
+      "leave": "Salir del grupo",
+      "leaveHint": "Se liberan tus lugares en los próximos partidos.",
+      "leaveConfirm": "¿Salir de {name}?",
+      "leaveBody": "Se cancelan tus inscripciones a los próximos partidos y, si hay lista de espera, entra el siguiente. Podés volver con el link de invitación.",
+      "leaveError": "No se pudo salir del grupo. Probá de nuevo.",
+      "lastAdmin": "Sos el único admin. Transferí el rol de admin a otro miembro primero, o borrá el grupo.",
+      "profilePrompt": "Contanos dónde jugás",
+      "profilePromptBody": "Tu posición y si te animás al arco ayudan a armar equipos parejos.",
+      "profilePromptDismiss": "Ocultar aviso"
     }
   },
   "devicePush": {
