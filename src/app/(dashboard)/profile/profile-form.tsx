@@ -55,16 +55,26 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
     setSuccess(false)
+
+    // player_profiles_display_name_length (00027): trimmed, 1..50.
+    const trimmedName = displayName.trim()
+    const trimmedNickname = nickname.trim()
+    if (!trimmedName) {
+      setError(t('ui.profileForm.nameRequired'))
+      return
+    }
+    setDisplayName(trimmedName)
+    setNickname(trimmedNickname)
+    setLoading(true)
 
     try {
       const { error: updateError } = await supabase
         .from('player_profiles')
         .update({
-          display_name: displayName,
-          nickname: nickname || null,
+          display_name: trimmedName,
+          nickname: trimmedNickname || null,
           main_position: mainPosition,
           preferred_positions: preferredPositions.length > 0 ? preferredPositions : [mainPosition],
           footedness,
@@ -82,7 +92,10 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error updating profile:', err)
-      setError(t('ui.profileForm.saveError'))
+      // The CHECK constraint is the server-side guard for a blank name (23514).
+      const dbError = err as { code?: string; message?: string }
+      const blankName = dbError?.code === '23514' && !!dbError.message?.includes('player_profiles_display_name_length')
+      setError(t(blankName ? 'ui.profileForm.nameRequired' : 'ui.profileForm.saveError'))
     } finally {
       setLoading(false)
     }

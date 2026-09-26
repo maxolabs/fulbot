@@ -76,6 +76,17 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
     setSuccess(false)
 
     try {
+      // groups_name_length (00027): trimmed, 1..50.
+      const trimmedName = name.trim()
+      if (!trimmedName) {
+        setError(t('ui.screens.groupSettings.nameRequired'))
+        setLoading(false)
+        return
+      }
+      setName(trimmedName)
+      const trimmedDescription = description.trim()
+      setDescription(trimmedDescription)
+
       const invalid = (Object.keys(weights) as (keyof ResultWeights)[]).some(
         k => !Number.isFinite(weights[k]) || weights[k] < MIN_WEIGHT || weights[k] > MAX_WEIGHT
       )
@@ -100,8 +111,8 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       const { error: updateError } = await supabase
         .from('groups')
         .update({
-          name,
-          description: description || null,
+          name: trimmedName,
+          description: trimmedDescription || null,
           default_match_day: defaultMatchDay,
           default_match_time: defaultMatchTime,
           default_max_players: defaultMaxPlayers,
@@ -123,6 +134,9 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       const dbError = err as { code?: string; message?: string }
       if (dbError?.code === '22023' || dbError?.message?.includes('invalid_timezone')) {
         setError(t('ui.lifecycle.invalidTimezone'))
+      } else if (dbError?.code === '23514' && dbError.message?.includes('groups_name_length')) {
+        // The CHECK constraint is the server-side guard for a blank name.
+        setError(t('ui.screens.groupSettings.nameRequired'))
       } else {
         setError(t('ui.screens.groupSettings.saveError'))
       }

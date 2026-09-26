@@ -800,6 +800,7 @@
         "allDone": "All done"
       },
       "groupSettings": {
+        "nameRequired": "Enter the group name.",
         "general": "General settings",
         "generalHint": "Basic info and group defaults",
         "members": "Members ({n})",
@@ -1190,6 +1191,7 @@
       "forcePairBroken": "{a} and {b} ended up on different teams."
     },
     "profileForm": {
+      "nameRequired": "Enter your name.",
       "saveError": "Couldn't save your changes. Try again.",
       "saved": "Profile updated",
       "name": "Name",

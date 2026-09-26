@@ -800,6 +800,7 @@
         "allDone": "Todos listos"
       },
       "groupSettings": {
+        "nameRequired": "Escribí el nombre del grupo.",
         "general": "Configuración general",
         "generalHint": "Información básica y valores por defecto del grupo",
         "members": "Miembros ({n})",
@@ -1190,6 +1191,7 @@
       "forcePairBroken": "{a} y {b} quedaron en equipos distintos."
     },
     "profileForm": {
+      "nameRequired": "Escribí tu nombre.",
       "saveError": "No se pudieron guardar los cambios. Probá de nuevo.",
       "saved": "Perfil actualizado",
       "name": "Nombre",
