@@ -45,9 +45,9 @@ export default async function DashboardLayout({
       }>,
     supabase
       .from('player_profiles')
-      .select('id')
+      .select('id, display_name')
       .eq('user_id', user.id)
-      .single() as unknown as Promise<{ data: { id: string } | null }>,
+      .single() as unknown as Promise<{ data: { id: string; display_name: string | null } | null }>,
     supabase.rpc('get_unread_notification_count') as unknown as Promise<{ data: number | null }>,
   ])
 
@@ -119,7 +119,12 @@ export default async function DashboardLayout({
   return (
     <LanguageProvider language={language}>
       <AppShell
-        user={userData ? { name: userData.name, email: userData.email, avatar_url: userData.avatar_url } : undefined}
+        user={userData ? {
+          // The profile form edits player_profiles.display_name, not users.name (ONB-13).
+          name: playerProfile?.display_name?.trim() || userData.name,
+          email: userData.email,
+          avatar_url: userData.avatar_url,
+        } : undefined}
         groups={groups.map(({ slug, name, role }) => ({ slug, name, role }))}
         currentGroup={currentGroup}
         unreadCount={unreadCount}
