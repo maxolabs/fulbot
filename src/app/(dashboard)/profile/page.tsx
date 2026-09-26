@@ -74,10 +74,7 @@ export default async function ProfilePage() {
     .eq('is_active', true) as { data: { group_id: string; groups: GroupScoreRow['groups'] }[] | null }
   // The score columns are not selectable (00029): get_member_scores() with no
   // group returns the viewer's own row in each of their groups.
-  const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
-    fn: 'get_member_scores', args: Record<string, never>
-  ) => PromiseLike<{ data: { group_id: string; member_score: number | null }[] | null }>
-  const { data: ownScores } = await scoresRpc('get_member_scores', {})
+  const { data: ownScores } = await supabase.rpc('get_member_scores', {})
   const ownScoreByGroup = new Map((ownScores || []).map((row) => [row.group_id, row.member_score]))
   const scoreRows: GroupScoreRow[] = (membershipRows || []).map((row) => ({
     member_score: ownScoreByGroup.get(row.group_id) ?? null,

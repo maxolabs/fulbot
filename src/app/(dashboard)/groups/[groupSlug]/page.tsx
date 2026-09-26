@@ -126,13 +126,12 @@ export default async function GroupDetailPage({ params }: PageProps) {
 
   // "Contanos dónde jugás": until the player saves their profile (or hides the
   // row) their positions are the column defaults, and the balancer would treat
-  // them as a CM. profile_completed_at comes with 00028; before it is applied
-  // the query errors and the row simply stays hidden.
-  const { data: profileState } = await (supabase as any)
+  // them as a CM (profile_completed_at, 00028).
+  const { data: profileState } = await supabase
     .from('player_profiles')
     .select('profile_completed_at')
     .eq('id', playerProfile.id)
-    .maybeSingle() as { data: { profile_completed_at: string | null } | null }
+    .maybeSingle()
   const showProfilePrompt = !!profileState && profileState.profile_completed_at === null
 
   async function dismissProfilePrompt() {
@@ -140,7 +139,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await (supabase as any)
+    await supabase
       .from('player_profiles')
       .update({ profile_completed_at: new Date().toISOString() })
       .eq('user_id', user.id)
@@ -276,16 +275,16 @@ export default async function GroupDetailPage({ params }: PageProps) {
         .select('player_id')
         .in('match_id', finishedIds)
         .eq('status', 'confirmed')
-        .not('player_id', 'is', null) as unknown as Promise<{ data: { player_id: string }[] | null }>,
+        .not('player_id', 'is', null),
       supabase
         .from('match_events')
         .select('player_id')
         .in('match_id', finishedIds)
         .eq('event_type', 'goal')
-        .not('player_id', 'is', null) as unknown as Promise<{ data: { player_id: string }[] | null }>,
+        .not('player_id', 'is', null),
     ])
-    for (const r of playedRows || []) { const row = rowFor(r.player_id); if (row) row.played += 1 }
-    for (const r of goalRows || []) { const row = rowFor(r.player_id); if (row) row.goals += 1 }
+    for (const r of playedRows || []) { const row = r.player_id && rowFor(r.player_id); if (row) row.played += 1 }
+    for (const r of goalRows || []) { const row = r.player_id && rowFor(r.player_id); if (row) row.goals += 1 }
     for (const m of finished) { if (m.mvp_player_id) { const row = rowFor(m.mvp_player_id); if (row) row.mvp += 1 } }
 
     // Scores are visible to admins and captains only (RLS on player_rating_summary
@@ -351,12 +350,12 @@ export default async function GroupDetailPage({ params }: PageProps) {
           .select('match_id')
           .in('match_id', ids)
           .eq('player_id', playerProfile.id)
-          .eq('status', 'confirmed') as unknown as Promise<{ data: { match_id: string }[] | null }>,
+          .eq('status', 'confirmed'),
         supabase
           .from('match_reports')
           .select('match_id')
           .in('match_id', ids)
-          .eq('reporter_player_id', playerProfile.id) as unknown as Promise<{ data: { match_id: string }[] | null }>,
+          .eq('reporter_player_id', playerProfile.id),
       ])
       const played = new Set((mySignups || []).map(s => s.match_id))
       const reported = new Set((myReports || []).map(r => r.match_id))

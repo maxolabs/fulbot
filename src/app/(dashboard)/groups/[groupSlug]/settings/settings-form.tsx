@@ -97,8 +97,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
           : {}
       const nextSettings = { ...existingSettings, result_weights: weights }
 
-       
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('groups')
         .update({
           name,

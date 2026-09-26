@@ -84,16 +84,15 @@ export async function POST(request: NextRequest) {
       validationResult.data
 
     // Create group with admin membership via RPC (bypasses RLS)
-     
-    const { data: group, error: groupError } = await (supabase as any)
+    const { data: group, error: groupError } = await supabase
       .rpc('create_group_with_admin', {
         p_name: name,
         p_slug: slug,
-        p_description: description || null,
+        p_description: description || undefined,
         p_default_match_day: defaultMatchDay ?? 1,
         p_default_match_time: defaultMatchTime || '21:00',
         p_default_max_players: defaultMaxPlayers || 14,
-        p_timezone: timezone || null,
+        p_timezone: timezone || undefined,
       })
 
     if (groupError) {

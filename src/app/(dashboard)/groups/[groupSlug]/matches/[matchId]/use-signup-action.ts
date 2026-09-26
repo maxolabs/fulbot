@@ -100,7 +100,8 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
       const args: Database['public']['Functions']['signup_for_match']['Args'] = { p_match_id: matchId }
       const { data: signup, error: signupError } = await supabase.rpc('signup_for_match', args)
       if (signupError) throw signupError
-      setSignupReason(signup?.status === 'waitlist' ? signup.waitlist_reason ?? 'full' : null)
+      // waitlist_reason is a CHECK-constrained text column, so the generated type is plain string.
+      setSignupReason(signup?.status === 'waitlist' ? (signup.waitlist_reason as WaitlistReason | null) ?? 'full' : null)
       router.refresh()
     } catch (err) {
       console.error('Error signing up:', err)

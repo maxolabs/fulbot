@@ -51,7 +51,7 @@ export function MembersManager({ members }: MembersManagerProps) {
     setLoading(membershipId)
     setError(null)
     try {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('group_memberships')
         .update({ role: newRole })
         .eq('id', membershipId)
@@ -72,7 +72,7 @@ export function MembersManager({ members }: MembersManagerProps) {
     try {
       // admin_remove_member (00028) deactivates the membership and cancels the
       // member's signups on upcoming matches, so the waitlist promotes.
-      const { error } = await (supabase as any).rpc('admin_remove_member', {
+      const { error } = await supabase.rpc('admin_remove_member', {
         p_membership_id: membershipId,
       })
 

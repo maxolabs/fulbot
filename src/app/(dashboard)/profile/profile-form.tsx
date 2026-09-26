@@ -60,8 +60,7 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
     setSuccess(false)
 
     try {
-       
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('player_profiles')
         .update({
           display_name: displayName,

@@ -98,14 +98,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return fail('forbidden', 403)
     }
 
-    if (!['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
+    if (!match.status || !['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
       return fail('notAllowed', 409)
     }
 
     // Get confirmed signups with player profiles and guest players.
-    // The hand-written Database type doesn't carry FK relationship metadata, so the
-    // client can't infer the shape of this embedded select on its own - we assert the
-    // known shape here instead (same pattern used elsewhere in this codebase).
+    // Asserts the known shape: several profile columns are nullable in the schema
+    // (DEFAULT without NOT NULL) but always set in practice.
     type SignupWithPlayer = {
       id: string
       player_id: string | null
@@ -189,13 +188,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // (docs/member-scoring.md §5.3). NULL (newcomer) and guests fall back to neutral.
     // The score columns are not selectable (00029): get_member_scores returns
     // every row of the group to an admin/captain, which the caller is.
-    type MemberScoreRow = { player_id: string; member_score: number | null }
-    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
-      fn: 'get_member_scores', args: { p_group_id: string }
-    ) => PromiseLike<{ data: MemberScoreRow[] | null }>
     const { data: membershipRows } = ratedIds.length > 0
-      ? await scoresRpc('get_member_scores', { p_group_id: match.group_id })
-      : { data: [] as MemberScoreRow[] }
+      ? await supabase.rpc('get_member_scores', { p_group_id: match.group_id })
+      : { data: [] }
     const memberScoreById = new Map(
       (membershipRows || []).map((m) => [m.player_id, m.member_score === null ? null : Number(m.member_score)])
     )

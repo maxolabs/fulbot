@@ -25,8 +25,7 @@ export function outboxRetryDelayMs(attempts: number): number {
   return Math.min(60, 2 ** Math.max(1, attempts)) * 60 * 1000
 }
 
-// available_at comes from 00030 and is not in the generated Database types yet.
-type OutboxUpdate = Database['public']['Tables']['notification_outbox']['Update'] & { available_at?: string }
+type OutboxUpdate = Database['public']['Tables']['notification_outbox']['Update']
 
 export interface DrainOutboxResult {
   processed: number
@@ -71,7 +70,7 @@ export async function drainOutbox(): Promise<DrainOutboxResult> {
   const settle = async (row: ClaimedOutboxRow, update: OutboxUpdate) => {
     await supabase
       .from('notification_outbox')
-      .update({ ...update, claimed_at: null, lease_id: null } as Database['public']['Tables']['notification_outbox']['Update'])
+      .update({ ...update, claimed_at: null, lease_id: null })
       .eq('id', row.id)
       .eq('lease_id', row.lease_id)
   }

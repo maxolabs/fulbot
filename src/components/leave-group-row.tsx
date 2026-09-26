@@ -42,7 +42,7 @@ export function LeaveGroupRow({ groupId, groupName, isLastAdmin = false, classNa
     setLoading(true)
     setError(null)
     try {
-      const { error: rpcError } = await (supabase as any).rpc('leave_group', { p_group_id: groupId })
+      const { error: rpcError } = await supabase.rpc('leave_group', { p_group_id: groupId })
       if (rpcError) throw rpcError
       setOpen(false)
       router.push('/groups')

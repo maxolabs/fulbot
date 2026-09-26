@@ -54,10 +54,7 @@ export async function SignupPolicyNotice({
 
   // The score columns are not selectable (00029): the viewer's own row always
   // comes back from get_member_scores, cooldown included.
-  const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
-    fn: 'get_member_scores', args: { p_group_id: string }
-  ) => PromiseLike<{ data: { player_id: string; is_active: boolean; member_score: number | null; signup_cooldown: boolean | null }[] | null }>
-  const { data: scoreRows } = await scoresRpc('get_member_scores', { p_group_id: groupId })
+  const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: groupId })
   const membership = (scoreRows || []).find((row) => row.player_id === playerId && row.is_active) ?? null
 
   if (!membership) return null

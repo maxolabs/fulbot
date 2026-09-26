@@ -49,7 +49,7 @@ export function InviteLinkSettings({ groupId, baseUrl, inviteCode }: InviteLinkS
     setLoading(true)
     setError(null)
     try {
-      const { data, error: rpcError } = await (supabase as any).rpc('regenerate_invite_code', {
+      const { data, error: rpcError } = await supabase.rpc('regenerate_invite_code', {
         p_group_id: groupId,
       })
       if (rpcError) throw rpcError

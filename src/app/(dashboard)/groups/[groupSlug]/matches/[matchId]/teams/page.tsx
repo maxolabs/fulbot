@@ -65,7 +65,6 @@ export default async function TeamsPage({ params }: PageProps) {
   // Get match details
   const { data: match } = await supabase
     .from('matches')
-    // '*' so a database without 00029's lineup_needs_review still renders.
     .select('*')
     .eq('id', matchId)
     .eq('group_id', group.id)
@@ -74,7 +73,7 @@ export default async function TeamsPage({ params }: PageProps) {
       date_time: string
       status: string
       max_players: number
-      lineup_needs_review?: boolean
+      lineup_needs_review: boolean
       ai_input_snapshot: {
         output?: {
           reasoning?: string

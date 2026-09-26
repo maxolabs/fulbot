@@ -50,8 +50,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       // Combine date and time into an ISO datetime, honoring the group's timezone
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
-       
-      const { data: match, error: insertError } = await (supabase as any)
+      const { data: match, error: insertError } = await supabase
         .from('matches')
         .insert({
           group_id: groupId,

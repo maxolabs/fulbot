@@ -117,10 +117,7 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   // captains or 'group' visibility, otherwise only the viewer's own).
   const scoreByPlayer = new Map<string, number | null>()
   if (scoringEnabled) {
-    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
-      fn: 'get_member_scores', args: { p_group_id: string }
-    ) => PromiseLike<{ data: { player_id: string; member_score: number | null }[] | null }>
-    const { data: scoreRows } = await scoresRpc('get_member_scores', { p_group_id: group.id })
+    const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: group.id })
     for (const row of scoreRows || []) {
       scoreByPlayer.set(row.player_id, row.member_score === null ? null : Number(row.member_score))
     }

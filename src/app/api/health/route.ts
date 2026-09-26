@@ -12,7 +12,7 @@
 // $CRON_SECRET` the response also carries the numbers and the recent failures.
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { ScheduledJob, SchedulerState } from '@/types/database'
+import type { ScheduledJob } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,10 +50,7 @@ async function collect(): Promise<HealthDetails> {
   const failureCutoff = new Date(now - FAILURE_WINDOW_HOURS * 3_600_000).toISOString()
 
   const [stateResult, overdueResult, failedResult] = await Promise.all([
-    supabase.from('scheduler_state').select('last_tick_at').eq('id', 1).maybeSingle() as unknown as Promise<{
-      data: Pick<SchedulerState, 'last_tick_at'> | null
-      error: { message: string } | null
-    }>,
+    supabase.from('scheduler_state').select('last_tick_at').eq('id', 1).maybeSingle(),
     supabase
       .from('scheduled_jobs')
       .select('id', { count: 'exact', head: true })
@@ -65,11 +62,7 @@ async function collect(): Promise<HealthDetails> {
       .eq('status', 'failed')
       .gte('updated_at', failureCutoff)
       .order('updated_at', { ascending: false })
-      .limit(10) as unknown as Promise<{
-      data: RecentFailure[] | null
-      count: number | null
-      error: { message: string } | null
-    }>,
+      .limit(10),
   ])
 
   const problems: string[] = []

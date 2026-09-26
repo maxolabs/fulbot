@@ -63,10 +63,6 @@ const REASON_BADGE_VARIANT: Record<WaitlistReason, 'warning' | 'destructive' | '
 
 const LEVEL_VALUES = [1, 2, 3, 4, 5] as const
 
-// admin_set_guest_rating (00029) is not in the generated Database type yet.
-type GuestRatingRpc = (fn: 'admin_set_guest_rating', args: { p_guest_player_id: string; p_rating: number }) =>
-  PromiseLike<{ error: { message: string } | null }>
-
 const iconButtonClassName =
   'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50'
 
@@ -108,8 +104,7 @@ export function SignupList({
     setSavingLevel(true)
     setLevelError(null)
     try {
-      const rpc = supabase.rpc.bind(supabase) as unknown as GuestRatingRpc
-      const { error } = await rpc('admin_set_guest_rating', {
+      const { error } = await supabase.rpc('admin_set_guest_rating', {
         p_guest_player_id: pendingLevel.guestId,
         p_rating: pendingLevel.rating,
       })

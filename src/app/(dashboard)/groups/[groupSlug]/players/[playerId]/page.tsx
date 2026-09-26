@@ -149,10 +149,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   if (canSeeScore) {
     // The score columns are not selectable (00029); get_member_scores applies
     // the same visibility rule on the server.
-    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
-      fn: 'get_member_scores', args: { p_group_id: string }
-    ) => PromiseLike<{ data: MemberScoreRow[] | null }>
-    const { data: scoreRows } = await scoresRpc('get_member_scores', { p_group_id: group.id })
+    const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: group.id })
     memberScore = (scoreRows || []).find((row) => row.player_id === playerId && row.is_active) ?? null
 
     // The window is the group's last N finished matches (§3); match-less events

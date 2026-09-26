@@ -89,8 +89,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
       if (settings.id) {
         // Update existing
-         
-        const { error: updateError } = await (supabase as any)
+        const { error: updateError } = await supabase
           .from('notification_settings')
           .update(data)
           .eq('id', settings.id)
@@ -98,8 +97,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         if (updateError) throw updateError
       } else {
         // Insert new
-         
-        const { data: newSettings, error: insertError } = await (supabase as any)
+        const { data: newSettings, error: insertError } = await supabase
           .from('notification_settings')
           .insert(data)
           .select('id')

@@ -35,8 +35,7 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
 
   useEffect(() => {
     let cancelled = false
-    // The Database type has no relationship metadata, so the embedded select is untyped.
-    ;(supabase as any)
+    supabase
       .from('match_reports')
       .select('*, match_report_stats(*)')
       .eq('match_id', matchId)

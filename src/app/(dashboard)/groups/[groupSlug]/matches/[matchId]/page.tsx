@@ -93,6 +93,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .select('*')
     .eq('id', matchId)
     .eq('group_id', group.id)
+    // Several columns are nullable in the schema (DEFAULT without NOT NULL) but
+    // always set in practice; this narrows them for rendering.
     .single() as { data: {
       id: string
       group_id: string
@@ -103,12 +105,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
       notes: string | null
       results_finalized: boolean
       result_status: MatchResultStatus
+      result_locked_by: string | null
+      result_locked_at: string | null
       mvp_player_id: string | null
       finished_at: string | null
       duration_minutes: number
       created_at: string
       /** 00029: the confirmed list changed after the teams were published. */
-      lineup_needs_review?: boolean
+      lineup_needs_review: boolean
     } | null }
 
   if (!match) return notFound()
@@ -467,14 +471,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
     hasTeams = (count ?? 0) > 0
   }
 
-  // Result consensus/lock columns (00019). `select('*')` already returns them; the
-  // narrow cast above predates them, so read them through a local cast here.
-  const resultMeta = match as unknown as {
-    result_status?: MatchResultStatus
-    result_locked_by?: string | null
-    result_locked_at?: string | null
-  }
-
   // Prepare teams data for MatchResults component
   const teamsForResults = matchTeams.map(t => ({
     id: t.id,
@@ -595,9 +591,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
         event_type: e.event_type,
         linked_event_id: e.linked_event_id,
       }))}
-      resultStatus={resultMeta.result_status ?? 'pending'}
-      lockedBy={resultMeta.result_locked_by ?? null}
-      lockedAt={resultMeta.result_locked_at ?? null}
+      resultStatus={match.result_status ?? 'pending'}
+      lockedBy={match.result_locked_by ?? null}
+      lockedAt={match.result_locked_at ?? null}
       mvpPlayerId={match.mvp_player_id}
       mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
     />
@@ -846,7 +842,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
               {isFinished && showAdminTools && teamsForResults.length > 0 && (
                 <MatchReportsTable
                   matchId={match.id}
-                  resultStatus={resultMeta.result_status ?? 'pending'}
+                  resultStatus={match.result_status ?? 'pending'}
                   teams={teamsForResults.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
                   people={[
                     ...matchPlayers.map(p => ({ id: p.id, display_name: p.display_name })),

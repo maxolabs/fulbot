@@ -77,7 +77,7 @@ export function MatchAdminActions({
     setError(null)
 
     try {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('matches')
         .delete()
         .eq('id', matchId)

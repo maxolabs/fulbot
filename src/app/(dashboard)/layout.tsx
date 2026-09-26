@@ -40,15 +40,13 @@ export default async function DashboardLayout({
       .from('users')
       .select('name, email, avatar_url, preferred_language')
       .eq('id', user.id)
-      .single() as unknown as Promise<{
-        data: { name: string; email: string; avatar_url: string | null; preferred_language: Language } | null
-      }>,
+      .single(),
     supabase
       .from('player_profiles')
       .select('id, display_name')
       .eq('user_id', user.id)
-      .single() as unknown as Promise<{ data: { id: string; display_name: string | null } | null }>,
-    supabase.rpc('get_unread_notification_count') as unknown as Promise<{ data: number | null }>,
+      .single(),
+    supabase.rpc('get_unread_notification_count'),
   ])
 
   const language: Language = userData?.preferred_language ?? 'es'
@@ -87,19 +85,19 @@ export default async function DashboardLayout({
         .in('status', UPCOMING_STATUSES)
         .order('date_time', { ascending: true })
         .limit(1)
-        .maybeSingle() as unknown as Promise<{ data: { id: string } | null }>,
+        .maybeSingle(),
       supabase
         .from('group_memberships')
         .select('player_id')
         .eq('group_id', current.id)
-        .eq('is_active', true) as unknown as Promise<{ data: { player_id: string }[] | null }>,
+        .eq('is_active', true),
       // RLS returns only the current voter's own peer_ratings rows (same
       // query the group dashboard uses for its "sin calificar" card).
       supabase
         .from('peer_ratings')
         .select('rated_player_id')
         .eq('group_id', current.id)
-        .eq('voter_player_id', playerProfile.id) as unknown as Promise<{ data: { rated_player_id: string }[] | null }>,
+        .eq('voter_player_id', playerProfile.id),
     ])
 
     const ratedIds = new Set((ratedRows || []).map((r) => r.rated_player_id))
