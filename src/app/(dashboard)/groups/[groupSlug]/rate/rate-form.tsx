@@ -18,13 +18,13 @@ import { useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
 import type { Database } from '@/types/database'
 import {
-  DIMENSION_HINTS,
-  DIMENSION_LABELS,
-  DIMENSION_SHORT,
   PLAYER_TAGS,
   RATING_DIMENSIONS,
-  RATING_SCALE_LABELS,
-  tagLabel,
+  dimensionHint,
+  dimensionLabel,
+  dimensionShort,
+  scaleLabel,
+  translatedTagLabel,
   type RatingDimension,
 } from '@/lib/ratings'
 
@@ -227,7 +227,7 @@ export function RateMembersForm({
           <span className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[.08em] text-muted-foreground sm:flex">
             {RATING_DIMENSIONS.map((dim) => (
               <span key={dim}>
-                {DIMENSION_SHORT[dim]} <span className="text-foreground">{entry![dim]}</span>
+                {dimensionShort(t, dim)} <span className="text-foreground">{entry![dim]}</span>
               </span>
             ))}
           </span>
@@ -287,12 +287,12 @@ export function RateMembersForm({
             return (
               <div key={dim} className="space-y-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium">{DIMENSION_LABELS[dim]}</span>
+                  <span className="text-sm font-medium">{dimensionLabel(t, dim)}</span>
                   <span className="text-xs text-muted-foreground">
-                    {value ? RATING_SCALE_LABELS[value] : DIMENSION_HINTS[dim]}
+                    {value ? scaleLabel(t, value) : dimensionHint(t, dim)}
                   </span>
                 </div>
-                <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={DIMENSION_LABELS[dim]}>
+                <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={dimensionLabel(t, dim)}>
                   {[1, 2, 3, 4, 5].map((n) => {
                     const selected = value === n
                     const below = value !== undefined && n < value
@@ -302,7 +302,7 @@ export function RateMembersForm({
                         type="button"
                         role="radio"
                         aria-checked={selected}
-                        aria-label={`${DIMENSION_LABELS[dim]} ${n}`}
+                        aria-label={t('ui.ratings.dimensionValue', { dimension: dimensionLabel(t, dim), value: n })}
                         onClick={() => setDraft((d) => ({ ...d, dims: { ...d.dims, [dim]: n } }))}
                         className={cn(
                           'h-11 rounded-[3px] border font-mono text-sm tabular-nums transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card lg:h-10',
@@ -343,7 +343,7 @@ export function RateMembersForm({
                         : 'border-border text-muted-foreground hover:bg-accent/60'
                     )}
                   >
-                    {tagLabel(tag.key)}
+                    {translatedTagLabel(t, tag.key)}
                   </button>
                 )
               })}
@@ -391,7 +391,7 @@ export function RateMembersForm({
             {t('ui.screens.rate.progressRated', { n: ratedCount })}
           </span>
           {pendingCount === 0 ? (
-            <Badge variant="success">{t('ui.spots.full')}</Badge>
+            <Badge variant="success">{t('ui.screens.rate.allDone')}</Badge>
           ) : (
             <span>{t('ui.screens.rate.progressPending', { n: pendingCount })}</span>
           )}

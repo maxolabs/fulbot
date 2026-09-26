@@ -8,6 +8,11 @@
 export const RATING_DIMENSIONS = ['goalkeeping', 'defense', 'attack', 'physical'] as const
 export type RatingDimension = (typeof RATING_DIMENSIONS)[number]
 
+// The Spanish constants below are the canonical vocabulary: the team generator
+// prompt (src/lib/ai) reads them and must stay stable. Screens translate with
+// the ui.ratings.* keys through the helpers at the end of this block, which use
+// the same stable ids (dimension names, 1-5, tag keys).
+
 export const DIMENSION_LABELS: Record<RatingDimension, string> = {
   goalkeeping: 'Arquero',
   defense: 'Defensa',
@@ -63,6 +68,32 @@ const TAG_LABELS: Record<string, string> = Object.fromEntries(
 
 export function tagLabel(key: string): string {
   return TAG_LABELS[key] ?? key
+}
+
+type Translate = (key: string, params?: Record<string, string | number>) => string
+
+export function dimensionLabel(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.dimensions.${dim}`)
+}
+
+export function dimensionShort(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.short.${dim}`)
+}
+
+export function dimensionHint(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.hints.${dim}`)
+}
+
+export function scaleLabel(t: Translate, value: number): string {
+  return t(`ui.ratings.scale.${value}`)
+}
+
+// Unknown tag keys (stored before a tag was renamed) fall back to the raw key,
+// like tagLabel.
+export function translatedTagLabel(t: Translate, key: string): string {
+  const path = `ui.ratings.tags.${key}`
+  const label = t(path)
+  return label === path ? tagLabel(key) : label
 }
 
 export const DEFAULT_OVERALL = 3

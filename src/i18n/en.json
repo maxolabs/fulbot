@@ -791,7 +791,9 @@
         "doneTitle": "Done, nobody left to rate.",
         "doneHint": "You can edit any rating whenever you want.",
         "backToGroup": "Back to the group",
-        "listTitle": "Teammates"
+        "listTitle": "Teammates",
+        "adminBadge": "Admin",
+        "allDone": "All done"
       },
       "groupSettings": {
         "general": "General settings",
@@ -1342,6 +1344,49 @@
       "lightShort": "Light:",
       "complete": "(complete)",
       "unknown": "Unknown"
+    },
+    "ratings": {
+      "dimensions": {
+        "goalkeeping": "Goalkeeping",
+        "defense": "Defense",
+        "attack": "Attack",
+        "physical": "Physical"
+      },
+      "short": {
+        "goalkeeping": "GK",
+        "defense": "DEF",
+        "attack": "ATT",
+        "physical": "PHY"
+      },
+      "hints": {
+        "goalkeeping": "How well do they keep goal? 1 = better not, 5 = a real keeper",
+        "defense": "Marking, cover, reading the play",
+        "attack": "Scoring, dribbling, the final pass",
+        "physical": "Speed, stamina, strength"
+      },
+      "scale": {
+        "1": "Weak",
+        "2": "Okay",
+        "3": "Good",
+        "4": "Very good",
+        "5": "Star"
+      },
+      "tags": {
+        "fast": "Fast",
+        "strong": "Strong",
+        "stamina": "Tireless",
+        "technical": "Technical",
+        "scorer": "Goal scorer",
+        "good_passer": "Good passer",
+        "marks_well": "Marks well",
+        "aerial": "Good in the air",
+        "vision": "Vision",
+        "leader": "Leader",
+        "hard_worker": "Hard worker",
+        "organized": "Disciplined",
+        "can_keep": "Can keep goal"
+      },
+      "dimensionValue": "{dimension} {value}"
     }
   },
   "devicePush": {

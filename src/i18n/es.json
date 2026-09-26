@@ -791,7 +791,9 @@
         "doneTitle": "Listo, no te queda nadie por calificar.",
         "doneHint": "Podés volver a editar cualquier calificación cuando quieras.",
         "backToGroup": "Volver al grupo",
-        "listTitle": "Compañeros"
+        "listTitle": "Compañeros",
+        "adminBadge": "Admin",
+        "allDone": "Todos listos"
       },
       "groupSettings": {
         "general": "Configuración general",
@@ -1342,6 +1344,49 @@
       "lightShort": "Cla:",
       "complete": "(completo)",
       "unknown": "Desconocido"
+    },
+    "ratings": {
+      "dimensions": {
+        "goalkeeping": "Arquero",
+        "defense": "Defensa",
+        "attack": "Ataque",
+        "physical": "Físico"
+      },
+      "short": {
+        "goalkeeping": "ARQ",
+        "defense": "DEF",
+        "attack": "ATA",
+        "physical": "FÍS"
+      },
+      "hints": {
+        "goalkeeping": "¿Qué tal ataja? 1 = mejor que no, 5 = arquero de verdad",
+        "defense": "Marca, cobertura, anticipo",
+        "attack": "Gol, gambeta, último pase",
+        "physical": "Velocidad, aguante, fuerza"
+      },
+      "scale": {
+        "1": "Flojo",
+        "2": "Cumple",
+        "3": "Bien",
+        "4": "Muy bien",
+        "5": "Crack"
+      },
+      "tags": {
+        "fast": "Rápido",
+        "strong": "Fuerte",
+        "stamina": "Resistente",
+        "technical": "Técnico",
+        "scorer": "Goleador",
+        "good_passer": "Buen pase",
+        "marks_well": "Marca bien",
+        "aerial": "Juego aéreo",
+        "vision": "Visión de juego",
+        "leader": "Líder",
+        "hard_worker": "Sacrificado",
+        "organized": "Ordenado",
+        "can_keep": "Puede atajar"
+      },
+      "dimensionValue": "{dimension} {value}"
     }
   },
   "devicePush": {
