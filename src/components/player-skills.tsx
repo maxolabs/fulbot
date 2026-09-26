@@ -2,11 +2,11 @@ import { Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { getTranslation, type Language } from '@/i18n/core'
 import {
-  DIMENSION_LABELS,
-  DIMENSION_SHORT,
   RATING_DIMENSIONS,
+  dimensionLabel,
+  dimensionShort,
   overallOf,
-  tagLabel,
+  translatedTagLabel,
   type RatingSummary,
 } from '@/lib/ratings'
 
@@ -40,8 +40,8 @@ export function SkillSummaryLine({
         <span className="text-xs text-muted-foreground">{t('ratings.noRatingsYet')}</span>
       ) : (
         RATING_DIMENSIONS.map((dim) => (
-          <span key={dim} className="text-xs text-muted-foreground" title={DIMENSION_LABELS[dim]}>
-            {DIMENSION_SHORT[dim]} <span className="font-medium text-foreground">{fmt(summary?.[dim])}</span>
+          <span key={dim} className="text-xs text-muted-foreground" title={dimensionLabel(t, dim)}>
+            {dimensionShort(t, dim)} <span className="font-medium text-foreground">{fmt(summary?.[dim])}</span>
           </span>
         ))
       )}
@@ -94,7 +94,7 @@ export function SkillSummaryCard({
           return (
             <div key={dim} className="space-y-1">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs text-muted-foreground">{DIMENSION_LABELS[dim]}</span>
+                <span className="text-xs text-muted-foreground">{dimensionLabel(t, dim)}</span>
                 <span className="text-sm font-semibold">{fmt(value)}</span>
               </div>
               <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
@@ -110,7 +110,7 @@ export function SkillSummaryCard({
         <div className="flex flex-wrap gap-1.5">
           {summary.tags.map((tag) => (
             <Badge key={tag} variant="outline" className="text-xs">
-              {tagLabel(tag)}
+              {translatedTagLabel(t, tag)}
             </Badge>
           ))}
         </div>

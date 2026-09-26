@@ -121,7 +121,7 @@ export default async function RateMembersPage({ params, searchParams }: PageProp
         title={
           <>
             {title}
-            {isBaseline && <Badge variant="secondary" className="ml-3 align-middle">Admin</Badge>}
+            {isBaseline && <Badge variant="secondary" className="ml-3 align-middle">{t('ui.screens.rate.adminBadge')}</Badge>}
           </>
         }
         subtitle={subtitle}

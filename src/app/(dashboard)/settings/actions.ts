@@ -13,6 +13,8 @@ export interface NotificationPrefsInput {
   teams_created: boolean
   match_reminder: boolean
   match_cancelled: boolean
+  match_updated: boolean
+  lineup_changed: boolean
   results_posted: boolean
   results_request: boolean
   results_reminder: boolean

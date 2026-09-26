@@ -9,6 +9,8 @@ export type NotificationType =
   | 'teams_created'
   | 'match_reminder'
   | 'match_cancelled'
+  | 'match_updated'
+  | 'lineup_changed'
   | 'results_posted'
   | 'rate_new_member'
   | 'results_request'
@@ -24,6 +26,8 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'teams_created',
   'match_reminder',
   'match_cancelled',
+  'match_updated',
+  'lineup_changed',
   'results_posted',
   'rate_new_member',
   'results_request',
@@ -66,6 +70,13 @@ export interface MatchReminderPayload {
   group_name: string
   time: string // "HH:MM" in the group's timezone
   location: string | null
+  // Added with 00030: the match start the reminder was sent for (the reminder
+  // dedupe in emit_notification is per date_time, so a rescheduled match gets
+  // a new one) and whether teams were already published (the text mentions
+  // shirts only then). Absent on older rows: the template falls back to
+  // "Hoy" and mentions shirts.
+  date_time?: string // ISO timestamp
+  has_teams?: boolean
 }
 
 // Emitted by a trigger on matches (00026) when a match with signups is
@@ -77,6 +88,42 @@ export interface MatchCancelledPayload {
   date_time: string // ISO timestamp
   location: string | null
   player_ids: string[]
+}
+
+// Emitted by a trigger on matches (00030) when an announced match changes
+// date/time or location before it starts. Group-wide row (one WhatsApp
+// message); the app and device push show it only to player_ids (confirmed and
+// waitlist when it changed).
+export interface MatchUpdatedPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp, the new start
+  previous_date_time: string
+  location: string | null
+  previous_location: string | null
+  date_changed: boolean
+  location_changed: boolean
+  player_ids: string[]
+}
+
+export interface LineupChangedPlayer {
+  name: string
+  player_id: string | null
+  guest: boolean
+}
+
+// In-app only (no outbox row), one row per admin/captain with
+// recipient_player_id set (00030): a confirmed player dropped out of a match
+// whose teams were already published. `promoted` is who came in from the
+// waitlist in the same transaction (empty when nobody did).
+export interface LineupChangedPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  left: LineupChangedPlayer[]
+  promoted: LineupChangedPlayer[]
+  spots_left: number
+  recipient_player_id: string
 }
 
 // Crowd-sourced results (docs/match-results-consensus.md §11.1). Emitted from
@@ -188,6 +235,8 @@ export interface NotificationPayloadMap {
   teams_created: TeamsCreatedPayload
   match_reminder: MatchReminderPayload
   match_cancelled: MatchCancelledPayload
+  match_updated: MatchUpdatedPayload
+  lineup_changed: LineupChangedPayload
   results_posted: ResultsPostedPayload
   rate_new_member: RateNewMemberPayload
   results_request: ResultsRequestPayload
@@ -206,6 +255,8 @@ export type NotificationEvent =
   | { type: 'teams_created'; payload: TeamsCreatedPayload }
   | { type: 'match_reminder'; payload: MatchReminderPayload }
   | { type: 'match_cancelled'; payload: MatchCancelledPayload }
+  | { type: 'match_updated'; payload: MatchUpdatedPayload }
+  | { type: 'lineup_changed'; payload: LineupChangedPayload }
   | { type: 'results_posted'; payload: ResultsPostedPayload }
   | { type: 'rate_new_member'; payload: RateNewMemberPayload }
   | { type: 'results_request'; payload: ResultsRequestPayload }

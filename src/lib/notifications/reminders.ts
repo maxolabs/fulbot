@@ -8,6 +8,10 @@
 // One group-wide row per match (one WhatsApp message to the group). In the app
 // and on devices it only reaches the players confirmed for that match:
 // push_audience_matches (00026) checks match_signups for 'match_reminder'.
+//
+// Dedupe is per match *date*: a match that was rescheduled after its reminder
+// went out gets a new one for the new time (emit_notification applies the
+// same rule under an advisory lock, 00030).
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types/database'
 import type { MatchReminderPayload } from './types'
@@ -47,7 +51,7 @@ export async function emitMatchReminders(
 
     const { data: matches, error: matchesError } = await supabase
       .from('matches')
-      .select('id, group_id, date_time, location')
+      .select('id, group_id, date_time, location, status')
       .eq('group_id', settings.group_id)
       .in('status', ['teams_created', 'full', 'signup_open', 'signup_closed'])
       .gte('date_time', now.toISOString())
@@ -61,17 +65,23 @@ export async function emitMatchReminders(
     for (const match of matches ?? []) {
       const { data: existing, error: existingError } = await supabase
         .from('notifications')
-        .select('id')
+        .select('payload')
         .eq('match_id', match.id)
         .eq('type', 'match_reminder')
-        .limit(1)
 
       if (existingError) {
         console.error('Error checking existing match_reminder:', existingError)
         continue
       }
 
-      if (existing && existing.length > 0) {
+      // Rows written before 00030 have no date_time; emit_notification decides
+      // those (they count until the match is rescheduled).
+      const matchStart = Date.parse(match.date_time)
+      const alreadySent = (existing ?? []).some((row) => {
+        const sentFor = (row.payload as { date_time?: unknown } | null)?.date_time
+        return typeof sentFor === 'string' && Date.parse(sentFor) === matchStart
+      })
+      if (alreadySent) {
         skipped++
         continue
       }
@@ -83,6 +93,8 @@ export async function emitMatchReminders(
         group_name: group?.name ?? '',
         time,
         location: match.location,
+        date_time: match.date_time,
+        has_teams: match.status === 'teams_created',
       }
 
       const { error: rpcError } = await supabase.rpc('emit_notification', {
