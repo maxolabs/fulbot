@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock, CalendarX } from 'lucide-react'
+import { Bell, Users, Trophy, CalendarClock, ClipboardList, AlarmClock, CalendarX, CalendarCog, UserMinus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -23,6 +23,8 @@ interface SettingsFormProps {
   initialLanguage: Language
   initialTheme: ThemePreference
   initialNotificationPrefs: NotificationPrefsInput
+  // Admins and captains of at least one group also see lineup_changed.
+  showStaffPrefs?: boolean
 }
 
 function applyThemePreview(theme: ThemePreference) {
@@ -46,6 +48,7 @@ export function SettingsForm({
   initialLanguage,
   initialTheme,
   initialNotificationPrefs,
+  showStaffPrefs = false,
 }: SettingsFormProps) {
   const t = useT()
   const router = useRouter()
@@ -116,6 +119,22 @@ export function SettingsForm({
       title: t('ui.notify.prefMatchCancelledTitle'),
       desc: t('ui.notify.prefMatchCancelledDesc'),
     },
+    {
+      key: 'match_updated',
+      icon: CalendarCog,
+      title: t('ui.notifications.prefMatchUpdatedTitle'),
+      desc: t('ui.notifications.prefMatchUpdatedDesc'),
+    },
+    ...(showStaffPrefs
+      ? [
+          {
+            key: 'lineup_changed' as const,
+            icon: UserMinus,
+            title: t('ui.notifications.prefLineupChangedTitle'),
+            desc: t('ui.notifications.prefLineupChangedDesc'),
+          },
+        ]
+      : []),
     {
       key: 'results_posted',
       icon: Trophy,

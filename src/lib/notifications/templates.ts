@@ -1,15 +1,24 @@
-// T5 notifications: Spanish (Rioplatense, "vos") text per notification type.
-// Used both for the WhatsApp outbox body and the /notifications page list.
+// T5 notifications: text per notification type, used both for the WhatsApp
+// outbox body and the /notifications page list. Strings live in the i18n
+// files under ui.notifications.* (Spanish uses vos). The outbox renders in
+// Spanish (groups have no language of their own yet); the in-app list
+// renders in the viewer's language.
 
-import type { MemberScoreBreakdown, NotificationEvent } from './types'
-import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
+import type { LineupChangedPlayer, MemberScoreBreakdown, NotificationEvent } from './types'
+import { getTranslation, type Language, type TranslateFn } from '@/i18n/core'
+import {
+  DEFAULT_TIMEZONE,
+  calendarDaysFromNow,
+  formatMatchDateShort,
+  formatMatchTime,
+} from '@/lib/utils/datetime'
 
 // Both formatters take an explicit timeZone and assemble the string
 // themselves (see src/lib/utils/datetime.ts), so this never depends on the
 // process's local timezone nor on locale-default AM/PM (which used to
 // differ between Node's ICU and the value stored on the outbox row).
-function formatDateTime(iso: string, timeZone: string): { date: string; time: string } {
-  return { date: formatMatchDateShort(iso, timeZone), time: formatMatchTime(iso, timeZone) }
+function formatDateTime(iso: string, timeZone: string, language: Language): { date: string; time: string } {
+  return { date: formatMatchDateShort(iso, timeZone, language), time: formatMatchTime(iso, timeZone) }
 }
 
 // The SQL job handlers store report_url without a host when
@@ -24,22 +33,18 @@ export function resolveReportUrl(url: string | null | undefined): string {
   return `${base}${raw.startsWith('/') ? '' : '/'}${raw}`
 }
 
-function pluralGoles(n: number): string {
-  return n === 1 ? '1 gol' : `${n} goles`
-}
-
 function joinNames(names: string[]): string {
   return names.join(', ')
 }
 
-// "a, b y c"
-function joinList(items: string[]): string {
+// "a, b y c" / "a, b and c"
+function joinList(items: string[], t: TranslateFn): string {
   if (items.length <= 1) return items.join('')
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+  return `${items.slice(0, -1).join(', ')} ${t('ui.notifications.and')} ${items[items.length - 1]}`
 }
 
-function pluralize(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`
+function plural(t: TranslateFn, key: string, n: number): string {
+  return t(`${key}${n === 1 ? 'One' : 'Many'}`, { count: n })
 }
 
 // One decimal, like MemberScoreStars on the player page.
@@ -47,34 +52,47 @@ function formatScore(score: number | null | undefined): string {
   return typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : '—'
 }
 
+function atLocation(location: string | null | undefined, t: TranslateFn): string {
+  return location ? t('ui.notifications.atLocation', { location }) : ''
+}
+
+function playerNames(players: LineupChangedPlayer[] | undefined): string[] {
+  return (players ?? []).map((p) => p.name).filter(Boolean)
+}
+
 // Human summary of what is dragging the score down, from the breakdown snapshot
 // (docs/member-scoring.md §5.5: "Contás 2 bajas tarde en los últimos 10 partidos").
-function describeScoreIssues(b: MemberScoreBreakdown | null | undefined): string[] {
+function describeScoreIssues(b: MemberScoreBreakdown | null | undefined, t: TranslateFn): string[] {
   if (!b) return []
+  const k = 'ui.notifications.issues.'
   const issues: string[] = []
   const noShows = b.asistencia?.no_shows ?? 0
-  if (noShows > 0) issues.push(pluralize(noShows, 'falta sin avisar', 'faltas sin avisar'))
+  if (noShows > 0) issues.push(plural(t, `${k}noShow`, noShows))
   const lateCancels = b.aviso?.late ?? 0
-  if (lateCancels > 0) issues.push(pluralize(lateCancels, 'baja tarde', 'bajas tarde'))
+  if (lateCancels > 0) issues.push(plural(t, `${k}lateCancel`, lateCancels))
   const lateArrivals = b.puntualidad?.late_arrivals ?? 0
-  if (lateArrivals > 0) issues.push(pluralize(lateArrivals, 'llegada tarde', 'llegadas tarde'))
+  if (lateArrivals > 0) issues.push(plural(t, `${k}lateArrival`, lateArrivals))
   const wrongJersey = b.reglas?.wrong_jersey ?? 0
-  if (wrongJersey > 0) issues.push(pluralize(wrongJersey, 'partido sin la camiseta', 'partidos sin la camiseta'))
+  if (wrongJersey > 0) issues.push(plural(t, `${k}wrongJersey`, wrongJersey))
   const unpaid = b.reglas?.unpaid ?? 0
-  if (unpaid > 0) issues.push(pluralize(unpaid, 'partido sin pagar', 'partidos sin pagar'))
+  if (unpaid > 0) issues.push(plural(t, `${k}unpaid`, unpaid))
   const missedParticipation = (b.participacion?.eligible ?? 0) - (b.participacion?.participated ?? 0)
-  if (missedParticipation > 0) {
-    issues.push(pluralize(missedParticipation, 'partido sin reportar ni puntuar', 'partidos sin reportar ni puntuar'))
-  }
+  if (missedParticipation > 0) issues.push(plural(t, `${k}participation`, missedParticipation))
   const adjustment = b.adjustment_points ?? 0
-  if (adjustment < 0) issues.push(`un ajuste del admin de ${adjustment} puntos`)
+  if (adjustment < 0) issues.push(t(`${k}adjustment`, { points: adjustment }))
   return issues
 }
 
 export interface RenderOptions {
-  // 'whatsapp' (default) includes the report link in the text; 'inapp' leaves
-  // it out because the notification card itself links to the match page.
+  // 'whatsapp' (default) includes the report link in the text and speaks to
+  // the whole group; 'inapp' leaves the link out (the row itself links to the
+  // match page) and speaks to the viewer (waitlist_promoted is only shown to
+  // the promoted player).
   channel?: 'whatsapp' | 'inapp'
+  // Defaults to 'es': the outbox is sent in Spanish.
+  language?: Language
+  // For "Hoy" / "Mañana" in reminders; defaults to the current time.
+  now?: Date
 }
 
 export function renderNotificationText(
@@ -82,119 +100,180 @@ export function renderNotificationText(
   timeZone: string = DEFAULT_TIMEZONE,
   options: RenderOptions = {}
 ): string {
-  const withLink = options.channel !== 'inapp'
+  const inApp = options.channel === 'inapp'
+  const withLink = !inApp
+  const language: Language = options.language === 'en' ? 'en' : 'es'
+  const t = getTranslation(language)
+  const k = 'ui.notifications.'
+
   switch (event.type) {
     case 'match_created': {
-      const { date, time } = formatDateTime(event.payload.date_time, timeZone)
-      const location = event.payload.location ? ` en ${event.payload.location}` : ''
+      const { date, time } = formatDateTime(event.payload.date_time, timeZone, language)
       const spots = event.payload.spots_left ?? event.payload.max_players
-      return (
-        `¡Partido confirmado! ${date} ${time}hs${location} -- ${event.payload.group_name}. ` +
-        `${spots === 1 ? 'Queda 1 lugar' : `Quedan ${spots} lugares`}. ` +
-        `Anotate acá: ${resolveReportUrl(event.payload.signup_url)}`
-      )
+      return t(`${k}matchCreated`, {
+        date,
+        time,
+        location: atLocation(event.payload.location, t),
+        group: event.payload.group_name,
+        spots: plural(t, `${k}spots`, spots),
+        url: resolveReportUrl(event.payload.signup_url),
+      })
     }
     case 'waitlist_promoted':
-      return `¡${event.payload.player_name} entró! Se liberó un lugar en la lista de espera y ahora está confirmado/a.`
+      return inApp
+        ? t(`${k}waitlistPromotedYou`)
+        : t(`${k}waitlistPromoted`, { name: event.payload.player_name })
     case 'teams_created':
-      return (
-        `¡Se armaron los equipos! ` +
-        `Oscuro: ${(event.payload.dark_team_names ?? []).join(', ') || '—'}. ` +
-        `Claro: ${(event.payload.light_team_names ?? []).join(', ') || '—'}.`
-      )
-    case 'match_reminder':
-      return `Hoy ${event.payload.time} -- ${event.payload.group_name} -- remera oscura/clara según tu equipo`
+      return t(`${k}teamsCreated`, {
+        dark: (event.payload.dark_team_names ?? []).join(', ') || '—',
+        light: (event.payload.light_team_names ?? []).join(', ') || '—',
+      })
+    case 'match_reminder': {
+      const p = event.payload
+      let day = t(`${k}reminderToday`)
+      let time = p.time
+      if (p.date_time && Number.isFinite(Date.parse(p.date_time))) {
+        time = formatMatchTime(p.date_time, timeZone)
+        const days = calendarDaysFromNow(p.date_time, timeZone, options.now)
+        day =
+          days <= 0
+            ? t(`${k}reminderToday`)
+            : days === 1
+              ? t(`${k}reminderTomorrow`)
+              : formatMatchDateShort(p.date_time, timeZone, language)
+      }
+      const text = t(`${k}reminder`, { day, time, location: atLocation(p.location, t), group: p.group_name })
+      // Older rows have no has_teams: keep the shirt line they always had.
+      return p.has_teams === false ? text : `${text} ${t(`${k}reminderShirts`)}`
+    }
     case 'match_cancelled': {
-      const { date, time } = formatDateTime(event.payload.date_time, timeZone)
-      const location = event.payload.location ? ` en ${event.payload.location}` : ''
-      return `Se suspendió el partido del ${date} ${time}hs${location} -- ${event.payload.group_name}.`
+      const { date, time } = formatDateTime(event.payload.date_time, timeZone, language)
+      return t(`${k}matchCancelled`, {
+        date,
+        time,
+        location: atLocation(event.payload.location, t),
+        group: event.payload.group_name,
+      })
+    }
+    case 'match_updated': {
+      const p = event.payload
+      const { date, time } = formatDateTime(p.date_time, timeZone, language)
+      if (p.date_changed !== false && p.previous_date_time) {
+        const prev = formatDateTime(p.previous_date_time, timeZone, language)
+        return t(`${k}matchUpdatedWhen`, {
+          group: p.group_name,
+          oldDate: prev.date,
+          oldTime: prev.time,
+          date,
+          time,
+          location: atLocation(p.location, t),
+        })
+      }
+      return t(`${k}matchUpdatedWhere`, {
+        date,
+        time,
+        group: p.group_name,
+        place: p.location || t(`${k}noLocation`),
+      })
+    }
+    case 'lineup_changed': {
+      const p = event.payload
+      const { date, time } = formatDateTime(p.date_time, timeZone, language)
+      const left = playerNames(p.left)
+      const promoted = playerNames(p.promoted)
+      const head = t(left.length > 1 ? `${k}lineupLeftMany` : `${k}lineupLeftOne`, {
+        names: joinList(left, t),
+        date,
+        time,
+        group: p.group_name,
+      })
+      const tail =
+        promoted.length > 0
+          ? t(`${k}lineupPromoted`, { names: joinList(promoted, t) })
+          : typeof p.spots_left === 'number' && p.spots_left > 0
+            ? plural(t, `${k}lineupNoPromoted`, p.spots_left)
+            : t(`${k}lineupNoPromoted`)
+      return `${head} ${tail}`
     }
     case 'results_posted': {
       const p = event.payload
-      const parts: string[] = [`Resultado: Oscuro ${p.dark_score} – Claro ${p.light_score}.`]
+      const parts: string[] = [t(`${k}resultsScore`, { dark: p.dark_score, light: p.light_score })]
       const scorers = (p.scorers ?? []).filter((s) => s.goals > 0)
       if (scorers.length > 0) {
         parts.push(
-          `Goles: ${joinNames(scorers.map((s) => (s.goals > 1 ? `${s.name} (${s.goals})` : s.name)))}.`
+          t(`${k}resultsGoals`, {
+            names: joinNames(scorers.map((s) => (s.goals > 1 ? `${s.name} (${s.goals})` : s.name))),
+          })
         )
       }
       const assisters = (p.assisters ?? []).filter((a) => a.assists > 0)
       if (assisters.length > 0) {
         parts.push(
-          `Asistencias: ${joinNames(assisters.map((a) => (a.assists > 1 ? `${a.name} (${a.assists})` : a.name)))}.`
+          t(`${k}resultsAssists`, {
+            names: joinNames(assisters.map((a) => (a.assists > 1 ? `${a.name} (${a.assists})` : a.name))),
+          })
         )
       }
       const unattributed = (p.unattributed?.dark ?? 0) + (p.unattributed?.light ?? 0)
       if (unattributed > 0) {
-        parts.push(`${pluralGoles(unattributed)} sin autor.`)
+        parts.push(plural(t, `${k}unattributed`, unattributed))
       }
       if (p.mvp_name) {
-        parts.push(`MVP: ${p.mvp_name}.`)
+        parts.push(t(`${k}resultsMvp`, { name: p.mvp_name }))
       }
       if (p.status === 'consensus') {
-        parts.push('(Consenso del grupo)')
+        parts.push(t(`${k}resultsConsensus`))
       }
       return parts.join(' ')
     }
     case 'results_request': {
-      const { date } = formatDateTime(event.payload.date_time, timeZone)
+      const { date } = formatDateTime(event.payload.date_time, timeZone, language)
       const link = withLink ? `: ${resolveReportUrl(event.payload.report_url)}` : '.'
-      return (
-        `¿Cómo salió el partido del ${date} (${event.payload.group_name})? ` +
-        `Cargá el resultado, los goles y el MVP${link}`
-      )
+      return t(`${k}resultsRequest`, { date, group: event.payload.group_name, link })
     }
     case 'results_reminder': {
-      const { date } = formatDateTime(event.payload.date_time, timeZone)
+      const { date } = formatDateTime(event.payload.date_time, timeZone, language)
       const names = event.payload.pending_player_names ?? []
-      const who = names.length > 0 ? ` Faltan: ${joinNames(names)}.` : ''
+      const who = names.length > 0 ? t(`${k}resultsReminderWho`, { names: joinNames(names) }) : ''
       const link = withLink ? `: ${resolveReportUrl(event.payload.report_url)}` : '.'
-      return (
-        `Todavía falta cerrar el resultado del ${date} (${event.payload.group_name}).${who} ` +
-        `Cargá lo que te acuerdes${link}`
-      )
+      return t(`${k}resultsReminder`, { date, group: event.payload.group_name, who, link })
     }
     case 'results_needs_review': {
-      const { date } = formatDateTime(event.payload.date_time, timeZone)
-      return (
-        `Cerró la ventana del partido del ${date} (${event.payload.group_name}) ` +
-        `sin reportes. Cargá el resultado a mano cuando puedas.`
-      )
+      const { date } = formatDateTime(event.payload.date_time, timeZone, language)
+      return t(`${k}resultsNeedsReview`, { date, group: event.payload.group_name })
     }
     case 'rate_new_member':
-      return `¡${event.payload.player_name} se sumó al grupo! Si ya jugaste con esa persona, dejá tu calificación para que los equipos salgan parejos.`
+      return t(`${k}rateNewMember`, { name: event.payload.player_name })
     case 'results_changed': {
-      const { date } = formatDateTime(event.payload.date_time, timeZone)
-      const mvp = event.payload.mvp_name ? ` MVP: ${event.payload.mvp_name}.` : ''
-      return (
-        `El resultado del ${date} (${event.payload.group_name}) cambió de ${event.payload.previous_score} ` +
-        `a ${event.payload.current_score} después de ser publicado.${mvp} Revisalo y cerralo si corresponde.`
-      )
+      const { date } = formatDateTime(event.payload.date_time, timeZone, language)
+      const mvp = event.payload.mvp_name ? t(`${k}resultsChangedMvp`, { name: event.payload.mvp_name }) : ''
+      return t(`${k}resultsChanged`, {
+        date,
+        group: event.payload.group_name,
+        previous: event.payload.previous_score,
+        current: event.payload.current_score,
+        mvp,
+      })
     }
     case 'member_score_dropped': {
       const p = event.payload
       const window = p.breakdown?.window_matches ?? 10
-      const issues = describeScoreIssues(p.breakdown)
-      const why = issues.length > 0 ? ` Contás ${joinList(issues)} en los últimos ${window} partidos.` : ''
-      return (
-        `Tu compromiso en ${p.group_name} bajó a ${formatScore(p.score)} ` +
-        `(el mínimo para tener prioridad al anotarte es ${formatScore(p.threshold)}).${why} ` +
-        `Lo recuperás yendo a los próximos partidos y avisando con tiempo si no podés: ` +
-        `solo cuentan los últimos ${window} partidos, así que nada es para siempre.`
-      )
+      const issues = describeScoreIssues(p.breakdown, t)
+      const why = issues.length > 0 ? t(`${k}scoreDroppedWhy`, { issues: joinList(issues, t), window }) : ''
+      return t(`${k}scoreDropped`, {
+        group: p.group_name,
+        score: formatScore(p.score),
+        threshold: formatScore(p.threshold),
+        why,
+        window,
+      })
     }
     case 'member_score_recovered': {
       const p = event.payload
       if (p.score === null) {
-        return (
-          `Tu compromiso en ${p.group_name} vuelve a contar como nuevo y recuperaste la prioridad ` +
-          `para anotarte. Seguí así: cada partido a tiempo suma.`
-        )
+        return t(`${k}scoreRecoveredNew`, { group: p.group_name })
       }
-      return (
-        `¡Tu compromiso en ${p.group_name} subió a ${formatScore(p.score)} y recuperaste la prioridad ` +
-        `para anotarte! Seguí así: cada partido a tiempo suma.`
-      )
+      return t(`${k}scoreRecovered`, { group: p.group_name, score: formatScore(p.score) })
     }
     default: {
       const _exhaustive: never = event

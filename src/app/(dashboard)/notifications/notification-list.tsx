@@ -5,6 +5,8 @@ import Link from 'next/link'
 import {
   CalendarPlus,
   CalendarX,
+  CalendarClock,
+  UserMinus,
   ArrowUpCircle,
   Users,
   Clock,
@@ -28,7 +30,7 @@ import { createClient } from '@/lib/supabase/client'
 import { renderNotificationText } from '@/lib/notifications/templates'
 import type { NotificationEvent, NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { formatMatchDayMonth, formatMatchTime } from '@/lib/utils/datetime'
-import { useT } from '@/i18n/provider'
+import { useLanguage, useT, type Language } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
 
 // Notification rows (docs/ui-rework/03-screens.md §10, 06-principles.md §9):
@@ -48,6 +50,8 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   teams_created: Users,
   match_reminder: Clock,
   match_cancelled: CalendarX,
+  match_updated: CalendarClock,
+  lineup_changed: UserMinus,
   results_posted: Goal,
   rate_new_member: Star,
   results_request: ClipboardList,
@@ -62,12 +66,12 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
 // (docs/match-results-consensus.md §11.2), not the top of the page.
 const REPORT_ANCHOR_TYPES = new Set<NotificationRow['type']>(['results_request', 'results_reminder'])
 
-function safeRenderText(item: NotificationItem): string {
+function safeRenderText(item: NotificationItem, language: Language): string {
   try {
     return renderNotificationText(
       { type: item.type, payload: item.payload } as unknown as NotificationEvent,
       item.groupTimezone,
-      { channel: 'inapp' }
+      { channel: 'inapp', language, now: new Date(item.created_at) }
     )
   } catch {
     return ''
@@ -84,6 +88,7 @@ export function NotificationList({
   extraActions?: React.ReactNode
 }) {
   const t = useT()
+  const language = useLanguage()
   const shell = useShell()
   const supabase = createClient()
   // Read state comes from notification_reads (per-player), passed in as
@@ -170,7 +175,7 @@ export function NotificationList({
           {items.map((n) => {
             const Icon = TYPE_ICON[n.type] ?? Bell
             const isRead = readIds.has(n.id)
-            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
+            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : n.type === 'lineup_changed' ? '/teams' : ''
             // Score nudges are addressed to one member and land on their own
             // player page in that group (docs/member-scoring.md §10.4).
             const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'
@@ -201,7 +206,7 @@ export function NotificationList({
                 <span className="min-w-0 flex-1">
                   <span className={cn('block text-sm text-pretty', !isRead && 'font-semibold')}>
                     {!isRead && <span className="sr-only">{t('ui.screens.notifications.unread')} </span>}
-                    {safeRenderText(n)}
+                    {safeRenderText(n, language)}
                   </span>
                   {n.groupName && <span className="mt-0.5 block text-xs text-muted-foreground">{n.groupName}</span>}
                 </span>

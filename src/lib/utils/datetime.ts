@@ -127,12 +127,29 @@ function capitalize(word: string): string {
   return word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)
 }
 
+/**
+ * Display language for the formatters below. Defaults to Spanish ('es', the
+ * es-AR locale) so existing call sites keep their output; pass the viewer's
+ * language ('en') to get English weekday names and M/d ordering.
+ */
+export type DateLocale = 'es' | 'en'
+
+function intlLocale(locale: DateLocale | undefined): string {
+  return locale === 'en' ? 'en-US' : 'es-AR'
+}
+
+// "7/9" in Spanish, "9/7" in English.
+function dayMonth(map: Record<string, string>, locale: DateLocale | undefined): string {
+  return locale === 'en' ? `${map.month}/${map.day}` : `${map.day}/${map.month}`
+}
+
 function getPartsMap(
   date: Date,
   timeZone: string,
-  options: Intl.DateTimeFormatOptions
+  options: Intl.DateTimeFormatOptions,
+  locale?: DateLocale
 ): Record<string, string> {
-  const dtf = new Intl.DateTimeFormat('es-AR', { timeZone, ...options })
+  const dtf = new Intl.DateTimeFormat(intlLocale(locale), { timeZone, ...options })
   const parts = dtf.formatToParts(date)
   const map: Record<string, string> = {}
   for (const part of parts) {
@@ -141,33 +158,43 @@ function getPartsMap(
   return map
 }
 
-/** "Lunes" -- the capitalized Spanish weekday name in `timeZone`. */
-export function formatWeekday(date: Date | string, timeZone: string): string {
-  const map = getPartsMap(toDate(date), timeZone, { weekday: 'long' })
+/** "Lunes" -- the capitalized weekday name in `timeZone` ("Monday" in English). */
+export function formatWeekday(date: Date | string, timeZone: string, locale?: DateLocale): string {
+  const map = getPartsMap(toDate(date), timeZone, { weekday: 'long' }, locale)
   return capitalize(map.weekday)
 }
 
 /** "Lunes 7/9/2026" -- capitalized weekday + d/M/yyyy, in `timeZone`. */
-export function formatMatchDate(date: Date | string, timeZone: string): string {
+export function formatMatchDate(date: Date | string, timeZone: string, locale?: DateLocale): string {
   const d = toDate(date)
-  const map = getPartsMap(d, timeZone, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'numeric',
-    year: 'numeric',
-  })
-  return `${capitalize(map.weekday)} ${map.day}/${map.month}/${map.year}`
+  const map = getPartsMap(
+    d,
+    timeZone,
+    {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+    },
+    locale
+  )
+  return `${capitalize(map.weekday)} ${dayMonth(map, locale)}/${map.year}`
 }
 
 /** "Lunes 7/9" -- capitalized weekday + d/M (no year), in `timeZone`. */
-export function formatMatchDateShort(date: Date | string, timeZone: string): string {
+export function formatMatchDateShort(date: Date | string, timeZone: string, locale?: DateLocale): string {
   const d = toDate(date)
-  const map = getPartsMap(d, timeZone, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'numeric',
-  })
-  return `${capitalize(map.weekday)} ${map.day}/${map.month}`
+  const map = getPartsMap(
+    d,
+    timeZone,
+    {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'numeric',
+    },
+    locale
+  )
+  return `${capitalize(map.weekday)} ${dayMonth(map, locale)}`
 }
 
 /**
@@ -175,10 +202,10 @@ export function formatMatchDateShort(date: Date | string, timeZone: string): str
  * already render a translated weekday label separately (e.g. via
  * `days.<key>` i18n strings) and just need the numeric date alongside it.
  */
-export function formatMatchDateNumeric(date: Date | string, timeZone: string): string {
+export function formatMatchDateNumeric(date: Date | string, timeZone: string, locale?: DateLocale): string {
   const d = toDate(date)
-  const map = getPartsMap(d, timeZone, { day: 'numeric', month: 'numeric', year: 'numeric' })
-  return `${map.day}/${map.month}/${map.year}`
+  const map = getPartsMap(d, timeZone, { day: 'numeric', month: 'numeric', year: 'numeric' }, locale)
+  return `${dayMonth(map, locale)}/${map.year}`
 }
 
 /** "07/09" -- zero-padded dd/MM with no weekday or year, in `timeZone`. */
@@ -201,8 +228,8 @@ export function formatMatchTime(date: Date | string, timeZone: string): string {
 }
 
 /** "Lunes 7/9/2026 21:00" -- formatMatchDate + formatMatchTime, in `timeZone`. */
-export function formatMatchDateTime(date: Date | string, timeZone: string): string {
-  return `${formatMatchDate(date, timeZone)} ${formatMatchTime(date, timeZone)}`
+export function formatMatchDateTime(date: Date | string, timeZone: string, locale?: DateLocale): string {
+  return `${formatMatchDate(date, timeZone, locale)} ${formatMatchTime(date, timeZone)}`
 }
 
 const EN_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -219,4 +246,19 @@ export function weekdayIndexInTimezone(date: Date | string, timeZone: string): n
   const name = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'long' }).format(d).toLowerCase()
   const idx = EN_WEEKDAYS.indexOf(name)
   return idx === -1 ? d.getUTCDay() : idx
+}
+
+/**
+ * How many calendar days `date` is after `now`, both read as wall-clock dates
+ * in `timeZone` (0 = same day, 1 = tomorrow, negative = in the past). Used to
+ * say "Hoy" / "Mañana" in reminders without trusting the runtime's zone.
+ */
+export function calendarDaysFromNow(date: Date | string, timeZone: string, now: Date = new Date()): number {
+  const a = splitDateTimeInTimezone(toDate(date).toISOString(), timeZone).date
+  const b = splitDateTimeInTimezone(now.toISOString(), timeZone).date
+  const toUtcDay = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map(Number)
+    return Date.UTC(y, m - 1, d) / 86400000
+  }
+  return Math.round(toUtcDay(a) - toUtcDay(b))
 }

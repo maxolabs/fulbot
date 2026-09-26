@@ -16,6 +16,18 @@ const MAX_ATTEMPTS = 5
 // claim window of claim_notification_outbox (00026).
 const BATCH_SIZE = 20
 
+// Retry delay after a failed send: 2, 4, 8, 16 minutes (capped at an hour).
+// claim_notification_outbox (00030) only claims rows whose available_at has
+// passed, and marks rows 'skipped' once they are stale (older than 24 hours,
+// or a pre-match message for a match that already started, finished or was
+// cancelled), so a flaky webhook never delivers yesterday's reminder.
+export function outboxRetryDelayMs(attempts: number): number {
+  return Math.min(60, 2 ** Math.max(1, attempts)) * 60 * 1000
+}
+
+// available_at comes from 00030 and is not in the generated Database types yet.
+type OutboxUpdate = Database['public']['Tables']['notification_outbox']['Update'] & { available_at?: string }
+
 export interface DrainOutboxResult {
   processed: number
   sent: number
@@ -56,10 +68,10 @@ export async function drainOutbox(): Promise<DrainOutboxResult> {
   let sent = 0
   let failed = 0
 
-  const settle = async (row: ClaimedOutboxRow, update: Database['public']['Tables']['notification_outbox']['Update']) => {
+  const settle = async (row: ClaimedOutboxRow, update: OutboxUpdate) => {
     await supabase
       .from('notification_outbox')
-      .update({ ...update, claimed_at: null, lease_id: null })
+      .update({ ...update, claimed_at: null, lease_id: null } as Database['public']['Tables']['notification_outbox']['Update'])
       .eq('id', row.id)
       .eq('lease_id', row.lease_id)
   }
@@ -87,9 +99,11 @@ export async function drainOutbox(): Promise<DrainOutboxResult> {
       sent++
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido'
+      const exhausted = row.attempts >= MAX_ATTEMPTS
       await settle(row, {
-        status: row.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
+        status: exhausted ? 'failed' : 'pending',
         last_error: message,
+        ...(exhausted ? {} : { available_at: new Date(Date.now() + outboxRetryDelayMs(row.attempts)).toISOString() }),
       })
       failed++
     }
