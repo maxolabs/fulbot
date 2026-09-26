@@ -17,7 +17,7 @@ Checklist, in order:
 
 ## 1. Database and migrations
 
-Migrations live in `supabase/migrations` (`00001_…` to `00027_…`) and must
+Migrations live in `supabase/migrations` (`00001_…` to `00031_…`) and must
 run in order. Each file is written to be re-runnable, but none is meant to be
 skipped.
 
@@ -39,7 +39,7 @@ supabase link --project-ref <project-ref>
 supabase migration repair --status applied 00001 00002 00003 ... 00026
 
 supabase migration list   # local vs remote: every row must match
-supabase db push          # applies only what is missing (e.g. 00027)
+supabase db push          # applies only what is missing (e.g. 00027 to 00031)
 ```
 
 After that, `supabase db push` is the only way migrations reach production.
@@ -65,6 +65,34 @@ Quick checks for the recent migrations, when unsure whether one ran:
 | 00025 | `select 1 from pg_tables where tablename = 'recurring_match_occurrences'` |
 | 00026 | `select 1 from pg_proc where proname = 'notification_visible_to'` |
 | 00027 | `select 1 from pg_constraint where conname = 'groups_name_length'` |
+| 00028 | `select 1 from information_schema.columns where table_name = 'player_profiles' and column_name = 'profile_completed_at'` |
+| 00029 | `select 1 from pg_proc where proname = 'get_member_scores'` |
+| 00030 | `select 1 from information_schema.columns where table_name = 'notification_outbox' and column_name = 'available_at'` |
+| 00031 | `select 1 from pg_proc where proname = 'emit_notification' and prosrc like '%''anon''%'` |
+
+### 00027 to 00031: order and what the app needs from each
+
+Apply them in order, **before** deploying the app version that ships with
+them. The current app calls functions and columns these migrations add; if the
+code goes out first, these screens fail until the migration runs:
+
+| Migration | Adds | If the app ships before it |
+|-----------|------|----------------------------|
+| 00027 `text_limits` | CHECK limits on names, descriptions, locations, notes; trims existing rows | Nothing breaks: the forms already enforce the same limits. Apply it anyway, it is what rejects crafted requests. |
+| 00028 `membership_lifecycle` | `create_group_with_admin(…, p_timezone)`, `leave_group`, `admin_remove_member`, `regenerate_invite_code`, `player_profiles.profile_completed_at`, time zone validation, slug `new` reserved | **Creating a group fails** (the app always sends `p_timezone`). **Saving the profile fails** (it writes `profile_completed_at`). Leaving a group, removing a member and regenerating the invite link fail. The "Contanos dónde jugás" row never shows and hiding it does nothing. |
+| 00029 `match_lifecycle_guards` | `get_member_scores()`, `admin_set_guest_rating()`, `matches.lineup_needs_review`, signup/cancel guards, column privileges on `matches` and `group_memberships` | **Member scores disappear** (players list, player page, profile, signup priority notice) and the team balancer treats everyone as neutral, because scores are only read through `get_member_scores`. "Editar nivel" on a guest fails. The "lineup changed" notice never shows. |
+| 00030 `notifications_match_updates` | `notification_outbox.available_at` (backoff), `match_updated` / `lineup_changed` notifications, reminder dedupe per date | A failed WhatsApp send cannot be written back (the app sets `available_at`): the row stays `sending` until the 10-minute stale reclaim and retries without backoff. No `match_updated` / `lineup_changed` notifications. |
+| 00031 `guest_cancel_notifications` | `emit_notification` accepts anonymous guests reached through the token-checked RPCs | Independent of the code: until it runs, **a guest cannot cancel** from `/m/<match>` when someone is on the waitlist ("No sos miembro de este grupo"). Apply it right away. |
+
+The reverse window matters for 00029 too: it revokes `SELECT` on
+`group_memberships.member_score`, `member_breakdown`, `member_score_at` and
+`signup_cooldown` from `authenticated`. An app version older than this wave
+reads those columns directly and gets "permission denied" on the score
+screens, so deploy the app right after applying 00029.
+
+With the CLI this is one `supabase db push` followed by the deploy. By hand,
+run each file with `psql -v ON_ERROR_STOP=1 -f …`, check it with the query in
+the table above, then deploy.
 
 `supabase/seed.sql` is demo data for a local stack. Never run it on
 production.
@@ -207,6 +235,12 @@ section). Something must call it every minute. Options, best first:
 Degraded means: no tick in the last `HEALTH_MAX_TICK_AGE_MINUTES` (default
 10), a pending job overdue by more than 10 minutes, a scheduled job failed in
 the last 24 hours, or the database could not be read.
+
+Without a per-minute ticker (option 4 in [Scheduler](#4-scheduler): only the
+daily Vercel cron and page-load ticks) the last tick is usually older than 10
+minutes, so `/api/health` reports `degraded` most of the time. That is the
+intended signal: set up a ticker, or raise `HEALTH_MAX_TICK_AGE_MINUTES` if
+you knowingly run without one (the other checks still apply).
 
 Point an uptime monitor (UptimeRobot, Better Stack, Uptime Kuma) at
 `https://fulbot.app/api/health`, checking for HTTP 200 every 5 minutes. It
