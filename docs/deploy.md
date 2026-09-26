@@ -17,7 +17,7 @@ Checklist, in order:
 
 ## 1. Database and migrations
 
-Migrations live in `supabase/migrations` (`00001_…` to `00031_…`) and must
+Migrations live in `supabase/migrations` (`00001_…` to `00032_…`) and must
 run in order. Each file is written to be re-runnable, but none is meant to be
 skipped.
 
@@ -39,7 +39,7 @@ supabase link --project-ref <project-ref>
 supabase migration repair --status applied 00001 00002 00003 ... 00026
 
 supabase migration list   # local vs remote: every row must match
-supabase db push          # applies only what is missing (e.g. 00027 to 00031)
+supabase db push          # applies only what is missing (e.g. 00027 to 00032)
 ```
 
 After that, `supabase db push` is the only way migrations reach production.
@@ -69,8 +69,9 @@ Quick checks for the recent migrations, when unsure whether one ran:
 | 00029 | `select 1 from pg_proc where proname = 'get_member_scores'` |
 | 00030 | `select 1 from information_schema.columns where table_name = 'notification_outbox' and column_name = 'available_at'` |
 | 00031 | `select 1 from pg_proc where proname = 'emit_notification' and prosrc like '%''anon''%'` |
+| 00032 | `select 1 from pg_trigger where tgname = 'matches_guard_closed_edits'` |
 
-### 00027 to 00031: order and what the app needs from each
+### 00027 to 00032: order and what the app needs from each
 
 Apply them in order, **before** deploying the app version that ships with
 them. The current app calls functions and columns these migrations add; if the
@@ -83,6 +84,7 @@ code goes out first, these screens fail until the migration runs:
 | 00029 `match_lifecycle_guards` | `get_member_scores()`, `admin_set_guest_rating()`, `matches.lineup_needs_review`, signup/cancel guards, column privileges on `matches` and `group_memberships` | **Member scores disappear** (players list, player page, profile, signup priority notice) and the team balancer treats everyone as neutral, because scores are only read through `get_member_scores`. "Editar nivel" on a guest fails. The "lineup changed" notice never shows. |
 | 00030 `notifications_match_updates` | `notification_outbox.available_at` (backoff), `match_updated` / `lineup_changed` notifications, reminder dedupe per date | A failed WhatsApp send cannot be written back (the app sets `available_at`): the row stays `sending` until the 10-minute stale reclaim and retries without backoff. No `match_updated` / `lineup_changed` notifications. |
 | 00031 `guest_cancel_notifications` | `emit_notification` accepts anonymous guests reached through the token-checked RPCs | Independent of the code: until it runs, **a guest cannot cancel** from `/m/<match>` when someone is on the waitlist ("No sos miembro de este grupo"). Apply it right away. |
+| 00032 `match_edit_guard` | Trigger: API callers cannot change `date_time`, `location` or `max_players` of a finished or cancelled match | Nothing breaks: the edit page already shows a notice instead of the form for those matches. Until it runs, a crafted request can still move a closed match. |
 
 The reverse window matters for 00029 too: it revokes `SELECT` on
 `group_memberships.member_score`, `member_breakdown`, `member_score_at` and

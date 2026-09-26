@@ -1,4 +1,7 @@
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { ArrowLeft, Lock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/server'
 import { TopBarConfig } from '@/components/layout/top-bar'
 import { PageHeader } from '@/components/layout/page-header'
@@ -56,11 +59,12 @@ export default async function EditMatchPage({ params }: PageProps) {
 
   const { data: match } = await supabase
     .from('matches')
-    .select('id, date_time, location, max_players, notes, duration_minutes, results_request_delay_minutes')
+    .select('id, status, date_time, location, max_players, notes, duration_minutes, results_request_delay_minutes')
     .eq('id', matchId)
     .eq('group_id', group.id)
     .single() as { data: {
       id: string
+      status: string
       date_time: string
       location: string | null
       max_players: number
@@ -71,11 +75,41 @@ export default async function EditMatchPage({ params }: PageProps) {
 
   if (!match) return notFound()
 
+  const matchHref = `/groups/${groupSlug}/matches/${matchId}`
+
+  // Finished and cancelled matches keep their date, place and cap
+  // (00032_match_edit_guard rejects the change in the database too).
+  if (match.status === 'finished' || match.status === 'cancelled') {
+    return (
+      <div className="mx-auto max-w-xl space-y-6">
+        <TopBarConfig title={t('matches.editMatch')} back={matchHref} />
+        <PageHeader title={t('matches.editMatch')} />
+        <div role="status" className="flex items-start gap-3 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+          <div className="min-w-0 space-y-3">
+            <div>
+              <p className="font-semibold">
+                {t(match.status === 'finished' ? 'matches.editLockedFinished' : 'matches.editLockedCancelled')}
+              </p>
+              <p className="mt-0.5 text-pretty text-muted-foreground">{t('matches.editLockedBody')}</p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href={matchHref}>
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                {t('matches.backToMatch')}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const { date, time } = splitDateTimeInTimezone(match.date_time, group.timezone)
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <TopBarConfig title={t('matches.editMatch')} back={`/groups/${groupSlug}/matches/${matchId}`} />
+      <TopBarConfig title={t('matches.editMatch')} back={matchHref} />
       <PageHeader title={t('matches.editMatch')} subtitle={t('matches.editMatchSubtitle')} />
       <p className="text-sm text-muted-foreground text-pretty lg:hidden">{t('matches.editMatchSubtitle')}</p>
 

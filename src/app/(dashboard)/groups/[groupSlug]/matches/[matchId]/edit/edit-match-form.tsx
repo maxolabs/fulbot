@@ -88,6 +88,11 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         .eq('id', matchId)
 
       if (updateError) {
+        // 00032: the match was finished or cancelled while the form was open.
+        if ((updateError.message ?? '').includes('No se puede modificar')) {
+          setError(t('ui.lifecycle.matchNotEditable'))
+          return
+        }
         throw updateError
       }
 
