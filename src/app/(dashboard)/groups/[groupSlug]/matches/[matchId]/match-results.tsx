@@ -50,6 +50,8 @@ interface MatchResultsProps {
   mvpPlayerId: string | null
   /** Registered confirmed players of the match (MVP candidates). */
   mvpCandidates: { id: string; display_name: string }[]
+  /** The group's time zone, for the "locked at" time. */
+  timeZone: string
 }
 
 // supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
@@ -100,6 +102,7 @@ export function MatchResults({
   lockedAt,
   mvpPlayerId,
   mvpCandidates,
+  timeZone,
 }: MatchResultsProps) {
   const router = useRouter()
   const supabase = createClient()
@@ -137,9 +140,9 @@ export function MatchResults({
 
   useEffect(() => {
     setLockedAtLabel(
-      lockedAt ? new Date(lockedAt).toLocaleString(language === 'en' ? 'en-US' : 'es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+      lockedAt ? new Date(lockedAt).toLocaleString(language === 'en' ? 'en-US' : 'es-AR', { dateStyle: 'short', timeStyle: 'short', timeZone }) : null
     )
-  }, [lockedAt, language])
+  }, [lockedAt, language, timeZone])
 
   useEffect(() => {
     if (!isLocked || !lockedBy) {

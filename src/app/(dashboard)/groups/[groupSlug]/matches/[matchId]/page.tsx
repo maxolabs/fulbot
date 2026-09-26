@@ -596,6 +596,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       lockedAt={match.result_locked_at ?? null}
       mvpPlayerId={match.mvp_player_id}
       mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+      timeZone={timeZone}
     />
   ) : null
 
@@ -849,6 +850,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                     ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
                   ]}
                   confirmedCount={matchPlayers.length}
+                  timeZone={timeZone}
                 />
               )}
 

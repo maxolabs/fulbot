@@ -15,6 +15,8 @@ interface MatchReportsTableProps {
   people: { id: string; display_name: string }[]
   /** Number of confirmed players (for "N de M reportaron"). */
   confirmedCount: number
+  /** The group's time zone: report times read like every other time in the app. */
+  timeZone: string
 }
 
 type ReportRow = MatchReport & { match_report_stats: MatchReportStat[] }
@@ -26,7 +28,7 @@ function fmtStat(stats: MatchReportStat[], teamId: string, key: 'goals' | 'assis
   return items.length > 0 ? items.join(', ') : '—'
 }
 
-export function MatchReportsTable({ matchId, resultStatus, teams, people, confirmedCount }: MatchReportsTableProps) {
+export function MatchReportsTable({ matchId, resultStatus, teams, people, confirmedCount, timeZone }: MatchReportsTableProps) {
   const supabase = createClient()
   const t = useT()
   const language = useLanguage()
@@ -180,6 +182,7 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                           {new Date(r.updated_at).toLocaleString(language === 'en' ? 'en-US' : 'es-AR', {
                             dateStyle: 'short',
                             timeStyle: 'short',
+                            timeZone,
                           })}
                         </td>
                       </tr>
