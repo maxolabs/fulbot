@@ -14,6 +14,9 @@ import { MembersManager } from './members-manager'
 import { NotificationSettings } from './notification-settings'
 import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
+import { InviteLinkSettings } from './invite-link-settings'
+import { LeaveGroupRow } from '@/components/leave-group-row'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -187,6 +190,16 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('ui.screens.groupSettings.invite')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.inviteHint')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <InviteLinkSettings groupId={group.id} baseUrl={getAppBaseUrl()} inviteCode={group.invite_code} />
+        </CardContent>
+      </Card>
+
       {/* Member scoring (docs/member-scoring.md §6, §10.2) */}
       <Card>
         <CardHeader>
@@ -253,6 +266,14 @@ export default async function GroupSettingsPage({ params }: PageProps) {
           />
         </CardContent>
       </Card>
+
+      {/* Leaving is not destructive for the group, so it sits above the danger zone as a row. */}
+      <LeaveGroupRow
+        groupId={group.id}
+        groupName={group.name}
+        isLastAdmin={members.filter((m) => m.role === 'admin').length <= 1}
+        className="border-b"
+      />
 
       <Card variant="solid" className="border-destructive">
         <CardHeader>

@@ -71,6 +71,8 @@ export function ProfileForm({ profile, positions }: ProfileFormProps) {
           footedness,
           goalkeeper_willingness: goalkeeperWillingness,
           fitness_status: fitnessStatus,
+          // Hides the "Contanos dónde jugás" row on the group home (00028).
+          profile_completed_at: new Date().toISOString(),
         })
         .eq('id', profile.id)
 

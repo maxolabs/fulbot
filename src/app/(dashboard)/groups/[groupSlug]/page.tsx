@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, Users } from 'lucide-react'
+import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -16,6 +17,7 @@ import { GroupSwitcherTitle } from '@/components/layout/group-switcher'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import { LeaveGroupRow } from '@/components/leave-group-row'
 import { InviteButton } from './invite-button'
 import { MatchRow, MatchStatusBadge, ScoreText } from './matches/match-row'
 import { formatHeroDate, formatRowDate, formatShortDate } from './matches/match-format'
@@ -120,6 +122,30 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .filter((m): m is MembershipResult & { player_profiles: NonNullable<MembershipResult['player_profiles']> } => m.player_profiles !== null)
     .map(m => ({ id: m.id, role: m.role, player: m.player_profiles }))
   const memberNameById = new Map(members.map(m => [m.player.id, m.player.display_name]))
+  const isLastAdmin = isAdmin && members.filter(m => m.role === 'admin').length <= 1
+
+  // "Contanos dónde jugás": until the player saves their profile (or hides the
+  // row) their positions are the column defaults, and the balancer would treat
+  // them as a CM. profile_completed_at comes with 00028; before it is applied
+  // the query errors and the row simply stays hidden.
+  const { data: profileState } = await (supabase as any)
+    .from('player_profiles')
+    .select('profile_completed_at')
+    .eq('id', playerProfile.id)
+    .maybeSingle() as { data: { profile_completed_at: string | null } | null }
+  const showProfilePrompt = !!profileState && profileState.profile_completed_at === null
+
+  async function dismissProfilePrompt() {
+    'use server'
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await (supabase as any)
+      .from('player_profiles')
+      .update({ profile_completed_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+    revalidatePath(`/groups/${groupSlug}`)
+  }
 
   // Initial scoring: members the current player hasn't rated or skipped yet in this
   // group. RLS returns only the current voter's own peer_ratings rows.
@@ -600,6 +626,31 @@ export default async function GroupDetailPage({ params }: PageProps) {
             )}
           </Card>
 
+          {showProfilePrompt && (
+            <div className="flex items-center border-y border-border">
+              <Link
+                href="/profile"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{t('ui.membership.profilePrompt')}</span>
+                  <span className="block text-xs text-muted-foreground text-pretty">{t('ui.membership.profilePromptBody')}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
+              <form action={dismissProfilePrompt}>
+                <button
+                  type="submit"
+                  aria-label={t('ui.membership.profilePromptDismiss')}
+                  className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              </form>
+            </div>
+          )}
+
           {/* Mobile: the aside collapses to two tiles */}
           <div className="grid grid-cols-2 gap-3 lg:hidden">
             <Link
@@ -703,6 +754,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
               </ul>
             </section>
           )}
+
+          <LeaveGroupRow
+            groupId={group.id}
+            groupName={group.name}
+            isLastAdmin={isLastAdmin}
+            className="border-b"
+          />
         </div>
 
         {/* Aside (browser only) */}
