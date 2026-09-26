@@ -83,7 +83,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   type MembershipWithProfile = {
     id: string
     role: string
-    member_score: number | null
     player_profiles: {
       id: string
       display_name: string
@@ -100,7 +99,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
     .select(`
       id,
       role,
-      member_score,
       player_profiles (
         id,
         display_name,
@@ -114,11 +112,25 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
     .eq('group_id', group.id)
     .eq('is_active', true) as { data: MembershipWithProfile[] | null }
 
+  // The score columns are not selectable (00029): get_member_scores applies
+  // the same visibility rule on the server (everyone's rows for admins,
+  // captains or 'group' visibility, otherwise only the viewer's own).
+  const scoreByPlayer = new Map<string, number | null>()
+  if (scoringEnabled) {
+    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
+      fn: 'get_member_scores', args: { p_group_id: string }
+    ) => PromiseLike<{ data: { player_id: string; member_score: number | null }[] | null }>
+    const { data: scoreRows } = await scoresRpc('get_member_scores', { p_group_id: group.id })
+    for (const row of scoreRows || []) {
+      scoreByPlayer.set(row.player_id, row.member_score === null ? null : Number(row.member_score))
+    }
+  }
+
   const players = (memberships || [])
     .filter((m) => m.player_profiles !== null)
     .map((m) => ({
       role: m.role as 'admin' | 'captain' | 'member',
-      memberScore: m.member_score === null ? null : Number(m.member_score),
+      memberScore: scoreByPlayer.get(m.player_profiles!.id) ?? null,
       ...(m.player_profiles as NonNullable<MembershipWithProfile['player_profiles']>),
     }))
     .sort((a, b) => {

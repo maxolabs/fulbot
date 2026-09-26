@@ -128,7 +128,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const canSeeScore = !!scoringSettings?.enabled
     && (scoringSettings.visibility === 'group' || isAdminOrCaptain || currentPlayer.id === playerId)
 
-  type MemberScoreRow = { member_score: number | null; member_breakdown: MemberBreakdown | null }
+  type MemberScoreRow = { player_id: string; is_active: boolean; member_score: number | null; member_breakdown: MemberBreakdown | null }
   type MemberEventRow = {
     id: string
     match_id: string | null
@@ -147,14 +147,13 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const reporterNameById = new Map<string, string>()
 
   if (canSeeScore) {
-    const { data: scoreRow } = await supabase
-      .from('group_memberships')
-      .select('member_score, member_breakdown')
-      .eq('group_id', group.id)
-      .eq('player_id', playerId)
-      .eq('is_active', true)
-      .maybeSingle() as { data: MemberScoreRow | null }
-    memberScore = scoreRow
+    // The score columns are not selectable (00029); get_member_scores applies
+    // the same visibility rule on the server.
+    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
+      fn: 'get_member_scores', args: { p_group_id: string }
+    ) => PromiseLike<{ data: MemberScoreRow[] | null }>
+    const { data: scoreRows } = await scoresRpc('get_member_scores', { p_group_id: group.id })
+    memberScore = (scoreRows || []).find((row) => row.player_id === playerId && row.is_active) ?? null
 
     // The window is the group's last N finished matches (§3); match-less events
     // (adjustments, newcomer ratings) count from the oldest window match on.
