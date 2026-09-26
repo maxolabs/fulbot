@@ -13,7 +13,8 @@ import { authErrorKey } from '@/lib/auth-errors'
 import { safeRedirect } from '@/lib/safe-redirect'
 
 // Password reset, step 1: same frame as login. Supabase mails a link to
-// /api/auth/callback, which opens a session and continues to /update-password.
+// /api/auth/callback (or /api/auth/confirm with the templates in
+// supabase/templates/), which opens a session and continues to /update-password.
 
 export function ForgotPasswordForm({ redirectParam }: { redirectParam?: string }) {
   const t = useT()
@@ -60,7 +61,7 @@ export function ForgotPasswordForm({ redirectParam }: { redirectParam?: string }
       </div>
 
       {sentTo ? (
-        <FormNotice kind="success">{t('ui.screens.auth.resetSent', { email: sentTo })}</FormNotice>
+        <FormNotice kind="success">{t('ui.screens.auth.resetSentAnyDevice', { email: sentTo })}</FormNotice>
       ) : (
         <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-5">
           {error && <FormNotice kind="error">{error}</FormNotice>}

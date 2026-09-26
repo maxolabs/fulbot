@@ -48,6 +48,30 @@ function stamp(): string {
   return new Date().toISOString()
 }
 
+// A tick that "succeeds" can still carry failed jobs or failed sweeps. They
+// are logged as warnings (one line each) so `grep WARN` or a log alert finds
+// them; GET /api/health reports the same failures for an uptime monitor.
+function warnOnFailures(body: Record<string, unknown>): void {
+  const jobs = Array.isArray(body.jobs) ? (body.jobs as Array<Record<string, unknown>>) : []
+  for (const job of jobs) {
+    if (job.ok === false) {
+      console.warn(
+        `[ticker] ${stamp()} WARN job failed: ${String(job.job_type)} id=${String(job.id)} ` +
+          `match=${String(job.match_id ?? '-')}: ${String(job.error ?? 'unknown error')}`
+      )
+    }
+  }
+  const sweeps = (body.sweeps ?? {}) as Record<string, unknown>
+  for (const [name, error] of Object.entries(sweeps)) {
+    if (error) console.warn(`[ticker] ${stamp()} WARN ${name}: ${String(error)}`)
+  }
+  for (const key of ['outbox', 'push'] as const) {
+    const result = body[key] as Record<string, unknown> | undefined
+    if (result && 'error' in result) console.warn(`[ticker] ${stamp()} WARN ${key} drain: ${String(result.error)}`)
+    else if (Number(result?.failed ?? 0) > 0) console.warn(`[ticker] ${stamp()} WARN ${key}: ${String(result?.failed)} delivery failure(s)`)
+  }
+}
+
 async function tickOnce(url: string, secret: string): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
@@ -86,6 +110,7 @@ async function tickOnce(url: string, secret: string): Promise<void> {
       `[ticker] ${stamp()} ok in ${elapsed}ms: claimed=${String(body.claimed ?? 0)} ` +
         `done=${String(body.done ?? 0)} failed=${String(body.failed ?? 0)} ${outboxText} ${pushText}`
     )
+    warnOnFailures(body)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[ticker] ${stamp()} request failed: ${message}`)

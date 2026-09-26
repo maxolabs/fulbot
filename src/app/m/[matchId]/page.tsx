@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -41,6 +43,60 @@ interface PublicMatch {
   timezone: string | null
 }
 
+// One RPC per request for generateMetadata and the page.
+const getPublicMatch = cache(async (matchId: string): Promise<PublicMatch | null> => {
+  const supabase = await createClient()
+  // get_public_match works for anonymous visitors too -- it's the only way
+  // this page reads match data, so RLS never needs to open matches to anon.
+  const args: Database['public']['Functions']['get_public_match']['Args'] = {
+    p_match_id: matchId,
+  }
+  const { data } = (await supabase.rpc('get_public_match', args)) as {
+    data: PublicMatch | null
+  }
+  return data?.id ? data : null
+})
+
+async function cookieLanguage(): Promise<Language> {
+  const cookieStore = await cookies()
+  return cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es'
+}
+
+// Link preview for WhatsApp (PLAT-8): group, date and time in the group's
+// time zone, location and spots. The image is ./opengraph-image.tsx. The page
+// is reachable by anyone with the link but never indexed.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { matchId } = await params
+  const t = getT(await cookieLanguage())
+  const robots = { index: false, follow: false }
+  const match = await getPublicMatch(matchId)
+  if (!match) return { title: t('ui.meta.matchFallback'), robots }
+
+  const date = new Date(match.date_time)
+  const timeZone = match.timezone || DEFAULT_TIMEZONE
+  const title = t('ui.meta.matchTitle', {
+    group: match.group_name,
+    date: `${formatRowDate(t, date, timeZone)} ${formatMatchTime(date, timeZone)}`,
+  })
+  const free = Math.max(0, match.max_players - match.confirmed_count)
+  const spots = !['signup_open', 'full'].includes(match.status)
+    ? t('ui.meta.matchClosed')
+    : free === 0
+      ? t('ui.meta.matchFull', { max: match.max_players })
+      : free === 1
+        ? t('ui.meta.matchOneSpot', { max: match.max_players })
+        : t('ui.meta.matchSpots', { free, max: match.max_players })
+  const description = [match.location, spots].filter(Boolean).join(' · ')
+
+  return {
+    title,
+    description,
+    robots,
+    openGraph: { title, description, type: 'website', url: `/m/${matchId}`, siteName: 'fulbot' },
+    twitter: { card: 'summary_large_image', title, description },
+  }
+}
+
 function Message({
   eyebrow,
   title,
@@ -74,20 +130,12 @@ export default async function PublicMatchPage({ params }: PageProps) {
   const { matchId } = await params
   const supabase = await createClient()
   const cookieStore = await cookies()
-  const langCookie = cookieStore.get('fulbot_lang')?.value
-  const language: Language = langCookie === 'en' ? 'en' : 'es'
+  const language = await cookieLanguage()
   const t = getT(language)
 
-  // get_public_match works for anonymous visitors too -- it's the only way
-  // this page reads match data, so RLS never needs to open matches to anon.
-  const args: Database['public']['Functions']['get_public_match']['Args'] = {
-    p_match_id: matchId,
-  }
-  const { data: match } = (await supabase.rpc('get_public_match', args)) as {
-    data: PublicMatch | null
-  }
+  const match = await getPublicMatch(matchId)
 
-  if (!match || !match.id) {
+  if (!match) {
     return (
       <Message
         title={t('ui.screens.publicMatch.notFoundTitle')}

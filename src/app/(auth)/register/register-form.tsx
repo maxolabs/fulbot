@@ -15,6 +15,7 @@ import type { Language } from '@/i18n/use-translations'
 import { authErrorKey } from '@/lib/auth-errors'
 import { safeRedirect } from '@/lib/safe-redirect'
 import { setLanguageCookie } from '../language-cookie'
+import { ResendConfirmation, confirmationRedirectUrl } from '../resend-confirmation'
 
 // Register (docs/ui-rework/03-screens.md §11): same frame as login.
 
@@ -34,9 +35,14 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [passwordError, setPasswordError] = useState(false)
+  const [nameError, setNameError] = useState(false)
   // Set when sign-up needs email confirmation (no session yet).
   const [sentTo, setSentTo] = useState<string | null>(null)
+  // Set when the email already has a confirmed account: Supabase answers a
+  // fake user with no identities and sends no email.
+  const [existingEmail, setExistingEmail] = useState<string | null>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -52,6 +58,14 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
     e.preventDefault()
     setError(null)
     setPasswordError(false)
+    setNameError(false)
+
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setNameError(true)
+      nameRef.current?.focus()
+      return
+    }
 
     if (password !== confirmPassword) {
       setError(t('auth.passwordMismatch'))
@@ -69,12 +83,12 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          emailRedirectTo: confirmationRedirectUrl(redirectTo),
           data: {
-            name,
+            name: trimmedName,
             preferred_language: language,
           },
         },
@@ -85,11 +99,17 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
         return
       }
 
+      if (data.user && data.user.identities?.length === 0) {
+        setExistingEmail(email.trim())
+        return
+      }
+
       setLanguageCookie(language)
 
-      // Email confirmation is on: the link lands on /api/auth/callback.
+      // Email confirmation is on: the link lands on /api/auth/confirm (or
+      // /api/auth/callback with the default templates).
       if (!data.session) {
-        setSentTo(email)
+        setSentTo(email.trim())
         return
       }
 
@@ -110,14 +130,39 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
             {t('ui.screens.auth.checkInboxTitle')}
           </h1>
           <p role="status" className="text-sm text-muted-foreground text-pretty">
-            {t('ui.screens.auth.checkInboxBody', { email: sentTo })}
+            {t('ui.screens.auth.checkInboxBodyAnyDevice', { email: sentTo })}
           </p>
+          <p className="text-sm text-muted-foreground text-pretty">{t('ui.screens.auth.checkInboxSpam')}</p>
         </div>
+        <ResendConfirmation email={sentTo} redirectTo={redirectTo} initialCooldown={60} />
         <p className="text-center text-sm">
           <Link href={`/login${redirectQuery}`} className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
             {t('ui.screens.auth.backToLogin')}
           </Link>
         </p>
+      </div>
+    )
+  }
+
+  if (existingEmail) {
+    return (
+      <div className="w-full max-w-sm space-y-8">
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance lg:text-3xl">
+            {t('ui.screens.auth.emailInUseTitle')}
+          </h1>
+          <p role="status" className="text-sm text-muted-foreground text-pretty">
+            {t('ui.screens.auth.emailInUseBody', { email: existingEmail })}
+          </p>
+        </div>
+        <div className="space-y-3">
+          <Button asChild size="xl" className="w-full">
+            <Link href={`/login${redirectQuery}`}>{t('auth.loginCta')}</Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full">
+            <Link href={`/forgot-password${redirectQuery}`}>{t('ui.screens.auth.recoverPassword')}</Link>
+          </Button>
+        </div>
       </div>
     )
   }
@@ -139,13 +184,21 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
             id="name"
             name="name"
             type="text"
+            ref={nameRef}
             autoComplete="name"
+            maxLength={50}
+            aria-invalid={nameError || undefined}
+            aria-describedby={nameError ? 'name-error' : undefined}
             placeholder={t('ui.screens.auth.namePlaceholder')}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value)
+              if (nameError) setNameError(false)
+            }}
             required
             disabled={loading}
           />
+          {nameError && <p id="name-error" role="alert" className="text-sm text-destructive">{t('ui.screens.auth.nameRequired')}</p>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">{t('auth.email')}</Label>

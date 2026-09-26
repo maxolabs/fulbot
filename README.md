@@ -16,6 +16,25 @@ Migrations live in `supabase/migrations` and are applied by hand (Supabase
 dashboard or `psql`). `supabase/seed.sql` builds a demo dataset for a local
 stack (every account's password is `password123`).
 
+Checks (the same ones CI runs, `.github/workflows/ci.yml`):
+
+```bash
+npm run type-check
+npm run lint
+npm test          # node:test unit tests (src/**/*.test.ts) through tsx
+npm run build
+```
+
+`supabase/config.toml` configures a local Supabase stack (`supabase start`:
+API on 56621, database on 56622, the mail catcher on 56624) with email
+confirmation on and the templates from `supabase/templates/`.
+
+## Deploying
+
+Production setup (Supabase Auth URLs, SMTP, email templates, rate limits,
+Vercel environment variables, the ticker options, `/api/health` monitoring
+and how to track applied migrations) is in [docs/deploy.md](docs/deploy.md).
+
 ## Device notifications and WhatsApp
 
 Players can enable Web Push in **Settings → Notifications on this device**.
@@ -113,3 +132,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app
 
 The response lists the jobs claimed in that pass (`claimed`, `done`, `failed`,
 `jobs[]`) and the outbox drain result.
+
+To know whether the scheduler is alive, point an uptime monitor at
+`GET /api/health` (200 `ok` / 503 `degraded`; details with the
+`CRON_SECRET` bearer). See [docs/deploy.md](docs/deploy.md#5-monitoring).

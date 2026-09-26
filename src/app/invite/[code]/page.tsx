@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
@@ -44,6 +46,32 @@ interface PublicGroup {
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
+// One RPC per request for generateMetadata and the page.
+const getPublicGroup = cache(async (code: string): Promise<PublicGroup | null> => {
+  const supabase = await createClient()
+  const { data } = await supabase.rpc('get_public_group_by_invite', { p_invite_code: code })
+  return (data as PublicGroup | null) ?? null
+})
+
+// Link preview (PLAT-8): the group name only. Never indexed.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { code } = await params
+  const cookieStore = await cookies()
+  const t = getT(cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es')
+  const robots = { index: false, follow: false }
+  const group = await getPublicGroup(code)
+  if (!group) return { title: t('ui.meta.inviteFallback'), robots }
+  const title = t('ui.meta.inviteTitle', { group: group.name })
+  const description = t('ui.meta.inviteDescription', { group: group.name })
+  return {
+    title,
+    description,
+    robots,
+    openGraph: { title, description, type: 'website', siteName: 'fulbot' },
+    twitter: { card: 'summary', title, description },
+  }
+}
+
 function Message({ title, body, cta }: { title: string; body: string; cta: { href: string; label: string } }) {
   return (
     <PublicFrame width="sm" className="justify-center">
@@ -71,8 +99,7 @@ export default async function InvitePage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Public view of the group (works for anonymous visitors, includes the next open match)
-  const { data: groupData } = await supabase.rpc('get_public_group_by_invite', { p_invite_code: code })
-  const group = (groupData as PublicGroup | null) ?? null
+  const group = await getPublicGroup(code)
 
   if (!group) {
     return (

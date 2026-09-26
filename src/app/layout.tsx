@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Syne, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import { cookies } from 'next/headers'
 import { getT } from '@/i18n/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import type { Language } from '@/i18n/core'
 import './globals.css'
 
@@ -46,7 +47,9 @@ async function getCookieLanguage(): Promise<Language> {
 export async function generateMetadata(): Promise<Metadata> {
   const t = getT(await getCookieLanguage())
   return {
-    title: t('ui.shell.metaTitle'),
+    // Absolute og:image / og:url for shared links (PLAT-8).
+    metadataBase: new URL(getAppBaseUrl()),
+    title: { default: t('ui.shell.metaTitle'), template: '%s · fulbot' },
     description: t('ui.shell.metaDescription'),
     manifest: '/manifest.json',
     icons: { apple: '/icons/icon-192.png' },
