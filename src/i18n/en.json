@@ -995,7 +995,8 @@
         "rosterChanged": "The confirmed list changed. Reload the page and try again.",
         "saveFailed": "Couldn't save the teams. Try again.",
         "generic": "Couldn't generate the teams. Try again in a moment."
-      }
+      },
+      "minDefendersSoft": "There are {n} defenders: not enough for {required} per team, so the rule was treated as a preference."
     },
     "rulesEditor": {
       "title": "Team building rules",
@@ -1096,8 +1097,38 @@
         "noGuestSignup": "There's no guest signup to cancel.",
         "signupNotFound": "We couldn't find your signup.",
         "signupFailed": "We couldn't sign you up. Try again.",
-        "cancelFailed": "We couldn't cancel your signup. Try again."
+        "cancelFailed": "We couldn't cancel your signup. Try again.",
+        "started": "The match has already started.",
+        "locked": "This match no longer accepts changes to the list."
       }
+    },
+    "matchLifecycle": {
+      "errors": {
+        "started": "The match has already started.",
+        "closed": "Signups are closed.",
+        "alreadySignedUp": "You're already signed up for this match.",
+        "notSignedUp": "You weren't signed up for this match anymore.",
+        "locked": "This match no longer accepts changes to the list.",
+        "noPermission": "You don't have permission to do this."
+      },
+      "confirmLeave": "Confirm leaving",
+      "confirmLeaveDetail": "Tap again to free up your spot.",
+      "leaveTitle": "Leave the match?",
+      "leaveBody": "Your spot opens up and, if there is a waitlist, the next player gets in.",
+      "lineupStaleTitle": "The teams are out of date",
+      "lineupStaleBody": "The confirmed list changed after the teams were made. Review them before playing.",
+      "reviewTeams": "Review teams",
+      "finishStale": "The teams don't match the confirmed list. Review them before finishing: attendance and reports come from those teams.",
+      "editLevel": "Edit level",
+      "editLevelTitle": "{name}'s estimated level",
+      "editLevelBody": "Used to balance the teams. Only admins and captains see it.",
+      "levelLabel": "Level",
+      "levelSaveError": "Couldn't save the level. Try again.",
+      "warnings": "Warnings",
+      "noKeeper": "{team} has no goalkeeper.",
+      "manyKeepers": "{team} has {n} goalkeepers.",
+      "avoidPairBroken": "{a} and {b} ended up on the same team.",
+      "forcePairBroken": "{a} and {b} ended up on different teams."
     },
     "profileForm": {
       "saveError": "Couldn't save your changes. Try again.",

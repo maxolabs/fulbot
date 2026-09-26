@@ -8,12 +8,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { Sheet } from '@/components/ui/sheet'
 import { ActionBar } from '@/components/layout/action-bar'
 import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
 import type { Database } from '@/types/database'
+import { signupErrorKey } from '@/app/(dashboard)/groups/[groupSlug]/matches/[matchId]/use-signup-action'
 
 // The visitor's signup state on /m/[matchId] (docs/ui-rework/03-screens.md
 // §12). One component owns every RPC and renders two things from the same
@@ -79,6 +81,8 @@ export function PublicMatchActions({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guestName, setGuestName] = useState('')
+  // Leaving goes through a confirmation Sheet (member or guest signup).
+  const [leaveTarget, setLeaveTarget] = useState<'member' | 'guest' | null>(null)
 
   const isClosed = status === 'signup_closed'
   const isFull = status === 'full'
@@ -95,6 +99,21 @@ export function PublicMatchActions({
 
   // --- handlers (one per RPC / route) -------------------------------------
 
+  // Known RPC errors (started, closed, already in, not in, locked) mean the
+  // page is stale: show the translated reason and refresh it.
+  const fail = (err: unknown, fallbackKey: string) => {
+    const key = signupErrorKey(err)
+    setError(t(key ?? fallbackKey))
+    if (key) router.refresh()
+  }
+
+  // The guest route already answers with a translated message; a 400 is a
+  // state problem (closed, started, gone), so the page is refreshed too.
+  const failRoute = (message: string | undefined, status: number, fallbackKey: string) => {
+    setError(message || t(fallbackKey))
+    if (status === 400) router.refresh()
+  }
+
   const handleSignUp = async () => {
     setLoading(true)
     setError(null)
@@ -105,14 +124,13 @@ export function PublicMatchActions({
       router.refresh()
     } catch (err) {
       console.error('Error signing up:', err)
-      setError(t('ui.screens.publicMatch.signupError'))
+      fail(err, 'ui.screens.publicMatch.signupError')
     } finally {
       setLoading(false)
     }
   }
 
   const handleCancel = async () => {
-    if (!confirm(t('ui.screens.publicMatch.cancelConfirm'))) return
     setLoading(true)
     setError(null)
     try {
@@ -122,9 +140,10 @@ export function PublicMatchActions({
       router.refresh()
     } catch (err) {
       console.error('Error canceling signup:', err)
-      setError(t('ui.screens.publicMatch.cancelError'))
+      fail(err, 'ui.screens.publicMatch.cancelError')
     } finally {
       setLoading(false)
+      setLeaveTarget(null)
     }
   }
 
@@ -147,26 +166,29 @@ export function PublicMatchActions({
       router.refresh()
     } catch (err) {
       console.error('Error joining and signing up:', err)
-      setError(t('ui.screens.publicMatch.joinSignupError'))
+      fail(err, 'ui.screens.publicMatch.joinSignupError')
     } finally {
       setLoading(false)
     }
   }
 
   const handleCancelGuest = async () => {
-    if (!confirm(t('ui.screens.publicMatch.cancelConfirm'))) return
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/matches/${matchId}/guest-signup`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('ui.screens.publicMatch.cancelError'))
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) {
+        failRoute(data.error, res.status, 'ui.screens.publicMatch.cancelError')
+        return
+      }
       router.refresh()
     } catch (err) {
       console.error('Error canceling guest signup:', err)
-      setError(err instanceof Error ? err.message : t('ui.screens.publicMatch.cancelError'))
+      setError(t('ui.screens.publicMatch.cancelError'))
     } finally {
       setLoading(false)
+      setLeaveTarget(null)
     }
   }
 
@@ -181,12 +203,15 @@ export function PublicMatchActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName: guestName.trim() }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('ui.screens.publicMatch.guestError'))
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) {
+        failRoute(data.error, res.status, 'ui.screens.publicMatch.guestError')
+        return
+      }
       router.refresh()
     } catch (err) {
       console.error('Error signing up as guest:', err)
-      setError(err instanceof Error ? err.message : t('ui.screens.publicMatch.guestError'))
+      setError(t('ui.screens.publicMatch.guestError'))
     } finally {
       setLoading(false)
     }
@@ -207,7 +232,7 @@ export function PublicMatchActions({
       bar = (
         <>
           {viewMatchLink('primary')}
-          <Button size="xl" variant="outline" onClick={handleCancel} disabled={loading}>
+          <Button size="xl" variant="outline" onClick={() => setLeaveTarget('member')} disabled={loading}>
             {loading && <Spinner size="sm" />}
             {t('ui.screens.publicMatch.leave')}
           </Button>
@@ -222,7 +247,7 @@ export function PublicMatchActions({
       bar = (
         <>
           {viewMatchLink('primary')}
-          <Button size="xl" variant="outline" onClick={handleCancel} disabled={loading}>
+          <Button size="xl" variant="outline" onClick={() => setLeaveTarget('member')} disabled={loading}>
             {loading && <Spinner size="sm" />}
             {t('ui.screens.publicMatch.leaveWaitlist')}
           </Button>
@@ -262,7 +287,7 @@ export function PublicMatchActions({
         </StatusLine>
       )
     bar = (
-      <Button size="xl" variant="outline" onClick={handleCancelGuest} disabled={loading}>
+      <Button size="xl" variant="outline" onClick={() => setLeaveTarget('guest')} disabled={loading}>
         {loading && <Spinner size="sm" />}
         {guestSignup.status === 'confirmed' ? t('ui.screens.publicMatch.leave') : t('ui.screens.publicMatch.leaveWaitlist')}
       </Button>
@@ -324,6 +349,26 @@ export function PublicMatchActions({
           {bar}
         </ActionBar>
       )}
+      <Sheet
+        open={leaveTarget !== null}
+        onOpenChange={(open) => { if (!open && !loading) setLeaveTarget(null) }}
+        title={t('ui.matchLifecycle.leaveTitle')}
+        description={t('ui.matchLifecycle.leaveBody')}
+      >
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button
+            variant="destructive"
+            disabled={loading}
+            onClick={() => { void (leaveTarget === 'guest' ? handleCancelGuest() : handleCancel()) }}
+          >
+            {loading && <Spinner size="sm" />}
+            {t('ui.matchLifecycle.confirmLeave')}
+          </Button>
+          <Button variant="outline" disabled={loading} onClick={() => setLeaveTarget(null)}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </Sheet>
     </>
   )
 }

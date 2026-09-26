@@ -1,7 +1,7 @@
 import type { PlayerInput, RuleInput, GeneratedTeams, TeamAssignment, PreviousLineup } from './team-generator'
 import { getFormation } from '@/lib/formations'
 import { getTranslation, type Language, type TranslateFn } from '@/i18n/core'
-import { isDefenseCapable, isGoalkeeperWilling, sameSplit } from './constraints'
+import { defendersPolicy, gkScore, isDefenseCapable, isGoalkeeperWilling, sameSplit } from './constraints'
 
 // Rule-based team balancer used when OPENAI_API_KEY is missing, or when the AI
 // response keeps failing hard-constraint validation after a retry.
@@ -17,8 +17,10 @@ import { isDefenseCapable, isGoalkeeperWilling, sameSplit } from './constraints'
 // 5. Honor a min_defenders rule by swapping a defender for a non-defender of
 //    similar rating between the teams.
 // 6. Assign positions within each team from a simple formation, matching each
-//    player's main/preferred position where possible, and picking the most
-//    goalkeeper-willing player for GK slots.
+//    player's main/preferred position where possible, and picking the best
+//    gkScore (willingness, can_keep tag, peer goalkeeping) for GK slots; ties
+//    go to the lower-rated player, so nobody's best outfield player is sent
+//    to goal just for being the best.
 //
 // Without a seed the result is deterministic. With a seed (sent on "Regenerar")
 // the draft order gets a small random jitter, several candidates are drawn and
@@ -138,14 +140,9 @@ function balanceOnce(
   const violatesAvoidPair = (unit: Unit, team: Team) => conflicts(unit.ids, teamMembers[team])
 
   // Step 1: seed the two teams with the two most goalkeeper-willing (distinct) units
-  const gkSkill = (p: PlayerInput) => p.skills?.goalkeeping ?? 0
   const gkSorted = players
     .filter(isGoalkeeperWilling)
-    .sort((a, b) =>
-      b.goalkeeperWillingness - a.goalkeeperWillingness ||
-      gkSkill(b) - gkSkill(a) ||
-      b.overallRating - a.overallRating
-    )
+    .sort((a, b) => gkScore(b) - gkScore(a) || a.overallRating - b.overallRating)
 
   const preassignedUnits = new Set<Unit>()
   const gkUnitsPicked: Unit[] = []
@@ -226,9 +223,11 @@ function balanceOnce(
   // Step 4: min_defenders. Swap a defense-capable player from the other team
   // (which must keep its own minimum) for a non-defender of the closest
   // rating. Only single-player units that weren't seeded as keepers move.
-  const minDefRule = rules.find((r) => r.type === 'min_defenders')
-  if (minDefRule) {
-    const required = minDefRule.value ?? 1
+  // When the pool can't cover both teams the rule is soft: still spread the
+  // defenders, but generateTeams reports the shortage once (minDefendersSoft).
+  const defenders = defendersPolicy(players, rules)
+  if (defenders.required > 0) {
+    const required = defenders.required
     const isDef = (id: string) => {
       const p = playerById.get(id)
       return p ? isDefenseCapable(p) : false
@@ -262,7 +261,7 @@ function balanceOnce(
         teamMembers[team] = [...teamMembers[team].filter((id) => id !== outgoing), incoming]
         teamMembers[other] = [...teamMembers[other].filter((id) => id !== incoming), outgoing]
       }
-      if (defCount(team) < required) {
+      if (defenders.hard && defCount(team) < required) {
         warnings.push(t('ui.teamsAi.minDefendersFailed', { team: t(`ui.teamsScreen.${team}`), n: required }))
       }
     }
@@ -280,9 +279,15 @@ function balanceOnce(
     const assignments: TeamAssignment[] = []
 
     formation.forEach((pos) => {
-      if (pos !== 'GK') return
-      remaining.sort((a, b) => b.goalkeeperWillingness - a.goalkeeperWillingness || b.overallRating - a.overallRating)
-      const gk = remaining.shift()
+      if (pos !== 'GK' || remaining.length === 0) return
+      // Best gkScore; on a tie the lower-rated player keeps goal. `remaining`
+      // keeps its rating order for the outfield slots below.
+      let best = 0
+      for (let i = 1; i < remaining.length; i++) {
+        const diff = gkScore(remaining[i]) - gkScore(remaining[best])
+        if (diff > 0 || (diff === 0 && remaining[i].overallRating < remaining[best].overallRating)) best = i
+      }
+      const gk = remaining.splice(best, 1)[0]
       if (gk) {
         assignments.push({ playerId: gk.id, position: 'GK', reason: t('ui.teamsAi.reasonGoalkeeper') })
       }

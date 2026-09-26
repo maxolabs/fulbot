@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Database, WaitlistReason } from '@/types/database'
@@ -43,6 +43,27 @@ export interface SignupAction {
   error: string | null
 }
 
+// The signup RPCs raise Spanish messages (00021, 00025, 00029). The ones a
+// member can act on map to ui.matchLifecycle.errors.*; they all mean the page
+// is stale, so the caller refreshes it. Anything else stays generic.
+const SIGNUP_ERRORS: Array<[string, string]> = [
+  ['El partido ya empezó', 'started'],
+  ['no está aceptando inscripciones', 'closed'],
+  ['Ya estás inscripto', 'alreadySignedUp'],
+  ['No estás inscripto', 'notSignedUp'],
+  ['ya no admite cambios', 'locked'],
+]
+
+export function signupErrorKey(err: unknown): string | null {
+  const message = (err as { message?: unknown } | null)?.message
+  if (typeof message !== 'string') return null
+  const hit = SIGNUP_ERRORS.find(([needle]) => message.includes(needle))
+  return hit ? `ui.matchLifecycle.errors.${hit[1]}` : null
+}
+
+// How long the armed "Confirmar salida" button waits for the second tap.
+const CONFIRM_LEAVE_MS = 5000
+
 export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }: SignupInput): SignupAction {
   const router = useRouter()
   const supabase = createClient()
@@ -53,6 +74,22 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
   // (docs/member-scoring.md §10.4). Shown right away; after router.refresh()
   // the same value comes back through currentSignup.waitlistReason.
   const [signupReason, setSignupReason] = useState<WaitlistReason | null>(null)
+  // Leaving is a two-tap inline confirm: the first tap arms the button, the
+  // second one cancels the signup. It disarms itself after a few seconds.
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
+
+  useEffect(() => {
+    if (!confirmingLeave) return
+    const timer = setTimeout(() => setConfirmingLeave(false), CONFIRM_LEAVE_MS)
+    return () => clearTimeout(timer)
+  }, [confirmingLeave])
+
+  // A known RPC error means the page is out of date: say why and refresh it.
+  const fail = useCallback((err: unknown, fallback: string) => {
+    const key = signupErrorKey(err)
+    setError(t(key ?? fallback))
+    if (key) router.refresh()
+  }, [router, t])
 
   const canSignUp = matchStatus === 'signup_open' || matchStatus === 'full'
 
@@ -67,14 +104,19 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
       router.refresh()
     } catch (err) {
       console.error('Error signing up:', err)
-      setError(t('matches.signupError'))
+      fail(err, 'matches.signupError')
     } finally {
       setLoading(null)
     }
-  }, [matchId, router, supabase, t])
+  }, [fail, matchId, router, supabase])
 
   const cancel = useCallback(async () => {
-    if (!confirm(t('matches.confirmCancelSignup'))) return
+    if (!confirmingLeave) {
+      setError(null)
+      setConfirmingLeave(true)
+      return
+    }
+    setConfirmingLeave(false)
     setLoading('cancel')
     setError(null)
     try {
@@ -84,11 +126,11 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
       router.refresh()
     } catch (err) {
       console.error('Error canceling signup:', err)
-      setError(t('matches.cancelError'))
+      fail(err, 'matches.cancelError')
     } finally {
       setLoading(null)
     }
-  }, [matchId, router, supabase, t])
+  }, [confirmingLeave, fail, matchId, router, supabase])
 
   return useMemo<SignupAction>(() => {
     const busy = loading !== null
@@ -97,8 +139,8 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
       return {
         status: 'confirmed',
         primary: { label: t('ui.matchScreens.match.signedUp'), disabled: true, pending: false, tone: 'done' },
-        secondary: { label: t('matches.leaveMatch'), onClick: cancel, disabled: busy, pending: loading === 'cancel', tone: 'action' },
-        detail: t('matches.confirmedSpot'),
+        secondary: { label: confirmingLeave ? t('ui.matchLifecycle.confirmLeave') : t('matches.leaveMatch'), onClick: cancel, disabled: busy, pending: loading === 'cancel', tone: 'action' },
+        detail: confirmingLeave ? t('ui.matchLifecycle.confirmLeaveDetail') : t('matches.confirmedSpot'),
         error,
       }
     }
@@ -114,8 +156,10 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
           pending: false,
           tone: 'done',
         },
-        secondary: { label: t('matches.leaveWaitlist'), onClick: cancel, disabled: busy, pending: loading === 'cancel', tone: 'action' },
-        detail: reason ? t(`signupPolicy.waitlistReason.${reason}`) : t('matches.waitlistPositionDetail', { position }),
+        secondary: { label: confirmingLeave ? t('ui.matchLifecycle.confirmLeave') : t('matches.leaveWaitlist'), onClick: cancel, disabled: busy, pending: loading === 'cancel', tone: 'action' },
+        detail: confirmingLeave
+          ? t('ui.matchLifecycle.confirmLeaveDetail')
+          : reason ? t(`signupPolicy.waitlistReason.${reason}`) : t('matches.waitlistPositionDetail', { position }),
         error,
       }
     }
@@ -141,5 +185,5 @@ export function useSignupAction({ matchId, currentSignup, matchStatus, isFull }:
       detail: isFull ? t('matches.canJoinWaitlist') : t('matches.spotsAvailable'),
       error,
     }
-  }, [cancel, canSignUp, currentSignup, error, isFull, loading, signUp, signupReason, t])
+  }, [cancel, canSignUp, confirmingLeave, currentSignup, error, isFull, loading, signUp, signupReason, t])
 }

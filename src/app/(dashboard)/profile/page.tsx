@@ -67,11 +67,22 @@ export default async function ProfilePage() {
     member_score: number | null
     groups: { id: string; name: string; slug: string } | null
   }
-  const { data: scoreRows } = await supabase
+  const { data: membershipRows } = await supabase
     .from('group_memberships')
-    .select('member_score, groups (id, name, slug)')
+    .select('group_id, groups (id, name, slug)')
     .eq('player_id', profile.id)
-    .eq('is_active', true) as { data: GroupScoreRow[] | null }
+    .eq('is_active', true) as { data: { group_id: string; groups: GroupScoreRow['groups'] }[] | null }
+  // The score columns are not selectable (00029): get_member_scores() with no
+  // group returns the viewer's own row in each of their groups.
+  const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: 'get_member_scores', args: Record<string, never>
+  ) => PromiseLike<{ data: { group_id: string; member_score: number | null }[] | null }>
+  const { data: ownScores } = await scoresRpc('get_member_scores', {})
+  const ownScoreByGroup = new Map((ownScores || []).map((row) => [row.group_id, row.member_score]))
+  const scoreRows: GroupScoreRow[] = (membershipRows || []).map((row) => ({
+    member_score: ownScoreByGroup.get(row.group_id) ?? null,
+    groups: row.groups,
+  }))
 
   const groupScores = await Promise.all(
     (scoreRows || [])

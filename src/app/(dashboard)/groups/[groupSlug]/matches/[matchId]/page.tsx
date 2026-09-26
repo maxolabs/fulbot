@@ -14,6 +14,7 @@ import { MatchActionBar, SignupActions, SignupDetail, SignupProvider } from './s
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { MatchAdminActions } from './match-admin-actions'
 import { MatchWorkflow } from './match-workflow'
+import { LineupStaleNotice } from './teams/lineup-stale-notice'
 import { AddGuestForm } from './add-guest-form'
 import { PostMatchVoting } from './post-match-voting'
 import { RulesManager } from './rules-manager'
@@ -106,6 +107,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
       finished_at: string | null
       duration_minutes: number
       created_at: string
+      /** 00029: the confirmed list changed after the teams were published. */
+      lineup_needs_review?: boolean
     } | null }
 
   if (!match) return notFound()
@@ -142,12 +145,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
       id: string
       display_name: string
       notes: string | null
-      estimated_rating: number
+      estimated_rating: number | null
       preferred_positions: string[]
     } | null
   }
 
-  const { data: signups } = await supabase
+  const { data: signupRows } = await supabase
     .from('match_signups')
     .select(`
       id,
@@ -176,6 +179,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .eq('match_id', matchId)
     .in('status', ['confirmed', 'waitlist', 'did_not_show'])
     .order('signup_time') as { data: SignupResult[] | null }
+
+  // A guest's estimated level is for organizers only (TS-4): members don't
+  // get it in the page payload at all.
+  const signups = isAdminOrCaptain
+    ? signupRows
+    : (signupRows || []).map((s) => s.guest_players ? { ...s, guest_players: { ...s.guest_players, estimated_rating: null } } : s)
 
   const confirmedSignups = (signups || []).filter(s => s.status === 'confirmed')
   const noShowSignups = (signups || []).filter(s => s.status === 'did_not_show')
@@ -517,6 +526,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const showAnnouncement = match.status === 'signup_open' || match.status === 'full'
   const showAddGuest = isAdminOrCaptain && !isFinished && match.status !== 'cancelled'
   const showRules = isAdminOrCaptain && ['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)
+  // The confirmed list changed after the teams were published (00029 trigger).
+  const lineupStale = match.status === 'teams_created' && !!match.lineup_needs_review
 
   // MatchAdminActions renders nothing once the match is finished; without
   // actions there is no "Gestionar" (the sheet would be empty too).
@@ -685,7 +696,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} />
+          {isAdminOrCaptain && lineupStale && (
+            <LineupStaleNotice
+              title={t('ui.matchLifecycle.lineupStaleTitle')}
+              body={t('ui.matchLifecycle.lineupStaleBody')}
+              actionLabel={t('ui.matchLifecycle.reviewTeams')}
+              href={`${matchHref}/teams`}
+            />
+          )}
+
+          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} lineupStale={lineupStale} />
 
           {heroScore && (
             <details className="rounded-md border border-border bg-card p-4">
@@ -779,6 +799,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                     showWaitlistPosition
                     emptyMessage={t('ui.matchScreens.match.waitlistEmpty')}
                     isAdminOrCaptain={isAdminOrCaptain}
+                    matchStatus={match.status}
                     ratingsById={ratingsById}
                   />
                 </section>

@@ -18,8 +18,9 @@ import { cn } from '@/lib/utils/cn'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { Sheet } from '@/components/ui/sheet'
 import { DraggableTeams } from './draggable-teams'
-import { normalizePosition } from '@/lib/teams/manual'
+import { normalizePosition, type PairRule } from '@/lib/teams/manual'
 import { WhatsAppShare, generateShareMessage, shareName } from './whatsapp-share'
+import { LineupStaleNotice } from './lineup-stale-notice'
 
 // Teams screen (docs/ui-rework/03-screens.md §4). Browser: PageHeader, two
 // dashed cards with one Pitch each, then the analysis and warnings cards.
@@ -77,6 +78,10 @@ interface TeamsViewProps {
   isAdminOrCaptain: boolean
   hasTeams: boolean
   matchStatus?: string
+  /** The confirmed list changed after publishing (00029); organizers only. */
+  lineupStale?: boolean
+  /** Active avoid/force pair rules, for the manual builder's warnings. */
+  pairRules?: PairRule[]
 }
 
 // "1-3-2-1": players per line from the keeper up, read off the formation
@@ -115,6 +120,8 @@ export function TeamsView({
   isAdminOrCaptain,
   hasTeams,
   matchStatus,
+  lineupStale = false,
+  pairRules = [],
 }: TeamsViewProps) {
   const t = useT()
   const language = useLanguage()
@@ -252,6 +259,7 @@ export function TeamsView({
             position: normalizePosition(player.mainPosition),
           }))}
           hasTeams={hasTeams}
+          pairRules={pairRules}
           onSaved={() => startRefresh(() => { setEditing(false); router.refresh() })}
           onCancel={() => setEditing(false)}
         />
@@ -286,6 +294,10 @@ export function TeamsView({
           <CircleAlert className="h-4 w-4 shrink-0" strokeWidth={1.75} />
           {error}
         </p>
+      )}
+
+      {canEditTeams && hasTeams && lineupStale && (
+        <LineupStaleNotice title={t('ui.matchLifecycle.lineupStaleTitle')} body={t('ui.matchLifecycle.lineupStaleBody')} />
       )}
 
       {canEditTeams && players.length < 4 && (
@@ -399,7 +411,8 @@ export function TeamsView({
             })}
           </div>
 
-          {unassignedPlayers.length > 0 && (
+          {/* Organizers place newcomers; members just see the published lineup. */}
+          {isAdminOrCaptain && unassignedPlayers.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -453,7 +466,7 @@ export function TeamsView({
         </Card>
       )}
 
-      {aiReasoning && (
+      {isAdminOrCaptain && aiReasoning && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2">
@@ -488,7 +501,7 @@ export function TeamsView({
         </Card>
       )}
 
-      {warnings && warnings.length > 0 && (
+      {isAdminOrCaptain && warnings && warnings.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

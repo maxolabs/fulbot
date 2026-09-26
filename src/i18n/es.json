@@ -995,7 +995,8 @@
         "rosterChanged": "La lista de confirmados cambió. Recargá la página y probá de nuevo.",
         "saveFailed": "No se pudieron guardar los equipos. Probá de nuevo.",
         "generic": "No se pudieron generar los equipos. Probá de nuevo en un momento."
-      }
+      },
+      "minDefendersSoft": "Hay {n} jugadores de defensa: no alcanzan para {required} por equipo, así que la regla se tomó como preferencia."
     },
     "rulesEditor": {
       "title": "Reglas para armar equipos",
@@ -1096,8 +1097,38 @@
         "noGuestSignup": "No hay una inscripción de invitado para bajar.",
         "signupNotFound": "No encontramos tu inscripción.",
         "signupFailed": "No pudimos anotarte. Probá de nuevo.",
-        "cancelFailed": "No pudimos bajarte. Probá de nuevo."
+        "cancelFailed": "No pudimos bajarte. Probá de nuevo.",
+        "started": "El partido ya empezó.",
+        "locked": "Este partido ya no admite cambios en la lista."
       }
+    },
+    "matchLifecycle": {
+      "errors": {
+        "started": "El partido ya empezó.",
+        "closed": "Las inscripciones están cerradas.",
+        "alreadySignedUp": "Ya estás anotado en este partido.",
+        "notSignedUp": "Ya no estabas anotado en este partido.",
+        "locked": "Este partido ya no admite cambios en la lista.",
+        "noPermission": "No tenés permiso para esta acción."
+      },
+      "confirmLeave": "Confirmar salida",
+      "confirmLeaveDetail": "Tocá de nuevo para liberar tu lugar.",
+      "leaveTitle": "¿Te bajás del partido?",
+      "leaveBody": "Liberás tu lugar y, si hay lista de espera, entra el siguiente.",
+      "lineupStaleTitle": "Los equipos quedaron desactualizados",
+      "lineupStaleBody": "La lista de confirmados cambió después de armar los equipos. Revisalos antes de jugar.",
+      "reviewTeams": "Revisar equipos",
+      "finishStale": "Los equipos no coinciden con la lista de confirmados. Revisalos antes de finalizar: la asistencia y los reportes salen de esos equipos.",
+      "editLevel": "Editar nivel",
+      "editLevelTitle": "Nivel estimado de {name}",
+      "editLevelBody": "Se usa para balancear los equipos. Solo lo ven los administradores y capitanes.",
+      "levelLabel": "Nivel",
+      "levelSaveError": "No se pudo guardar el nivel. Probá de nuevo.",
+      "warnings": "Avisos",
+      "noKeeper": "{team} no tiene arquero.",
+      "manyKeepers": "{team} tiene {n} arqueros.",
+      "avoidPairBroken": "{a} y {b} quedaron en el mismo equipo.",
+      "forcePairBroken": "{a} y {b} quedaron en equipos distintos."
     },
     "profileForm": {
       "saveError": "No se pudieron guardar los cambios. Probá de nuevo.",
