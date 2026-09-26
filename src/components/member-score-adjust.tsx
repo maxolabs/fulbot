@@ -6,6 +6,8 @@ import { SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Sheet } from '@/components/ui/sheet'
+import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 
@@ -174,9 +176,9 @@ export function MemberEventDeleteButton({ eventId }: DeleteProps) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const handleDelete = async () => {
-    if (!confirm(t('memberScore.deleteEventConfirm'))) return
     setBusy(true)
     setError(null)
     try {
@@ -188,22 +190,41 @@ export function MemberEventDeleteButton({ eventId }: DeleteProps) {
       setError(errorMessage(err, t('memberScore.deleteEventError')))
     } finally {
       setBusy(false)
+      setConfirmOpen(false)
     }
   }
 
   return (
-    <span className="inline-flex items-center gap-1">
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={busy}
-        className="rounded-[3px] p-1 text-muted-foreground hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        aria-label={t('memberScore.deleteEvent')}
+    <>
+      <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={busy}
+          className="rounded-[3px] p-1 text-muted-foreground hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          aria-label={t('memberScore.deleteEvent')}
+          title={t('memberScore.deleteEvent')}
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+        {error && <span className="text-xs text-destructive">{error}</span>}
+      </span>
+      <Sheet
+        open={confirmOpen}
+        onOpenChange={(open) => { if (!open && !busy) setConfirmOpen(false) }}
         title={t('memberScore.deleteEvent')}
+        description={t('memberScore.deleteEventConfirm')}
       >
-        <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-      </button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
-    </span>
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button variant="destructive" disabled={busy} onClick={() => { void handleDelete() }}>
+            {busy && <Spinner size="sm" />}
+            {t('memberScore.deleteEvent')}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => setConfirmOpen(false)}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </Sheet>
+    </>
   )
 }

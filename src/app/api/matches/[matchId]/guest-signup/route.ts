@@ -26,6 +26,8 @@ const RPC_ERRORS: Array<[string, string]> = [
   ['El nombre es demasiado largo', 'nameTooLong'],
   ['Partido no encontrado', 'matchNotFound'],
   ['El partido no está aceptando inscripciones', 'closed'],
+  ['El partido ya empezó', 'started'],
+  ['El partido ya no admite cambios en la lista', 'locked'],
   ['Ya estás inscripto en este partido', 'alreadySignedUp'],
   ['Demasiadas inscripciones de invitados', 'rateLimited'],
   ['Inscripción no encontrada', 'signupNotFound'],
