@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
 import { useT } from '@/i18n/provider'
+import { TimezoneSelect, isValidTimezone } from './timezone-select'
 
 interface RecurringPatternFormProps {
   groupId: string
@@ -43,30 +44,6 @@ const DAYS = [
   { value: 6, key: 'days.saturday' },
 ]
 
-// A handful of common Argentina/LatAm/EU zones; "Otra" lets an admin type
-// anything IANA-valid the select doesn't list.
-const TIMEZONE_PRESETS = [
-  'America/Argentina/Buenos_Aires',
-  'America/Montevideo',
-  'America/Santiago',
-  'America/Sao_Paulo',
-  'America/Bogota',
-  'America/Lima',
-  'America/Mexico_City',
-  'Europe/Madrid',
-]
-
-// Same check the DB trigger does against pg_timezone_names (00025), done in
-// the browser first so the admin gets a readable error.
-function isValidTimezone(tz: string) {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz })
-    return true
-  } catch {
-    return false
-  }
-}
-
 function trimTime(t: string) {
   // Inputs come back as "HH:mm:ss"; <input type="time"> wants "HH:mm".
   return t.slice(0, 5)
@@ -79,8 +56,8 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
 
   const defaultWeekday = initialPattern?.weekday ?? groupDefaults.default_match_day ?? 1
   const defaultSignupWeekday = initialPattern?.signup_opens_weekday ?? ((defaultWeekday - 1 + 7) % 7)
+  // A new pattern starts in the group's zone; the form warns when they differ.
   const defaultTimezone = initialPattern?.timezone ?? groupDefaults.timezone ?? 'America/Argentina/Buenos_Aires'
-  const isPresetTimezone = TIMEZONE_PRESETS.includes(defaultTimezone)
 
   const [patternId, setPatternId] = useState(initialPattern?.id ?? null)
   const [isActive, setIsActive] = useState(initialPattern?.is_active ?? true)
@@ -94,14 +71,15 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
   const [signupOpensTime, setSignupOpensTime] = useState(
     initialPattern ? trimTime(initialPattern.signup_opens_time) : '12:00'
   )
-  const [timezoneChoice, setTimezoneChoice] = useState(isPresetTimezone ? defaultTimezone : '__custom__')
-  const [customTimezone, setCustomTimezone] = useState(isPresetTimezone ? '' : defaultTimezone)
+  const [timezone, setTimezone] = useState(defaultTimezone)
 
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const effectiveTimezone = timezoneChoice === '__custom__' ? customTimezone.trim() : timezoneChoice
+  const effectiveTimezone = timezone.trim()
+  const differsFromGroup =
+    !!groupDefaults.timezone && isValidTimezone(effectiveTimezone) && effectiveTimezone !== groupDefaults.timezone
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -288,25 +266,17 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
 
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="timezone">{t('ui.lifecycle.recurring.timezone')}</Label>
-          <NativeSelect
+          <TimezoneSelect
             id="timezone"
-            value={timezoneChoice}
-            onChange={(e) => setTimezoneChoice(e.target.value)}
+            value={timezone}
+            onChange={setTimezone}
             disabled={loading}
-          >
-            {TIMEZONE_PRESETS.map((tz) => (
-              <option key={tz} value={tz}>{tz}</option>
-            ))}
-            <option value="__custom__">{t('ui.lifecycle.recurring.customTimezone')}</option>
-          </NativeSelect>
-          {timezoneChoice === '__custom__' && (
-            <Input
-              value={customTimezone}
-              onChange={(e) => setCustomTimezone(e.target.value)}
-              disabled={loading}
-              placeholder={t('ui.lifecycle.recurring.customTimezonePlaceholder')}
-              className="mt-2 font-mono text-sm"
-            />
+            extraOption={groupDefaults.timezone}
+          />
+          {differsFromGroup && (
+            <p className="text-xs text-muted-foreground text-pretty">
+              {t('ui.lifecycle.recurring.timezoneDiffers', { zone: groupDefaults.timezone })}
+            </p>
           )}
         </div>
       </div>
