@@ -9,14 +9,17 @@ interface RealtimeWrapperProps {
   children: React.ReactNode
 }
 
+// Keeps an open match page live: signups (00025) and the match row itself
+// (status, result, MVP, lineup review flag; published in 00029) refresh the
+// server components.
 export function RealtimeWrapper({ matchId, children }: RealtimeWrapperProps) {
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
-    // Subscribe to changes in match_signups for this match
+    const refresh = () => router.refresh()
     const channel = supabase
-      .channel(`match-signups-${matchId}`)
+      .channel(`match-${matchId}`)
       .on(
         'postgres_changes',
         {
@@ -25,10 +28,17 @@ export function RealtimeWrapper({ matchId, children }: RealtimeWrapperProps) {
           table: 'match_signups',
           filter: `match_id=eq.${matchId}`,
         },
-        () => {
-          // Refresh the page when signups change
-          router.refresh()
-        }
+        refresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
+          filter: `id=eq.${matchId}`,
+        },
+        refresh
       )
       .subscribe()
 
