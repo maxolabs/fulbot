@@ -14,6 +14,7 @@ import { useT } from '@/i18n/provider'
 import { authErrorKey } from '@/lib/auth-errors'
 import { safeRedirect } from '@/lib/safe-redirect'
 import { setLanguageCookie } from '../language-cookie'
+import { ResendConfirmation } from '../resend-confirmation'
 
 // Login (docs/ui-rework/03-screens.md §11): max-w-sm form on the board,
 // mono eyebrow labels, 44px inputs, one cone button.
@@ -29,10 +30,23 @@ function LoginFormFields() {
   // Carried to the register and forgot-password links so the target survives.
   const redirectQuery = rawRedirect && redirectTo === rawRedirect ? `?redirect=${encodeURIComponent(redirectTo)}` : ''
 
-  // /api/auth/callback sends ?error=auth_failed when a confirmation or reset
-  // link could not be exchanged for a session.
+  // /api/auth/callback and /api/auth/confirm send ?error=auth_failed (and
+  // ?reason=signup|recovery) when a confirmation or reset link failed.
+  const linkReason = searchParams.get('reason')
   const [error, setError] = useState<string | null>(
-    searchParams.get('error') === 'auth_failed' ? t('ui.screens.auth.errorLinkInvalid') : null
+    searchParams.get('error') === 'auth_failed'
+      ? t(
+          linkReason === 'signup'
+            ? 'ui.screens.auth.errorConfirmLinkInvalid'
+            : linkReason === 'recovery'
+              ? 'ui.screens.auth.errorResetLinkInvalid'
+              : 'ui.screens.auth.errorLinkInvalid'
+        )
+      : null
+  )
+  // A failed confirmation link or an unconfirmed email offers a resend.
+  const [offerResend, setOfferResend] = useState(
+    searchParams.get('error') === 'auth_failed' && linkReason === 'signup'
   )
   const [loading, setLoading] = useState(false)
 
@@ -41,6 +55,7 @@ function LoginFormFields() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setOfferResend(false)
     setLoading(true)
 
     try {
@@ -50,7 +65,9 @@ function LoginFormFields() {
       })
 
       if (error) {
-        setError(t(authErrorKey(error, 'auth.loginGenericError')))
+        const key = authErrorKey(error, 'auth.loginGenericError')
+        setError(t(key))
+        setOfferResend(key === 'ui.screens.auth.errorEmailNotConfirmed')
         return
       }
 
@@ -81,6 +98,7 @@ function LoginFormFields() {
 
       <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-5">
         {error && <FormNotice kind="error">{error}</FormNotice>}
+        {offerResend && <ResendConfirmation email={email} redirectTo={redirectTo} />}
         <div className="space-y-1.5">
           <Label htmlFor="email">{t('auth.email')}</Label>
           <Input

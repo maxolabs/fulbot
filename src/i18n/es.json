@@ -823,7 +823,20 @@
         "errorSessionExpired": "Tu sesión expiró. Iniciá sesión de nuevo.",
         "errorNetwork": "Error de conexión. Probá de nuevo.",
         "errorGeneric": "Algo salió mal. Probá de nuevo.",
-        "errorLinkInvalid": "El enlace expiró o ya se usó. Pedí uno nuevo."
+        "errorLinkInvalid": "El enlace expiró o ya se usó. Pedí uno nuevo.",
+        "checkInboxBodyAnyDevice": "Te mandamos un enlace a {email} para confirmar tu cuenta. Podés abrirlo desde cualquier dispositivo.",
+        "checkInboxSpam": "¿No te llegó? Revisá la carpeta de spam o pedí que te lo reenviemos.",
+        "resetSentAnyDevice": "Si hay una cuenta con {email}, te llega un enlace en unos minutos. Podés abrirlo desde cualquier dispositivo.",
+        "errorConfirmLinkInvalid": "No pudimos confirmar tu email con ese enlace. Puede que ya esté confirmado: iniciá sesión. Si no, pedí uno nuevo.",
+        "errorResetLinkInvalid": "El enlace para cambiar la contraseña expiró o ya se usó. Pedí uno nuevo.",
+        "resend": "Reenviar email",
+        "resendIn": "Reenviar en {seconds} s",
+        "resendSent": "Listo, te reenviamos el email a {email}.",
+        "resendNeedsEmail": "Escribí tu email arriba para que te reenviemos la confirmación.",
+        "emailInUseTitle": "Ya tenés cuenta",
+        "emailInUseBody": "Ya hay una cuenta con {email}. Iniciá sesión o, si no te acordás la contraseña, recuperala.",
+        "recoverPassword": "Recuperar contraseña",
+        "nameRequired": "Escribí tu nombre."
       },
       "publicMatch": {
         "notFoundTitle": "Partido no encontrado",
@@ -1151,6 +1164,27 @@
       "deleteConfirm": "¿Eliminar este partido? No se puede deshacer.",
       "confirmCancel": "Sí, cancelar",
       "confirmDelete": "Sí, eliminar"
+    },
+    "errors": {
+      "notFoundTitle": "No encontramos esta página",
+      "notFoundBody": "Puede que el enlace esté mal escrito, que la página ya no exista o que no tengas acceso.",
+      "errorTitle": "Algo salió mal",
+      "errorBody": "No pudimos cargar esta página. Probá de nuevo en un momento.",
+      "retry": "Reintentar",
+      "goToGroups": "Ir a mis grupos",
+      "goHome": "Ir al inicio",
+      "reference": "Referencia: {digest}"
+    },
+    "meta": {
+      "matchTitle": "{group} · {date}",
+      "matchSpots": "{free} lugares libres de {max}. Anotate en fulbot.",
+      "matchOneSpot": "Queda 1 lugar de {max}. Anotate en fulbot.",
+      "matchFull": "Completo ({max} de {max}). Anotate en la lista de espera.",
+      "matchClosed": "Inscripción cerrada.",
+      "matchFallback": "Partido en fulbot",
+      "inviteTitle": "Unite a {group}",
+      "inviteDescription": "Te invitaron a {group} en fulbot para organizar el partido de la semana.",
+      "inviteFallback": "Invitación a fulbot"
     }
   },
   "devicePush": {

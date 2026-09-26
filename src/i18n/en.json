@@ -823,7 +823,20 @@
         "errorSessionExpired": "Your session expired. Log in again.",
         "errorNetwork": "Connection error. Try again.",
         "errorGeneric": "Something went wrong. Try again.",
-        "errorLinkInvalid": "The link expired or was already used. Request a new one."
+        "errorLinkInvalid": "The link expired or was already used. Request a new one.",
+        "checkInboxBodyAnyDevice": "We sent a link to {email} to confirm your account. You can open it on any device.",
+        "checkInboxSpam": "Didn't get it? Check your spam folder or ask us to send it again.",
+        "resetSentAnyDevice": "If there is an account for {email}, a link is on its way. You can open it on any device.",
+        "errorConfirmLinkInvalid": "We couldn't confirm your email with that link. It may already be confirmed: log in. If not, request a new one.",
+        "errorResetLinkInvalid": "The password reset link expired or was already used. Request a new one.",
+        "resend": "Resend email",
+        "resendIn": "Resend in {seconds}s",
+        "resendSent": "Done, we sent the email to {email} again.",
+        "resendNeedsEmail": "Type your email above so we can resend the confirmation.",
+        "emailInUseTitle": "You already have an account",
+        "emailInUseBody": "There is already an account for {email}. Log in or, if you don't remember the password, reset it.",
+        "recoverPassword": "Reset password",
+        "nameRequired": "Enter your name."
       },
       "publicMatch": {
         "notFoundTitle": "Match not found",
@@ -1151,6 +1164,27 @@
       "deleteConfirm": "Delete this match? This can't be undone.",
       "confirmCancel": "Yes, cancel it",
       "confirmDelete": "Yes, delete it"
+    },
+    "errors": {
+      "notFoundTitle": "We couldn't find this page",
+      "notFoundBody": "The link may be mistyped, the page may no longer exist, or you don't have access.",
+      "errorTitle": "Something went wrong",
+      "errorBody": "We couldn't load this page. Try again in a moment.",
+      "retry": "Try again",
+      "goToGroups": "Go to my groups",
+      "goHome": "Go home",
+      "reference": "Reference: {digest}"
+    },
+    "meta": {
+      "matchTitle": "{group} · {date}",
+      "matchSpots": "{free} of {max} spots open. Sign up on fulbot.",
+      "matchOneSpot": "1 of {max} spots left. Sign up on fulbot.",
+      "matchFull": "Full ({max} of {max}). Join the waitlist.",
+      "matchClosed": "Sign-up is closed.",
+      "matchFallback": "Match on fulbot",
+      "inviteTitle": "Join {group}",
+      "inviteDescription": "You're invited to {group} on fulbot to organize the weekly match.",
+      "inviteFallback": "fulbot invite"
     }
   },
   "devicePush": {
