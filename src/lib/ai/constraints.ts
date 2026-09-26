@@ -9,10 +9,32 @@ export function isDefenseCapable(player: PlayerInput): boolean {
     player.preferredPositions.some((pos) => DEFENDER_POSITIONS.includes(pos))
 }
 
-// "GK-willing" means goalkeeper_willingness >= 1, i.e. anything but "never"
-// (the profile default is 0). Guests come in as 0: we don't know them.
+// Peer data that says a player can keep goal even when their own profile
+// says "never" (the profile default is 0): the "can_keep" tag, or a peer
+// goalkeeping score of GK_SKILL_WILLING or more.
+export const CAN_KEEP_TAG = 'can_keep'
+export const GK_SKILL_WILLING = 3.5
+
+function canKeep(player: PlayerInput): boolean {
+  return player.tags.includes(CAN_KEEP_TAG) || (player.skills?.goalkeeping ?? 0) >= GK_SKILL_WILLING
+}
+
+// "GK-willing": goalkeeper_willingness >= 1 (anything but "never"), or peers
+// say they can keep (tag or goalkeeping >= 3.5). Guests come in as 0 with no
+// peer data: we don't know them.
 export function isGoalkeeperWilling(player: PlayerInput): boolean {
-  return player.goalkeeperWillingness >= 1
+  return player.goalkeeperWillingness >= 1 || canKeep(player)
+}
+
+// How good a pick for the GK slot a player is, higher first: own willingness
+// (0-3), +1 for the can_keep tag, plus the peer goalkeeping score (1-5, 0 when
+// unrated) weighted by half. With no data at all everyone scores 0 and the
+// caller's tie-break decides (the balancer then keeps its best outfield
+// players on the field).
+export function gkScore(player: PlayerInput): number {
+  return player.goalkeeperWillingness +
+    (player.tags.includes(CAN_KEEP_TAG) ? 1 : 0) +
+    (player.skills?.goalkeeping ?? 0) * 0.5
 }
 
 export interface GoalkeeperPolicy {
@@ -45,4 +67,35 @@ export function goalkeeperPolicy(players: PlayerInput[], rules: RuleInput[]): Go
   const required = Math.max(1, rule?.value ?? 1)
   const willing = players.filter(isGoalkeeperWilling).length
   return { required, willing, hard: willing >= required * 2 }
+}
+
+export interface DefendersPolicy {
+  /** Defense-capable players each team should have; 0 when there is no min_defenders rule. */
+  required: number
+  /** Defense-capable players in this match's pool. */
+  capable: number
+  /**
+   * Hard only when the pool can give both teams their minimum. Otherwise the
+   * rule is a soft preference (with a warning), like the goalkeeper minimum:
+   * a rule that can't be met would only burn the AI attempts.
+   */
+  hard: boolean
+}
+
+export function defendersPolicy(players: PlayerInput[], rules: RuleInput[]): DefendersPolicy {
+  const rule = rules.find((r) => r.type === 'min_defenders')
+  if (!rule) return { required: 0, capable: 0, hard: false }
+  const required = Math.max(1, rule.value ?? 1)
+  const capable = players.filter(isDefenseCapable).length
+  return { required, capable, hard: capable >= required * 2 }
+}
+
+// Pair rules only matter when both players are in this match: a group rule
+// about someone who didn't sign up would reach the prompt as a raw id.
+export function rulesForPlayers(players: PlayerInput[], rules: RuleInput[]): RuleInput[] {
+  const ids = new Set(players.map((p) => p.id))
+  return rules.filter((r) =>
+    (r.type !== 'avoid_pair' && r.type !== 'force_pair') ||
+    (!!r.playerIds && r.playerIds.length === 2 && r.playerIds.every((id) => ids.has(id)))
+  )
 }

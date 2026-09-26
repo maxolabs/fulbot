@@ -12,6 +12,11 @@ import {
 import type { Json } from '@/types/database'
 import { getT, type Language } from '@/i18n/server'
 import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { rulesForPlayers } from '@/lib/ai/constraints'
+
+// The OpenAI attempts stop at ~25s (team-generator.ts) and the fallback runs
+// after that, so the whole request fits in a minute.
+export const maxDuration = 60
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
@@ -182,13 +187,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Member score ("Compromiso") of each registered player in the match's group
     // (docs/member-scoring.md §5.3). NULL (newcomer) and guests fall back to neutral.
+    // The score columns are not selectable (00029): get_member_scores returns
+    // every row of the group to an admin/captain, which the caller is.
+    type MemberScoreRow = { player_id: string; member_score: number | null }
+    const scoresRpc = supabase.rpc.bind(supabase) as unknown as (
+      fn: 'get_member_scores', args: { p_group_id: string }
+    ) => PromiseLike<{ data: MemberScoreRow[] | null }>
     const { data: membershipRows } = ratedIds.length > 0
-      ? await supabase
-          .from('group_memberships')
-          .select('player_id, member_score')
-          .eq('group_id', match.group_id)
-          .in('player_id', ratedIds) as { data: { player_id: string; member_score: number | null }[] | null }
-      : { data: [] as { player_id: string; member_score: number | null }[] }
+      ? await scoresRpc('get_member_scores', { p_group_id: match.group_id })
+      : { data: [] as MemberScoreRow[] }
     const memberScoreById = new Map(
       (membershipRows || []).map((m) => [m.player_id, m.member_score === null ? null : Number(m.member_score)])
     )
@@ -239,7 +246,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .or(`group_id.eq.${match.group_id},match_id.eq.${matchId}`)
       .eq('is_active', true)
 
-    const ruleInputs: RuleInput[] = (rules || [])
+    // Pair rules about players who aren't in this match are dropped (they would
+    // reach the prompt and the snapshot as raw ids).
+    const ruleInputs: RuleInput[] = rulesForPlayers(players, (rules || [])
       .filter((r) => KNOWN_RULE_TYPES.has(r.rule_type as RuleInput['type']))
       .map((r) => {
         const d = (r.data ?? {}) as { player_ids?: string[]; min_count?: number }
@@ -248,7 +257,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           playerIds: d.player_ids,
           value: d.min_count,
         }
-      })
+      }))
 
     // Recent match history, for teammate-pair rotation
     const { data: historyRows } = await supabase.rpc('get_recent_match_history', {

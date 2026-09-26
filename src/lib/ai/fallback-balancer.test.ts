@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { generateFallbackTeams } from './fallback-balancer'
-import { goalkeeperPolicy, isDefenseCapable, sameSplit } from './constraints'
+import { defendersPolicy, gkScore, goalkeeperPolicy, isDefenseCapable, isGoalkeeperWilling, rulesForPlayers, sameSplit } from './constraints'
 import { guestPlayerDefaults, validateHardConstraints, type PlayerInput } from './team-generator'
 
 const player = (id: string, rating: number, extra: Partial<PlayerInput> = {}): PlayerInput => ({
@@ -56,4 +56,54 @@ test('min_defenders is honored by swapping a defender across', () => {
     assert.ok(team.some((a) => isDefenseCapable(players.find((p) => p.id === a.playerId)!)))
   }
   assert.deepEqual(validateHardConstraints(players, rules, result), [])
+})
+
+const keeperOf = (team: { playerId: string; position: string }[]) => team.find((a) => a.position === 'GK')?.playerId
+
+test('with nobody GK-willing the best-rated player is not sent to goal', () => {
+  const players = pool(10)
+  const result = generateFallbackTeams(players, [], 5)
+  const rating = (id: string) => players.find((p) => p.id === id)!.overallRating
+  for (const team of [result.dark, result.light]) {
+    const keeper = keeperOf(team)
+    assert.ok(keeper)
+    const lowest = Math.min(...team.map((a) => rating(a.playerId)))
+    assert.equal(rating(keeper!), lowest)
+  }
+})
+
+test('peer data makes a player GK-willing and wins the GK slot', () => {
+  const tagged = player('tagged', 3, { tags: ['can_keep'] })
+  const skilled = player('skilled', 3, { skills: { goalkeeping: 4, defense: 3, attack: 3, physical: 3 } })
+  const low = player('low', 3, { skills: { goalkeeping: 2, defense: 3, attack: 3, physical: 3 } })
+  assert.ok(isGoalkeeperWilling(tagged))
+  assert.ok(isGoalkeeperWilling(skilled))
+  assert.ok(!isGoalkeeperWilling(low))
+  assert.ok(gkScore(player('keen', 1, { goalkeeperWillingness: 3 })) > gkScore(tagged))
+
+  const players = [...pool(8), tagged, skilled]
+  assert.equal(goalkeeperPolicy(players, []).hard, true)
+  const result = generateFallbackTeams(players, [], 5)
+  assert.deepEqual([keeperOf(result.dark), keeperOf(result.light)].sort(), ['skilled', 'tagged'])
+  assert.deepEqual(validateHardConstraints(players, [], result), [])
+})
+
+test('min_defenders turns soft when the pool cannot cover both teams', () => {
+  const players = pool(10)
+  players[0] = player('d1', 3, { mainPosition: 'CB', preferredPositions: ['CB'] })
+  const rules = [{ type: 'min_defenders' as const, value: 1 }]
+  assert.deepEqual(defendersPolicy(players, rules), { required: 1, capable: 1, hard: false })
+  const result = generateFallbackTeams(players, rules, 5)
+  assert.deepEqual(validateHardConstraints(players, rules, result), [])
+  assert.equal(result.warnings.length, 0)
+})
+
+test('pair rules about players outside the match are dropped', () => {
+  const players = pool(4)
+  const rules = rulesForPlayers(players, [
+    { type: 'avoid_pair', playerIds: ['p0', 'p1'] },
+    { type: 'force_pair', playerIds: ['p0', 'absent'] },
+    { type: 'min_goalkeepers', value: 1 },
+  ])
+  assert.deepEqual(rules.map((r) => r.type), ['avoid_pair', 'min_goalkeepers'])
 })

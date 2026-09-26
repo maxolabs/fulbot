@@ -4,7 +4,16 @@ import { generateFallbackTeams } from './fallback-balancer'
 import { POSITIONS } from '@/lib/teams/manual'
 import { tagLabel, type PlayerSkills } from '@/lib/ratings'
 import { getTranslation, type Language } from '@/i18n/core'
-import { goalkeeperPolicy, isDefenseCapable, isGoalkeeperWilling, sameSplit, type GoalkeeperPolicy } from './constraints'
+import {
+  defendersPolicy,
+  goalkeeperPolicy,
+  isDefenseCapable,
+  isGoalkeeperWilling,
+  rulesForPlayers,
+  sameSplit,
+  type DefendersPolicy,
+  type GoalkeeperPolicy,
+} from './constraints'
 
 export interface PlayerInput {
   id: string
@@ -193,6 +202,7 @@ function buildPrompt(
   teamSize: number,
   relevantPairs: PairCount[],
   gk: GoalkeeperPolicy,
+  defenders: DefendersPolicy,
   language: Language,
   previous: PreviousLineup | null,
   violations?: string[]
@@ -226,17 +236,21 @@ function buildPrompt(
         }
         // min_goalkeepers is described once below, as hard or soft (goalkeeperPolicy)
         if (r.type === 'min_defenders') {
-          return `- Each team must have at least ${r.value ?? 1} player(s) capable of playing defense (CB/LB/RB) (hard constraint)`
+          return defenders.hard
+            ? `- Each team must have at least ${defenders.required} player(s) capable of playing defense (CB/LB/RB) (hard constraint)`
+            : `- Defenders: only ${defenders.capable} player(s) capable of playing defense (CB/LB/RB) in this match, not enough for ${defenders.required} per team. This is a SOFT preference, not a hard constraint: spread them between the teams.`
         }
         return ''
       }).filter(Boolean).join('\n') || 'No special rules'
     : 'No special rules'
 
-  // "GK-willing" = goalkeeper willingness other than "never". The minimum is a
-  // hard constraint only when there are enough of them for both teams.
+  // "GK-willing" = goalkeeper willingness other than "never", or peers say
+  // they can keep (isGoalkeeperWilling). The minimum is a hard constraint only
+  // when there are enough of them for both teams.
+  const gkWilling = 'GK willingness other than "never", or the "Puede atajar" trait, or a GK skill of 3.5 or more'
   const gkDescription = gk.hard
-    ? `- Each team must have at least ${gk.required} GK-willing player(s), i.e. GK willingness other than "never" (hard constraint)`
-    : `- Goalkeepers: only ${gk.willing} GK-willing player(s) (GK willingness other than "never") in this match, not enough for ${gk.required} per team. This is a SOFT preference, not a hard constraint: put GK-willing players in goal where you can, otherwise the player with the best GK skill.`
+    ? `- Each team must have at least ${gk.required} GK-willing player(s), i.e. ${gkWilling} (hard constraint)`
+    : `- Goalkeepers: only ${gk.willing} GK-willing player(s) (${gkWilling}) in this match, not enough for ${gk.required} per team. This is a SOFT preference, not a hard constraint: put GK-willing players in goal where you can, otherwise the player with the best GK skill (never just the best-rated player).`
 
   const historyDescription = relevantPairs.length > 0
     ? relevantPairs.map((p) => `- ${p.names[0]} and ${p.names[1]} have been teammates ${p.count} time(s) recently`).join('\n')
@@ -258,7 +272,7 @@ Produce a clearly different split: move several players to the other team (just 
     ? `\n## Your Previous Attempt Had These Problems (FIX THEM)\n\n${violations.map((v) => `- ${v}`).join('\n')}\n`
     : ''
 
-  return `You are an expert football (soccer) team balancer for amateur 7-a-side matches. Your goal is to create two balanced teams that will have a competitive and fun match.
+  return `You are an expert football (soccer) team balancer for amateur matches. Your goal is to create two balanced teams that will have a competitive and fun match.
 
 ## Players Available (${players.length} total, ${teamSize} per team)
 
@@ -315,6 +329,7 @@ Respond with ONLY a valid JSON object, no markdown, no code fences:
 
 The balanceScore should be between 0 and 1, where 1 means perfectly balanced.
 Write "reasoning", every "warnings" item and every "reason" in ${OUTPUT_LANGUAGE[language]}. Keep player names exactly as given.
+Ratings, skills and Compromiso are private: never quote a player's rating, skill score or Compromiso (no numbers like "4.2" or "3/5") in "reasoning", "warnings" or "reason", and never describe a specific player's Compromiso. Describe the balance qualitatively (e.g. "strong defense", "experienced keeper").
 Include ALL ${players.length} players EXACTLY ONCE, split as evenly as possible between the two teams (sizes may differ by at most 1).
 Use standard position abbreviations: GK, CB, LB, RB, CDM, CM, CAM, LM, RM, LW, RW, ST, CF`
 }
@@ -326,7 +341,8 @@ Use standard position abbreviations: GK, CB, LB, RB, CDM, CM, CAM, LM, RM, LW, R
 // - force_pair always on the same team
 // - each team has >= required GK-willing players, only while goalkeeperPolicy()
 //   says the pool allows it (>= 2 GK-willing with the default of 1 per team)
-// - each team has >= required defense-capable players when a min_defenders rule exists
+// - each team has >= required defense-capable players when a min_defenders rule
+//   exists and defendersPolicy() says the pool allows it
 export function validateHardConstraints(
   players: PlayerInput[],
   rules: RuleInput[],
@@ -407,10 +423,11 @@ export function validateHardConstraints(
     }
   }
 
-  // Defenders minimum (only when a min_defenders rule exists)
-  const minDefRule = rules.find((r) => r.type === 'min_defenders')
-  if (minDefRule) {
-    const required = minDefRule.value ?? 1
+  // Defenders minimum: hard only when a min_defenders rule exists and the pool
+  // can cover both teams (see defendersPolicy); otherwise a soft preference
+  const defenders = defendersPolicy(players, rules)
+  if (defenders.hard) {
+    const required = defenders.required
     for (const [teamName, ids] of [['dark', darkIds], ['light', lightIds]] as const) {
       const defCount = ids.filter((id) => {
         const player = players.find((p) => p.id === id)
@@ -425,9 +442,17 @@ export function validateHardConstraints(
   return violations
 }
 
+// OpenAI budget: one request may take OPENAI_TIMEOUT_MS, and all attempts
+// together OPENAI_DEADLINE_MS, so the fallback still answers well inside the
+// route's maxDuration (60s). The SDK's own retries are off: our loop retries.
+const OPENAI_TIMEOUT_MS = 15_000
+const OPENAI_DEADLINE_MS = 25_000
+// Not worth starting another attempt with less time than this left.
+const OPENAI_MIN_ATTEMPT_MS = 3_000
+
 export async function generateTeams(
   players: PlayerInput[],
-  rules: RuleInput[] = [],
+  allRules: RuleInput[] = [],
   teamSize?: number,
   history: MatchHistoryEntry[] = [],
   options: GenerateOptions = {}
@@ -440,14 +465,19 @@ export async function generateTeams(
     ? options.previous
     : null
   const t = getTranslation(language)
+  const rules = rulesForPlayers(players, allRules)
   const pairHistory = relevantPairCounts(players, computeTeammatePairCounts(history))
   const gk = goalkeeperPolicy(players, rules)
+  const defenders = defendersPolicy(players, rules)
 
   // Said once, whichever provider answers: with too few GK-willing players the
-  // keeper minimum was only a preference.
-  const gkWarnings = gk.hard
-    ? []
-    : [gk.willing === 0 ? t('ui.teamsAi.gkNone') : t('ui.teamsAi.gkFew', { n: gk.willing })]
+  // keeper minimum was only a preference; same for an unreachable min_defenders.
+  const gkWarnings = [
+    ...(gk.hard ? [] : [gk.willing === 0 ? t('ui.teamsAi.gkNone') : t('ui.teamsAi.gkFew', { n: gk.willing })]),
+    ...(defenders.required > 0 && !defenders.hard
+      ? [t('ui.teamsAi.minDefendersSoft', { n: defenders.capable, required: defenders.required })]
+      : []),
+  ]
   const fallback = (prompt: string | null): GenerateTeamsResult => {
     const result = generateFallbackTeams(players, rules, calculatedTeamSize, { language, previous, seed: options.seed })
     return { ...result, warnings: [...gkWarnings, ...result.warnings], provider: 'fallback', prompt, pairHistory }
@@ -455,15 +485,21 @@ export async function generateTeams(
 
   if (!apiKey) return fallback(null)
 
-  const client = new OpenAI({ apiKey })
+  const client = new OpenAI({ apiKey, timeout: OPENAI_TIMEOUT_MS, maxRetries: 0 })
+  const startedAt = Date.now()
 
   let lastViolations: string[] = []
   let lastPrompt: string | null = null
   const maxAttempts = 2
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const left = OPENAI_DEADLINE_MS - (Date.now() - startedAt)
+    if (left < OPENAI_MIN_ATTEMPT_MS) {
+      lastViolations = [...lastViolations, 'Out of time for another AI attempt']
+      break
+    }
     try {
-      const prompt = buildPrompt(players, rules, calculatedTeamSize, pairHistory, gk, language, previous, attempt > 0 ? lastViolations : undefined)
+      const prompt = buildPrompt(players, rules, calculatedTeamSize, pairHistory, gk, defenders, language, previous, attempt > 0 ? lastViolations : undefined)
       lastPrompt = prompt
 
       const response = await client.chat.completions.create({
@@ -471,7 +507,7 @@ export async function generateTeams(
         max_tokens: 2048,
         response_format: { type: 'json_object' },
         messages: [{ role: 'user', content: prompt }],
-      })
+      }, { timeout: Math.min(OPENAI_TIMEOUT_MS, left) })
 
       const textContent = response.choices[0]?.message?.content
       if (!textContent) {
