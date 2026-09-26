@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { GROUP_COOKIE, GROUP_COOKIE_MAX_AGE, groupSlugFromPathname } from '@/lib/group-cookie'
 import { safeRedirect } from '@/lib/safe-redirect'
+import { getSupabasePublicEnv } from '@/lib/env'
 
 export async function updateSession(request: NextRequest) {
   // Current-group memory (docs/ui-rework/02-shell.md §3): remember the slug
@@ -10,13 +11,15 @@ export async function updateSession(request: NextRequest) {
   // the Supabase session cookies for the rest of the request.
   const groupSlug = groupSlugFromPathname(request.nextUrl.pathname)
 
+  const supabaseEnv = getSupabasePublicEnv()
+
   let supabaseResponse = NextResponse.next({
     request,
   })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseEnv.url,
+    supabaseEnv.anonKey,
     {
       cookies: {
         getAll() {
