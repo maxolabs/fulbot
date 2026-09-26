@@ -144,9 +144,10 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Cancha del club"
+          placeholder={t('ui.matchScreens.forms.locationPlaceholder')}
           maxLength={200}
         />
+        <p className="text-xs text-muted-foreground">{t('ui.matchScreens.forms.editNotifyHint')}</p>
       </div>
 
       <div className="space-y-1.5">
@@ -166,7 +167,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="durationMinutes">Duración (min)</Label>
+          <Label htmlFor="durationMinutes">{t('ui.matchScreens.forms.duration')}</Label>
           <Input
             id="durationMinutes"
             type="number"
@@ -180,11 +181,11 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Al pasar este tiempo el partido se da por terminado solo
+            {t('ui.matchScreens.forms.durationHint')}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
+          <Label htmlFor="resultsRequestDelayMinutes">{t('ui.matchScreens.forms.resultsDelay')}</Label>
           <Input
             id="resultsRequestDelayMinutes"
             type="number"
@@ -198,7 +199,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Cuándo se les pide a los jugadores que carguen el resultado
+            {t('ui.matchScreens.forms.resultsDelayHint')}
           </p>
         </div>
       </div>
@@ -210,7 +211,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Traer pechera"
+          placeholder={t('ui.matchScreens.forms.notesPlaceholder')}
           maxLength={500}
           rows={2}
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
