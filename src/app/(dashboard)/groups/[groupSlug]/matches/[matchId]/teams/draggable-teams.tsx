@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sheet } from '@/components/ui/sheet'
 import { DndContext, DragOverlay, PointerSensor, KeyboardSensor, closestCenter, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { GripVertical, Save, Search, Users, X } from 'lucide-react'
+import { AlertTriangle, GripVertical, Save, Search, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
-import { assignmentPayload, draftProblem, movePlayer, POSITIONS, syncRoster, type BuilderPlayer, type TeamDraft, type TeamSlot } from '@/lib/teams/manual'
+import { assignmentPayload, draftProblem, lineupWarnings, movePlayer, POSITIONS, syncRoster, type BuilderPlayer, type LineupWarning, type PairRule, type TeamDraft, type TeamSlot } from '@/lib/teams/manual'
 import type { Json } from '@/types/database'
 
 function PlayerCard({ player, team, disabled, onMove, onPosition }: {
@@ -75,9 +75,9 @@ function TeamZone({ team, players, children, disabled, activeSlot }: { team: Tea
   )
 }
 
-export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedPlayers, hasTeams, onSaved, onCancel }: {
+export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedPlayers, hasTeams, pairRules = [], onSaved, onCancel }: {
   matchId: string; darkPlayers: BuilderPlayer[]; lightPlayers: BuilderPlayer[]; unassignedPlayers: BuilderPlayer[]
-  hasTeams: boolean; onSaved: () => void; onCancel: () => void
+  hasTeams: boolean; pairRules?: PairRule[]; onSaved: () => void; onCancel: () => void
 }) {
   const t = useT()
   const router = useRouter()
@@ -93,6 +93,12 @@ export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedP
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor))
   const total = draft.pool.length + draft.dark.length + draft.light.length
   const problem = draftProblem(draft)
+  // Non-blocking: publishing is still allowed with these.
+  const warningText = (w: LineupWarning) =>
+    w.kind === 'noKeeper' ? t('ui.matchLifecycle.noKeeper', { team: t(`ui.teamsScreen.${w.team}`) })
+      : w.kind === 'manyKeepers' ? t('ui.matchLifecycle.manyKeepers', { team: t(`ui.teamsScreen.${w.team}`), n: w.count })
+      : t(`ui.matchLifecycle.${w.kind}`, { a: w.names[0], b: w.names[1] })
+  const warnings = problem ? [] : lineupWarnings(draft, pairRules).map(warningText)
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   // The editor replaces the button that opened it; keep keyboard focus here.
@@ -224,6 +230,12 @@ export function DraggableTeams({ matchId, darkPlayers, lightPlayers, unassignedP
           <div aria-live="polite" className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4" aria-hidden="true" />{t('ui.builder.assigned', { n: total - draft.pool.length, total })}</p>
             <p className="mt-1 text-xs text-muted-foreground">{problem ? t(`ui.builder.${problem}`) : t('ui.builder.ready', { dark: draft.dark.length, light: draft.light.length })}</p>
+            {warnings.length > 0 && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
+                <span className="line-clamp-2"><span className="sr-only">{t('ui.matchLifecycle.warnings')}: </span>{warnings.join(' · ')}</span>
+              </p>
+            )}
           </div>
           <Button type="button" onClick={save} disabled={!!problem || saving || (hasTeams && !dirty)}>
             {saving ? <Spinner size="sm" /> : <Save className="h-4 w-4" aria-hidden="true" />}

@@ -5,6 +5,7 @@ import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { guestPlayerDefaults } from '@/lib/ai/team-generator'
+import type { PairRule } from '@/lib/teams/manual'
 import { TeamsView } from './teams-view'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
@@ -218,6 +219,27 @@ export default async function TeamsPage({ params }: PageProps) {
     }
   }
 
+  // Pair rules for the manual builder's warnings (organizers only; same
+  // sources as the generator: group rules plus this match's rules).
+  let pairRules: PairRule[] = []
+  if (isAdminOrCaptain) {
+    const { data: ruleRows } = await supabase
+      .from('rule_sets')
+      .select('rule_type, data')
+      .or(`group_id.eq.${group.id},match_id.eq.${matchId}`)
+      .eq('is_active', true) as { data: { rule_type: string; data: { player_ids?: unknown } | null }[] | null }
+    pairRules = (ruleRows || []).flatMap((r): PairRule[] => {
+      const ids = r.data?.player_ids
+      if ((r.rule_type !== 'avoid_pair' && r.rule_type !== 'force_pair') || !Array.isArray(ids) || ids.length !== 2) return []
+      if (typeof ids[0] !== 'string' || typeof ids[1] !== 'string') return []
+      return [{ type: r.rule_type, playerIds: [ids[0], ids[1]] }]
+    })
+  }
+
+  // The AI analysis and warnings are written from private ratings and the
+  // member score: organizers only, so members never get them in the payload.
+  const aiOutput = isAdminOrCaptain ? match.ai_input_snapshot?.output : undefined
+
   // Dates are formatted here, in the group's timezone, so the client never
   // touches the visitor's clock (src/lib/utils/datetime.ts).
   const dateLabel = `${formatMatchDateShort(match.date_time, timeZone)} · ${formatMatchTime(match.date_time, timeZone)}`
@@ -241,10 +263,11 @@ export default async function TeamsPage({ params }: PageProps) {
           id: teams?.find((t) => t.name === 'light')?.id || null,
           assignments: lightTeamAssignments,
         }}
-        aiReasoning={match.ai_input_snapshot?.output?.reasoning}
-        balanceScore={match.ai_input_snapshot?.output?.balanceScore}
-        warnings={match.ai_input_snapshot?.output?.warnings}
-        provider={match.ai_input_snapshot?.provider}
+        aiReasoning={aiOutput?.reasoning}
+        balanceScore={aiOutput?.balanceScore}
+        warnings={aiOutput?.warnings}
+        provider={isAdminOrCaptain ? match.ai_input_snapshot?.provider : undefined}
+        pairRules={pairRules}
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}
         matchStatus={match.status}
