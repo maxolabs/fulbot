@@ -37,7 +37,7 @@ track who played and who was MVP.
 |---|---|---|
 | Visitor (no account) | WhatsApp link `/m/<matchId>` or invite link `/invite/<code>` | see the match card and names, sign up as a one-off guest by name, cancel that signup |
 | Member | registered + joined a group | see everything in the group, sign up / drop out, vote MVP, rate, see stats, get in-app notifications |
-| Captain | promoted by an admin | member + generate/edit teams, edit match, change match status, add/remove guests, load results, mark no-shows |
+| Captain | promoted by an admin | member + generate/edit teams, edit match, change match status, add/remove guests, load results, mark no-shows (co-organizer by design since OD-7, 2026-11-15) |
 | Admin | group creator or promoted | captain + group settings, roles, notification settings, recurring pattern, create matches, delete matches, rules |
 | System | Vercel cron (daily 12:00 UTC) + lazy calls | create recurring matches, send reminders, drain WhatsApp outbox |
 
@@ -83,6 +83,8 @@ draft ──► signup_open ◄──► signup_closed
 - `signup_open ⇄ full` is automatic on the confirmed count.
 - `teams_created` cannot go back to any signup state.
 - Nothing ever moves a match to `finished` automatically; an admin/captain must click.
+  *(Outdated: since 00019 the ticker finishes a match at kickoff + duration, and since 00034
+  (OD-3) a match without teams can finish too, with attendance only.)*
 - ⚠️ Three code paths change status **outside** this machine: admin "Agregar invitado" can
   flip `draft`/`signup_closed`/`teams_created` to `full`; team generation sets
   `teams_created` from **any** status (even `finished`/`cancelled`); the create form inserts
@@ -673,6 +675,8 @@ draft ──► signup_open ◄──► signup_closed
 - **UC 6.1.1** Admin/captain, status `teams_created` → "Marcar como finalizado" → `finished`.
   ✅ No confirmation, irreversible, no time check, **no notification** ("vote now" does not
   exist as a message; the only prompt is the dashboard nudge).
+- *(Since 00034, OD-3: a started match without teams finishes with attendance only, from
+  "Finalizar sin equipos" or the ticker; it has no result or MVP flow.)*
 - ⚠️ A match that never had teams generated can never be finished, so it never gets results,
   votes, badges or attendance.
 - ❌ No auto-finish when the date passes (every match must be closed by hand).
