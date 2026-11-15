@@ -8,7 +8,7 @@
 // own schedule:
 //   0. scheduler tick: run every due scheduled_jobs row (auto_finish,
 //      results_request, results_reminder, results_window_close) and drain
-//      the outbox -- the daily floor when no scripts/ticker.ts is running
+//      the outbox -- a daily backstop behind the pg_cron minute ticker
 //      (docs/match-results-consensus.md §5).
 //   1. generate_recurring_matches + emit match_created for whatever it (or a
 //      racing group-page lazy call) just created (§2.4).
