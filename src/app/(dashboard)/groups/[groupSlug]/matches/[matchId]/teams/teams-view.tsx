@@ -497,6 +497,7 @@ export function TeamsView({
                 <span className="font-mono text-sm tabular-nums">{Math.round(balanceScore * 100)}%</span>
               </div>
             )}
+            <p className="text-xs text-muted-foreground">{t('ui.teamsPrivacy.analysisPrivate')}</p>
           </CardContent>
         </Card>
       )}

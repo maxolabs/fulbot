@@ -1,4 +1,4 @@
--- Run after migration 00023 against the local seeded database. Every write rolls back.
+-- Run after migration 00023 (snapshot table: 00035) against the local seeded database. Every write rolls back.
 BEGIN;
 DO $$
 DECLARE
@@ -28,7 +28,7 @@ BEGIN
   IF v_status <> 'teams_created' THEN RAISE EXCEPTION 'TEST: status not updated'; END IF;
   SELECT count(*) INTO v_before FROM public.team_assignments a JOIN public.teams t ON t.id=a.team_id WHERE t.match_id=v_match;
   IF v_before <> jsonb_array_length(v_payload) THEN RAISE EXCEPTION 'TEST: incomplete lineup'; END IF;
-  IF (SELECT ai_input_snapshot IS NOT NULL FROM public.matches WHERE id=v_match) THEN RAISE EXCEPTION 'TEST: stale AI snapshot'; END IF;
+  IF EXISTS (SELECT 1 FROM public.match_ai_snapshots WHERE match_id=v_match) THEN RAISE EXCEPTION 'TEST: stale AI snapshot'; END IF;
   -- Re-saving an already published lineup must not notify the group again.
   SELECT count(*) INTO v_before FROM public.notifications WHERE match_id=v_match AND type='teams_created';
   PERFORM public.publish_match_teams(v_match, v_payload, NULL);

@@ -221,6 +221,7 @@ export function AddGuestForm({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('ui.matchScreens.forms.guest.namePlaceholder')}
+                maxLength={60}
                 required
                 autoFocus
               />

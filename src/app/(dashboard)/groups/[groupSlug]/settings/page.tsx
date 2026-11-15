@@ -16,6 +16,7 @@ import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
 import { InviteLinkSettings } from './invite-link-settings'
 import { LeaveGroupRow } from '@/components/leave-group-row'
+import { RulesManager } from '@/components/rules-manager'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
@@ -78,9 +79,12 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     .eq('is_active', true)
     .single() as { data: { role: string } | null }
 
-  if (!membership || membership.role !== 'admin') {
+  // Admins get every card. Captains co-organize teams, so they get the group's
+  // teaming rules only (OD-10).
+  if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
     redirect(`/groups/${groupSlug}`)
   }
+  const isAdmin = membership.role === 'admin'
 
   type MembershipWithProfile = {
     id: string
@@ -119,6 +123,40 @@ export default async function GroupSettingsPage({ params }: PageProps) {
       userId: (m.player_profiles as { user_id: string | null }).user_id,
       isCurrentUser: (m.player_profiles as { user_id: string | null }).user_id === user.id,
     }))
+
+  // "Reglas del grupo" (OD-10): group-wide rule_sets rows (match_id NULL),
+  // which the balancer applies to every match. Guests belong to one match, so
+  // only members are offered here.
+  const groupRulesCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('ui.groupRules.title')}</CardTitle>
+        <CardDescription className="text-pretty">{t('ui.groupRules.hint')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <RulesManager
+          groupId={group.id}
+          players={members.map((m) => ({ id: m.playerId, display_name: m.displayName }))}
+          bare
+        />
+      </CardContent>
+    </Card>
+  )
+
+  if (!isAdmin) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <TopBarConfig title={t('ui.shell.groupSettings')} back={`/groups/${groupSlug}`} />
+
+        <PageHeader title={t('ui.shell.groupSettings')} subtitle={group.name} />
+        <Eyebrow className="lg:hidden">{group.name}</Eyebrow>
+
+        {groupRulesCard}
+
+        <p className="text-sm text-muted-foreground text-pretty">{t('ui.groupRules.captainNote')}</p>
+      </div>
+    )
+  }
 
   type NotificationSettingsType = {
     id: string
@@ -234,6 +272,8 @@ export default async function GroupSettingsPage({ params }: PageProps) {
           />
         </CardContent>
       </Card>
+
+      {groupRulesCard}
 
       <Card>
         <CardHeader>

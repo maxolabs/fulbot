@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { overallOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
 import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
@@ -74,17 +74,29 @@ export default async function TeamsPage({ params }: PageProps) {
       status: string
       max_players: number
       lineup_needs_review: boolean
-      ai_input_snapshot: {
-        output?: {
-          reasoning?: string
-          balanceScore?: number
-          warnings?: string[]
-        }
-        provider?: 'openai' | 'fallback'
-      } | null
     } | null }
 
   if (!match) return notFound()
+
+  // The analysis of the last AI lineup (OD-6): match_ai_snapshots is readable
+  // by admins and captains only, so members never get it, whatever the UI does.
+  type AiSnapshot = {
+    output?: {
+      reasoning?: string
+      balanceScore?: number
+      warnings?: string[]
+    }
+    provider?: 'openai' | 'fallback'
+  }
+  let aiSnapshot: AiSnapshot | null = null
+  if (isAdminOrCaptain) {
+    const { data: snapshotRow } = await supabase
+      .from('match_ai_snapshots')
+      .select('snapshot')
+      .eq('match_id', matchId)
+      .maybeSingle() as { data: { snapshot: AiSnapshot } | null }
+    aiSnapshot = snapshotRow?.snapshot ?? null
+  }
 
   // Get confirmed signups with player info (registered + guests)
   type SignupResult = {
@@ -100,7 +112,6 @@ export default async function TeamsPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
-      estimated_rating: number | null
       preferred_positions: string[] | null
     } | null
   }
@@ -120,22 +131,32 @@ export default async function TeamsPage({ params }: PageProps) {
       guest_players (
         id,
         display_name,
-        estimated_rating,
         preferred_positions
       )
     `)
     .eq('match_id', matchId)
     .eq('status', 'confirmed') as { data: SignupResult[] | null }
 
+  // A guest's level is organizer-only (00035): members get the default.
+  const guestRatingById = new Map<string, number | null>()
+  if (isAdminOrCaptain && (signups || []).some((s) => s.guest_players)) {
+    const { data: guestRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+    for (const row of guestRows || []) {
+      guestRatingById.set(row.guest_player_id, row.estimated_rating === null ? null : Number(row.estimated_rating))
+    }
+  }
+
   // Scores: player_rating_summary is readable by admins/captains only, so members
   // simply get the default here (and the UI hides the numbers for them anyway).
+  // Ratings are per group (OD-9): this group's rows only.
   const ratedIds = (signups || [])
     .map((s) => s.player_profiles?.id)
     .filter((id): id is string => !!id)
   const { data: summaryRows } = ratedIds.length > 0
     ? await supabase
         .from('player_rating_summary')
-        .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+        .select(RATING_SUMMARY_COLUMNS)
+        .eq('group_id', group.id)
         .in('player_id', ratedIds) as { data: RatingSummary[] | null }
     : { data: [] as RatingSummary[] }
   const summaries = summariesById(summaryRows)
@@ -158,7 +179,7 @@ export default async function TeamsPage({ params }: PageProps) {
         id: s.guest_players!.id,
         displayName: s.guest_players!.display_name,
         preferredPositions: s.guest_players!.preferred_positions,
-        estimatedRating: s.guest_players!.estimated_rating,
+        estimatedRating: guestRatingById.get(s.guest_players!.id) ?? null,
       })
       return {
         id: guest.id,
@@ -237,7 +258,7 @@ export default async function TeamsPage({ params }: PageProps) {
 
   // The AI analysis and warnings are written from private ratings and the
   // member score: organizers only, so members never get them in the payload.
-  const aiOutput = isAdminOrCaptain ? match.ai_input_snapshot?.output : undefined
+  const aiOutput = isAdminOrCaptain ? aiSnapshot?.output : undefined
 
   // Dates are formatted here, in the group's timezone, so the client never
   // touches the visitor's clock (src/lib/utils/datetime.ts).
@@ -265,7 +286,7 @@ export default async function TeamsPage({ params }: PageProps) {
         aiReasoning={aiOutput?.reasoning}
         balanceScore={aiOutput?.balanceScore}
         warnings={aiOutput?.warnings}
-        provider={isAdminOrCaptain ? match.ai_input_snapshot?.provider : undefined}
+        provider={isAdminOrCaptain ? aiSnapshot?.provider : undefined}
         pairRules={pairRules}
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}

@@ -11,7 +11,7 @@ import {
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
 import { getT, type Language } from '@/i18n/server'
-import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { overallOf, skillsOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
 import { rulesForPlayers } from '@/lib/ai/constraints'
 
 // The OpenAI attempts stop at ~25s (team-generator.ts) and the fallback runs
@@ -125,7 +125,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       guest_players: {
         id: string
         display_name: string
-        estimated_rating: number
         preferred_positions: string[]
       } | null
     }
@@ -152,7 +151,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guest_players (
           id,
           display_name,
-          estimated_rating,
           preferred_positions
         )
       `)
@@ -172,14 +170,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Scores come from player_rating_summary (peer ratings blended with post-match
-    // ratings). The caller is an admin/captain, so RLS lets them read it.
+    // ratings), this group's row only (OD-9): a level earned in another group
+    // says little here. The caller is an admin/captain, so RLS lets them read it.
     const ratedIds = signups
       .map((s) => s.player_profiles?.id)
       .filter((id): id is string => !!id)
     const { data: summaryRows } = ratedIds.length > 0
       ? await supabase
           .from('player_rating_summary')
-          .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+          .select(RATING_SUMMARY_COLUMNS)
+          .eq('group_id', match.group_id)
           .in('player_id', ratedIds) as { data: RatingSummary[] | null }
       : { data: [] as RatingSummary[] }
     const summaries = summariesById(summaryRows)
@@ -194,6 +194,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const memberScoreById = new Map(
       (membershipRows || []).map((m) => [m.player_id, m.member_score === null ? null : Number(m.member_score)])
     )
+
+    // Guest levels are organizer-only columns (00035); the caller is one.
+    const guestRatingById = new Map<string, number | null>()
+    if (signups.some((s) => s.guest_players)) {
+      const { data: guestRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+      for (const row of guestRows || []) {
+        guestRatingById.set(row.guest_player_id, row.estimated_rating === null ? null : Number(row.estimated_rating))
+      }
+    }
 
     // Convert to PlayerInput format (registered players + guests)
     const players: PlayerInput[] = signups
@@ -225,7 +234,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id: gp.id,
           displayName: gp.display_name,
           preferredPositions: gp.preferred_positions,
-          estimatedRating: gp.estimated_rating,
+          estimatedRating: guestRatingById.get(gp.id) ?? null,
         })
       })
 
@@ -301,7 +310,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
 
     // Persist teams + assignments atomically through the shared RPC (also used by
-    // manual drag/drop edits), then update match status + AI snapshot.
+    // manual drag/drop edits), which also sets the status and stores the snapshot.
     const assignmentsPayload = [
       ...generatedTeams.dark.map((a, index) => ({
         team: 'dark' as const,
@@ -321,38 +330,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })),
     ]
 
-    // Full input for debugging (docs/rework-plan.md §2.3): the prompt sent to
-    // the model (null when it never was) and the teammate-pair history it saw.
-    // A manual publish (draggable-teams) stores a NULL snapshot on purpose: this
-    // one describes the AI lineup and its analysis, which no longer apply once
-    // someone rearranges the teams by hand.
-    const generatedAt = new Date().toISOString()
+    // What the organizer analysis card shows, and nothing else (OD-6): the
+    // snapshot lives in match_ai_snapshots (admins and captains only), and
+    // publish_match_teams whitelists the same fields again, so ratings, member
+    // scores and the prompt never reach the database. A manual publish
+    // (draggable-teams) sends NULL, which removes it: the analysis describes
+    // the AI lineup, not one rearranged by hand.
     const snapshot = {
-      input: {
-        players: players.map((p) => ({
-          id: p.id,
-          name: p.displayName,
-          rating: p.overallRating,
-          memberScore: p.memberScore,
-          isGuest: p.isGuest ?? false,
-        })),
-        rules: ruleInputs,
-        recentMatchesConsidered: historyEntries.length,
-        pairHistory: generatedTeams.pairHistory,
-        previousLineup: previous,
-        language,
-        prompt: generatedTeams.prompt,
-      },
       output: {
-        dark: generatedTeams.dark,
-        light: generatedTeams.light,
         reasoning: generatedTeams.reasoning,
         balanceScore: generatedTeams.balanceScore,
         warnings: generatedTeams.warnings,
       },
       provider: generatedTeams.provider,
       model: generatedTeams.model ?? null,
-      generatedAt,
+      generatedAt: new Date().toISOString(),
     } as unknown as Json
 
     const { error: saveError } = await supabase.rpc('publish_match_teams', {
