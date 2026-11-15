@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
+import { isRemovedByAdminError } from '@/lib/membership-errors'
 
 interface JoinGroupButtonProps {
   inviteCode: string
@@ -30,8 +31,9 @@ export function JoinGroupButton({
     setError(null)
 
     try {
-      // The RPC validates the invite code, adds a new member, reactivates a
-      // removed one (as a plain member) and is a no-op for an active member.
+      // The RPC validates the invite code, adds a new member, reactivates one
+      // who left (as a plain member), is a no-op for an active member and
+      // refuses a player an admin removed (00033).
       const { error: joinError } = await supabase.rpc('join_group_via_invite', {
         p_invite_code: inviteCode,
       })
@@ -41,7 +43,7 @@ export function JoinGroupButton({
       router.refresh()
     } catch (err) {
       console.error('Error joining group:', err)
-      setError(t('ui.screens.invite.joinError'))
+      setError(isRemovedByAdminError(err) ? t('ui.membership.removedByAdmin') : t('ui.screens.invite.joinError'))
     } finally {
       setLoading(false)
     }

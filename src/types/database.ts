@@ -11,6 +11,8 @@
 // Note: group_memberships.member_score / member_breakdown / member_score_at / signup_cooldown are
 // listed in the generated Row but are not SELECT-able by `authenticated` (00024 column grants).
 // Read scores through get_member_scores() and never select('*') on group_memberships.
+// removed_at / removed_by (00033) are not SELECT-able either: admins list ex-members through
+// admin_list_removed_members().
 import type { Database as GeneratedDatabase } from './database.generated'
 
 export type { Json } from './database.generated'

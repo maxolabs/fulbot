@@ -4,15 +4,25 @@ import { PublicFrame } from '@/components/layout/public-frame'
 import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { FormNotice } from '@/components/form-controls'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
 // Landing (docs/ui-rework/03-screens.md §11, 06-principles.md §1.5): on the
 // board, tagline in the display face, the three feature blocks as three
 // dashed cards in a row (stacked on phones), one cone "Crear cuenta" and a
-// text "Iniciar sesión".
+// text "Iniciar sesión". The footer links the terms and the privacy policy;
+// ?account=deleted (after "Borrar mi cuenta") shows a one-line notice.
 
-export default async function Home() {
+const footerLinkClassName =
+  'rounded-[3px] underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ account?: string | string[] }>
+}) {
+  const { account } = await searchParams
   const cookieStore = await cookies()
   const langCookie = cookieStore.get('fulbot_lang')?.value
   const language: Language = langCookie === 'en' ? 'en' : 'es'
@@ -27,6 +37,8 @@ export default async function Home() {
   return (
     <PublicFrame className="max-w-2xl justify-center">
       <div className="w-full space-y-10">
+        {account === 'deleted' && <FormNotice kind="success">{t('ui.account.deleted')}</FormNotice>}
+
         <h1 className="mx-auto max-w-md text-center font-display text-3xl font-extrabold leading-tight tracking-tight text-balance lg:text-4xl">
           {t('landing.tagline')}
         </h1>
@@ -58,9 +70,15 @@ export default async function Home() {
           </Button>
         </div>
 
-        <p className="text-center font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">
-          {t('landing.footer')}
-        </p>
+        <footer className="space-y-3 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">
+            {t('landing.footer')}
+          </p>
+          <nav aria-label={t('ui.legal.eyebrow')} className="flex justify-center gap-4 text-xs text-muted-foreground">
+            <Link href="/terms" className={footerLinkClassName}>{t('ui.legal.termsLink')}</Link>
+            <Link href="/privacy" className={footerLinkClassName}>{t('ui.legal.privacyLink')}</Link>
+          </nav>
+        </footer>
       </div>
     </PublicFrame>
   )

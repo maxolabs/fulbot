@@ -170,6 +170,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
   let isMember = false
   let memberSignup: { id: string; status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
   let inviteCode: string | null = null
+  // An admin removed this visitor from the group (OD-1): no join path.
+  let removedByAdmin = false
   let groupId: string | null = null
   let profileId: string | null = null
 
@@ -185,10 +187,11 @@ export default async function PublicMatchPage({ params }: PageProps) {
       // groups is readable by members only; this RPC gives a signed-in visitor
       // the group id and invite code the join-and-sign-up flow needs.
       const { data: joinInfo } = await supabase.rpc('get_match_join_info', { p_match_id: matchId })
-      const groupRow = joinInfo as { group_id: string; invite_code: string } | null
+      const groupRow = joinInfo as { group_id: string; invite_code: string | null; removed?: boolean } | null
 
       if (groupRow) {
         inviteCode = groupRow.invite_code
+        removedByAdmin = groupRow.removed === true
         groupId = groupRow.group_id
 
         const { data: membership } = await supabase
@@ -324,6 +327,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
           memberSignup={memberSignup}
           guestSignup={guestSignup}
           inviteCode={inviteCode}
+          removedByAdmin={removedByAdmin}
         >
           <section className="space-y-2">
             <Eyebrow as="h2">

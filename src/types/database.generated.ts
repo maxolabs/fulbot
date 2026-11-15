@@ -19,6 +19,8 @@ export type Database = {
           member_score: number | null
           member_score_at: string | null
           player_id: string
+          removed_at: string | null
+          removed_by: string | null
           role: Database["public"]["Enums"]["group_role"] | null
           signup_cooldown: boolean
         }
@@ -31,6 +33,8 @@ export type Database = {
           member_score?: number | null
           member_score_at?: string | null
           player_id: string
+          removed_at?: string | null
+          removed_by?: string | null
           role?: Database["public"]["Enums"]["group_role"] | null
           signup_cooldown?: boolean
         }
@@ -43,6 +47,8 @@ export type Database = {
           member_score?: number | null
           member_score_at?: string | null
           player_id?: string
+          removed_at?: string | null
+          removed_by?: string | null
           role?: Database["public"]["Enums"]["group_role"] | null
           signup_cooldown?: boolean
         }
@@ -1062,6 +1068,7 @@ export type Database = {
           assists: number | null
           clean_sheets: number | null
           created_at: string | null
+          deleted_at: string | null
           display_name: string
           fitness_status: Database["public"]["Enums"]["fitness_status"] | null
           footedness: Database["public"]["Enums"]["footedness"] | null
@@ -1081,6 +1088,7 @@ export type Database = {
           assists?: number | null
           clean_sheets?: number | null
           created_at?: string | null
+          deleted_at?: string | null
           display_name: string
           fitness_status?: Database["public"]["Enums"]["fitness_status"] | null
           footedness?: Database["public"]["Enums"]["footedness"] | null
@@ -1100,6 +1108,7 @@ export type Database = {
           assists?: number | null
           clean_sheets?: number | null
           created_at?: string | null
+          deleted_at?: string | null
           display_name?: string
           fitness_status?: Database["public"]["Enums"]["fitness_status"] | null
           footedness?: Database["public"]["Enums"]["footedness"] | null
@@ -1647,6 +1656,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_deletion_blockers: {
+        Args: never
+        Returns: {
+          group_id: string
+          group_name: string
+          group_slug: string
+        }[]
+      }
       admin_add_guest_signup: {
         Args: {
           p_display_name: string
@@ -1691,6 +1708,39 @@ export type Database = {
       admin_finalize_match_results: {
         Args: { p_match_id: string }
         Returns: undefined
+      }
+      admin_list_removed_members: {
+        Args: { p_group_id: string }
+        Returns: {
+          display_name: string
+          membership_id: string
+          player_id: string
+          removed_at: string
+          removed_by_name: string
+        }[]
+      }
+      admin_readd_member: {
+        Args: { p_membership_id: string }
+        Returns: {
+          group_id: string
+          id: string
+          is_active: boolean | null
+          joined_at: string | null
+          member_breakdown: Json | null
+          member_score: number | null
+          member_score_at: string | null
+          player_id: string
+          removed_at: string | null
+          removed_by: string | null
+          role: Database["public"]["Enums"]["group_role"] | null
+          signup_cooldown: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "group_memberships"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       admin_recompute_member_scores: {
         Args: { p_group_id: string }
@@ -1869,6 +1919,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_my_account: { Args: never; Returns: Json }
       delete_my_match_report: {
         Args: { p_match_id: string }
         Returns: undefined
@@ -1979,6 +2030,8 @@ export type Database = {
           member_score: number | null
           member_score_at: string | null
           player_id: string
+          removed_at: string | null
+          removed_by: string | null
           role: Database["public"]["Enums"]["group_role"] | null
           signup_cooldown: boolean
         }

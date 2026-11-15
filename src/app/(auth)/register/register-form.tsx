@@ -273,6 +273,18 @@ export function RegisterForm({ initialLanguage, redirectParam }: RegisterFormPro
           {loading && <Spinner size="sm" />}
           {t('auth.createAccount')}
         </Button>
+        {/* Opens in a new tab so the half-filled form is not lost. */}
+        <p className="text-center text-xs text-muted-foreground text-pretty">
+          {t('ui.legal.consentPrefix')}{' '}
+          <Link href="/terms" target="_blank" rel="noopener" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+            {t('ui.legal.consentTerms')}
+          </Link>{' '}
+          {t('ui.legal.consentAnd')}{' '}
+          <Link href="/privacy" target="_blank" rel="noopener" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+            {t('ui.legal.consentPrivacy')}
+          </Link>
+          .
+        </p>
       </form>
 
       <p className="text-center text-sm text-muted-foreground">

@@ -11,6 +11,7 @@ import { GroupSettingsForm } from './settings-form'
 import { MemberScoringSettingsCard } from './member-scoring-settings'
 import type { Json } from '@/types/database'
 import { MembersManager } from './members-manager'
+import { ExMembers, type ExMember } from './ex-members'
 import { NotificationSettings } from './notification-settings'
 import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
@@ -18,6 +19,7 @@ import { InviteLinkSettings } from './invite-link-settings'
 import { LeaveGroupRow } from '@/components/leave-group-row'
 import { RulesManager } from '@/components/rules-manager'
 import { getAppBaseUrl } from '@/lib/app-url'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric } from '@/lib/utils/datetime'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -158,6 +160,23 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     )
   }
 
+  // Admin-removed players (OD-1): their profiles are not readable under RLS
+  // once they left every shared group, so the list comes from an admin RPC.
+  type RemovedRow = {
+    membership_id: string
+    display_name: string
+    removed_at: string
+    removed_by_name: string | null
+  }
+  const { data: removedRows } = await supabase
+    .rpc('admin_list_removed_members', { p_group_id: group.id }) as { data: RemovedRow[] | null }
+  const exMembers: ExMember[] = (removedRows || []).map((r) => ({
+    membershipId: r.membership_id,
+    displayName: r.display_name,
+    removedOn: formatMatchDateNumeric(r.removed_at, group.timezone || DEFAULT_TIMEZONE, userData?.preferred_language ?? 'es'),
+    removedBy: r.removed_by_name,
+  }))
+
   type NotificationSettingsType = {
     id: string
     send_signup_link_on_create: boolean
@@ -264,12 +283,13 @@ export default async function GroupSettingsPage({ params }: PageProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <MembersManager
             groupId={group.id}
             members={members}
             currentUserId={user.id}
           />
+          <ExMembers exMembers={exMembers} />
         </CardContent>
       </Card>
 

@@ -70,8 +70,10 @@ export function MembersManager({ members }: MembersManagerProps) {
     setLoading(membershipId)
     setError(null)
     try {
-      // admin_remove_member (00028) deactivates the membership and cancels the
-      // member's signups on upcoming matches, so the waitlist promotes.
+      // admin_remove_member (00033) deactivates the membership, records the
+      // removal (no rejoining with the invite link until an admin re-adds them)
+      // and cancels the member's signups on upcoming matches, teams_created
+      // included, without a cancel penalty; the waitlist promotes.
       const { error } = await supabase.rpc('admin_remove_member', {
         p_membership_id: membershipId,
       })
@@ -217,7 +219,7 @@ export function MembersManager({ members }: MembersManagerProps) {
         open={pendingRemoval !== null}
         onOpenChange={(open) => { if (!open && loading === null) setPendingRemoval(null) }}
         title={pendingRemoval ? t('ui.screens.members.removeConfirm', { name: pendingRemoval.displayName }) : ''}
-        description={t('ui.screens.members.removeBody')}
+        description={t('ui.membership.removeBody')}
       >
         <div className="flex flex-wrap gap-3 pt-4">
           <Button
