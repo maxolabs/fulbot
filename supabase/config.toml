@@ -1,6 +1,7 @@
 # Supabase CLI config for the LOCAL stack (`supabase start`). The hosted
-# project is configured in the dashboard instead: docs/deploy.md lists every
-# setting below with its production value.
+# project's auth settings are set in the dashboard or with the Management API
+# call in docs/deploy.md §2, which lists every setting below with its
+# production value. `supabase db push` (migrations) does not read them.
 #
 # Ports match the fulbot-ms stack used so far (API 56621, DB 56622, mail
 # 56624) so they don't collide with other local Supabase projects. Only the
@@ -81,6 +82,11 @@ secure_password_change = false
 max_frequency = "60s"
 otp_expiry = 3600
 
+# Email templates: Spanish (owner decision, 2026-11-15). Supabase takes one
+# template per email type, and the hosted project uses these same .es files
+# (docs/deploy.md §2); the .en.html files are kept as translations only.
+# Every link lands on /api/auth/confirm with a token hash, so it works in any
+# browser, the installed app or the mail app.
 [auth.email.template.confirmation]
 subject = "Confirmá tu cuenta de fulbot"
 content_path = "./supabase/templates/confirm-signup.es.html"
@@ -88,6 +94,12 @@ content_path = "./supabase/templates/confirm-signup.es.html"
 [auth.email.template.recovery]
 subject = "Elegí una contraseña nueva para fulbot"
 content_path = "./supabase/templates/reset-password.es.html"
+
+# With double_confirm_changes on, Supabase sends this to the current and the
+# new address; each link verifies its own token and returns to /settings.
+[auth.email.template.email_change]
+subject = "Confirmá el cambio de email en fulbot"
+content_path = "./supabase/templates/email-change.es.html"
 
 [auth.sms]
 enable_signup = false
