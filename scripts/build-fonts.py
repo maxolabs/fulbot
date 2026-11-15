@@ -12,7 +12,7 @@
 # variable font (wght 400-800), IBM Plex Sans as the variable font pinned to
 # normal width (wght 100-700), IBM Plex Mono as static files, each cut to the
 # Google Fonts latin + latin-ext (+ vietnamese, + Mono's box-drawing block)
-# ranges with Google's layout features. Greek and Cyrillic are left out; they
+# ranges with Google's layout features, unhinted. Greek and Cyrillic are left out; they
 # fall back to the system font. Characters outside these ranges (→, ★, emoji)
 # fall back exactly as before.
 #
@@ -50,6 +50,8 @@ def build(src_dir, out_dir, src, dst, ranges, pin=None, extra_features=()):
         font = TTFont(pinned, recalcTimestamp=False)
     options = subset.Options()
     options.flavor = "woff2"
+    # Unhinted, like the files Google Fonts served to next/font/google.
+    options.hinting = False
     options.layout_features = list(options.layout_features) + list(extra_features)
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes=unicodes(*ranges))
