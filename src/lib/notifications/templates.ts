@@ -56,6 +56,17 @@ function atLocation(location: string | null | undefined, t: TranslateFn): string
   return location ? t('ui.notifications.atLocation', { location }) : ''
 }
 
+function teamName(team: 'dark' | 'light' | null | undefined, t: TranslateFn): string {
+  return team === 'light' ? t('ui.notifications.light') : t('ui.notifications.dark')
+}
+
+// Position codes come from team_assignments ('GK', 'CB', ...); unknown codes pass through.
+function positionName(code: string | null | undefined, t: TranslateFn): string {
+  if (!code) return ''
+  const label = t(`positions.${code}`)
+  return label === `positions.${code}` ? code : label
+}
+
 function playerNames(players: LineupChangedPlayer[] | undefined): string[] {
   return (players ?? []).map((p) => p.name).filter(Boolean)
 }
@@ -105,6 +116,7 @@ export function renderNotificationText(
   const language: Language = options.language === 'en' ? 'en' : 'es'
   const t = getTranslation(language)
   const k = 'ui.notifications.'
+  const lk = 'ui.lifecycle.notifications.'
 
   switch (event.type) {
     case 'match_created': {
@@ -119,10 +131,15 @@ export function renderNotificationText(
         url: resolveReportUrl(event.payload.signup_url),
       })
     }
-    case 'waitlist_promoted':
-      return inApp
-        ? t(`${k}waitlistPromotedYou`)
-        : t(`${k}waitlistPromoted`, { name: event.payload.player_name })
+    case 'waitlist_promoted': {
+      const p = event.payload
+      const text = inApp ? t(`${k}waitlistPromotedYou`) : t(`${k}waitlistPromoted`, { name: p.player_name })
+      // 00034 (OD-2): with the teams out, the promoted player took the leaver's slot.
+      if (!p.team) return text
+      const position = positionName(p.position, t)
+      const slot = position ? `${teamName(p.team, t)} (${position})` : teamName(p.team, t)
+      return `${text} ${t(inApp ? `${lk}promotedTeamYou` : `${lk}promotedTeam`, { slot })}`
+    }
     case 'teams_created':
       return t(`${k}teamsCreated`, {
         dark: (event.payload.dark_team_names ?? []).join(', ') || '—',
@@ -181,12 +198,38 @@ export function renderNotificationText(
       const { date, time } = formatDateTime(p.date_time, timeZone, language)
       const left = playerNames(p.left)
       const promoted = playerNames(p.promoted)
-      const head = t(left.length > 1 ? `${k}lineupLeftMany` : `${k}lineupLeftOne`, {
-        names: joinList(left, t),
-        date,
-        time,
-        group: p.group_name,
-      })
+      const swaps = p.swaps ?? []
+      const params = { names: joinList(left, t), date, time, group: p.group_name }
+      const many = left.length > 1
+
+      // Late drop-out before the teams (OD-11): who left and who came in.
+      if (p.phase === 'late') {
+        const head = t(many ? `${lk}lateLeftMany` : `${lk}lateLeftOne`, params)
+        const tail =
+          promoted.length > 0
+            ? t(`${lk}latePromoted`, { names: joinList(promoted, t) })
+            : typeof p.spots_left === 'number' && p.spots_left > 0
+              ? plural(t, `${lk}lateNoPromoted`, p.spots_left)
+              : ''
+        return [head, tail].filter(Boolean).join(' ')
+      }
+
+      const head = t(many ? `${k}lineupLeftMany` : `${k}lineupLeftOne`, params)
+      // Promoted players took the leavers' slots (OD-2): say who replaced
+      // whom, and only ask for a review when a gap is left.
+      if (swaps.length > 0) {
+        const swapText =
+          swaps.length === 1 && left.length === 1
+            ? t(`${lk}swapOne`, { in: swaps[0].in, team: teamName(swaps[0].team, t) })
+            : t(`${lk}swapMany`, {
+                pairs: joinList(
+                  swaps.map((sw) => t(`${lk}swapPair`, { in: sw.in, left: sw.left, team: teamName(sw.team, t) })),
+                  t
+                ),
+              })
+        const review = p.needs_review ? t(`${k}lineupNoPromoted`) : t(`${lk}teamsOk`)
+        return `${head} ${swapText} ${review}`
+      }
       const tail =
         promoted.length > 0
           ? t(`${k}lineupPromoted`, { names: joinList(promoted, t) })

@@ -689,7 +689,7 @@
         "maxPlayers": "Max players",
         "maxPlayersHint": "Once it is full, anyone who signs up goes to the waitlist.",
         "duration": "Duration (min)",
-        "durationHint": "Once teams are set, the match finishes on its own after this time.",
+        "durationHint": "The match finishes on its own once this time has passed since kickoff. Without teams, it closes with attendance only.",
         "resultsDelay": "Ask for the result (min after the end)",
         "resultsDelayHint": "When players are asked to report the result.",
         "notesOptional": "Notes (optional)",
@@ -1094,7 +1094,7 @@
       "buildTitle": "Ready to build the teams",
       "buildBody": "Balance them automatically or pick each player manually. You can also close registration before starting.",
       "teamsTitle": "Ready to play",
-      "teamsBody": "Review the lineup, adjust the teams and share them. Mark the match finished after playing.",
+      "teamsBody": "Review the lineup, adjust the teams and share them. If someone drops out, the first on the waitlist takes their place. Mark the match finished after playing.",
       "reportTitle": "How did the match go?",
       "finishedTitle": "Match finished",
       "finishedBody": "The result and group reports are below.",
@@ -1109,7 +1109,7 @@
       "roster": "View {n} confirmed players",
       "reviewDraft": "Review and open registration",
       "attention": "Needs attention",
-      "attentionBody": "These dates have passed. Review the teams and finish or cancel each match.",
+      "attentionBody": "These dates have passed. Finish each match, with or without teams, or cancel it if it wasn’t played.",
       "closedBody": "Registration is closed. Balance teams automatically or assign confirmed players yourself.",
       "closedShortBody": "Signups are closed and {n} more confirmed players are needed. Reopen signups or add guests to build the teams."
     },
@@ -1157,6 +1157,44 @@
         "cancelFailed": "We couldn't cancel your signup. Try again.",
         "started": "The match has already started.",
         "locked": "This match no longer accepts changes to the list."
+      },
+      "notifications": {
+        "lateLeftOne": "{names} dropped out of the match on {date} {time} ({group}), a few hours before kickoff.",
+        "lateLeftMany": "{names} dropped out of the match on {date} {time} ({group}), a few hours before kickoff.",
+        "latePromoted": "{names} comes in from the waitlist.",
+        "lateNoPromotedOne": "Nobody is on the waitlist: 1 spot is open.",
+        "lateNoPromotedMany": "Nobody is on the waitlist: {count} spots are open.",
+        "swapOne": "{in} comes in from the waitlist and takes their place on {team}.",
+        "swapMany": "In from the waitlist: {pairs}.",
+        "swapPair": "{in} for {left} ({team})",
+        "teamsOk": "The teams stay as they are.",
+        "promotedTeamYou": "You play for {slot}.",
+        "promotedTeam": "They play for {slot}."
+      },
+      "lineup": {
+        "staleBody": "Someone dropped out with nobody on the waitlist to replace them, or a player joined without a spot on the teams. Review them before playing."
+      },
+      "attendanceOnly": {
+        "eyebrow": "Result",
+        "badge": "Attendance only",
+        "body": "No teams were built in fulbot, so this match has no result or MVP. Attendance for the confirmed players is already recorded.",
+        "adminHint": "If someone didn’t show up, mark them in the confirmed list."
+      },
+      "finish": {
+        "pastTitle": "Did you play?",
+        "pastBody": "The match has started and has no teams. Finish it to record attendance for the confirmed players, or build the teams if you want to report the result.",
+        "pastShortBody": "The match has started and has no teams. Finish it to record attendance for the confirmed players.",
+        "withoutTeams": "Finish without teams",
+        "withoutTeamsConfirm": "Attendance is recorded for the {n} confirmed players. Without teams there is no result or MVP, and teams can’t be built afterwards.",
+        "notStarted": "Without teams, the match can only be finished once it has started."
+      },
+      "guestPriority": {
+        "windowTitle": "Members have priority until {date} at {time}",
+        "reservedTitle": "Spots reserved for members until {date} at {time}",
+        "body": "If you sign up now you join the waitlist and get in automatically if there is room.",
+        "waitlistedWindow": "Group members have priority until {date} at {time}. If there is room, you get in automatically.",
+        "waitlistedReserved": "The last spots are reserved for members until {date} at {time}. If there is room, you get in automatically.",
+        "joinWaitlist": "Join the waitlist"
       }
     },
     "matchLifecycle": {
@@ -1278,7 +1316,7 @@
       "error": "Couldn't delete the group. Try again."
     },
     "adminActions": {
-      "noTeamsHint": "Without teams the match can't be finished: build the teams first.",
+      "noTeamsHint": "Without teams the match closes with attendance only: no result or MVP.",
       "edit": "Edit match",
       "markFinished": "Mark as finished",
       "cancel": "Cancel match",
@@ -1380,7 +1418,7 @@
       "prefMatchUpdatedTitle": "Match changes",
       "prefMatchUpdatedDesc": "When the day, time or place of a match you signed up for changes",
       "prefLineupChangedTitle": "Dropouts after teams",
-      "prefLineupChangedDesc": "Admins and captains only: when someone drops out after the teams are published"
+      "prefLineupChangedDesc": "Admins and captains only: when someone drops out after the teams are published or a few hours before kickoff"
     },
     "report": {
       "stepScore": "Score",

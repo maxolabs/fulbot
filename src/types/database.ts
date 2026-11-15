@@ -34,6 +34,9 @@ type FunctionOverrides = {
   }
   // RETURNS TABLE columns come out non-null; the score columns are NULL for newcomers,
   // and member_breakdown is jsonb with a known shape.
+  guest_priority_hold: Omit<GeneratedFunctions['guest_priority_hold'], 'Returns'> & {
+    Returns: GuestPriorityHold | null
+  }
   get_member_scores: Omit<GeneratedFunctions['get_member_scores'], 'Returns'> & {
     Returns: {
       group_id: string
@@ -55,6 +58,19 @@ export type Database = Omit<GeneratedDatabase, 'public'> & {
 
 // Member scoring (00021, docs/member-scoring.md §2, §10.1).
 export type WaitlistReason = 'full' | 'priority_window' | 'reserved' | 'cooldown'
+
+/**
+ * guest_priority_hold() (00034, OD-8): the member-scoring priority period that
+ * applies to self-signup guests on /m right now. `holds` says whether a guest
+ * signing up now goes to the waitlist for it (reserved spots only bite once the
+ * open ones are taken). NULL when no period is running.
+ */
+export interface GuestPriorityHold {
+  reason: 'priority_window' | 'reserved'
+  until: string
+  holds: boolean
+  reserved_spots: number
+}
 
 export interface MemberBreakdown {
   window_matches: number

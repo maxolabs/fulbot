@@ -57,7 +57,7 @@ export function buildPushPayload(event: PushEvent) {
     // Republished teams/results replace the previous alert for that match.
     tag: event.match_id && ['teams_created', 'results_posted', 'results_reminder'].includes(event.type)
       ? `fulbot-${event.type}-${event.match_id}` : `fulbot-${event.notification_id}`,
-    url: `${matchPath}${reporting ? '#reportar' : event.type === 'teams_created' || event.type === 'lineup_changed' ? '/teams' : ''}`,
+    url: `${matchPath}${reporting ? '#reportar' : event.type === 'teams_created' || (event.type === 'lineup_changed' && event.payload.phase !== 'late') ? '/teams' : ''}`,
   }
 }
 
