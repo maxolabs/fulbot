@@ -7,7 +7,8 @@ exactly; other tracks depend on them.
 Product decisions taken by the owner (2026-09-05):
 
 1. **One-time guests can sign up from the public match link** with just a name, no account.
-2. **Only admins** can add or remove guests from inside the app.
+2. **Only admins** can add or remove guests from inside the app. *(Superseded 2026-11-15 by
+   OD-7: captains are co-organizers and add or remove guests too; see `init-prompt.md` §4.2.)*
 3. **"Close signups" is a real state** (`signup_closed`): the list freezes but stays visible.
 
 Verification available on this machine: `npm run type-check`, `npm run lint`,

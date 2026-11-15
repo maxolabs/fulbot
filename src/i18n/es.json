@@ -689,7 +689,7 @@
         "maxPlayers": "Jugadores máximo",
         "maxPlayersHint": "Cuando se llene, los que se anoten después quedan en lista de espera.",
         "duration": "Duración (min)",
-        "durationHint": "Con los equipos armados, al pasar este tiempo el partido se da por terminado solo.",
+        "durationHint": "Al pasar este tiempo desde el inicio, el partido se da por terminado solo. Sin equipos, se cierra solo con la asistencia.",
         "resultsDelay": "Pedir el resultado (min después del final)",
         "resultsDelayHint": "Cuándo se les pide a los jugadores que carguen el resultado.",
         "notesOptional": "Notas (opcional)",
@@ -1103,7 +1103,7 @@
       "buildTitle": "Ya podés armar los equipos",
       "buildBody": "Balancealos automáticamente o elegí cada jugador a mano. También podés cerrar las inscripciones antes de empezar.",
       "teamsTitle": "Todo listo para jugar",
-      "teamsBody": "Revisá la formación, ajustá los equipos y compartilos. Cuando termine el partido, marcá el final.",
+      "teamsBody": "Revisá la formación, ajustá los equipos y compartilos. Si alguien se baja, el primero en espera toma su lugar. Cuando termine el partido, marcá el final.",
       "reportTitle": "¿Cómo salió el partido?",
       "finishedTitle": "Partido finalizado",
       "finishedBody": "El resultado y los reportes del grupo están más abajo.",
@@ -1118,7 +1118,7 @@
       "roster": "Ver los {n} confirmados",
       "reviewDraft": "Revisar y abrir inscripciones",
       "attention": "Por resolver",
-      "attentionBody": "Estas fechas ya pasaron. Revisá los equipos y finalizá o cancelá cada partido.",
+      "attentionBody": "Estas fechas ya pasaron. Finalizá cada partido, con o sin equipos, o cancelalo si no se jugó.",
       "closedBody": "Las inscripciones están cerradas. Balanceá los equipos automáticamente o repartí a los confirmados a mano.",
       "closedShortBody": "Las inscripciones están cerradas y faltan {n} confirmados. Reabrilas o sumá invitados para armar los equipos."
     },
@@ -1166,6 +1166,44 @@
         "cancelFailed": "No pudimos bajarte. Probá de nuevo.",
         "started": "El partido ya empezó.",
         "locked": "Este partido ya no admite cambios en la lista."
+      },
+      "notifications": {
+        "lateLeftOne": "Se bajó {names} del partido del {date} {time}hs ({group}), a pocas horas de jugar.",
+        "lateLeftMany": "Se bajaron {names} del partido del {date} {time}hs ({group}), a pocas horas de jugar.",
+        "latePromoted": "Entra {names} de la lista de espera.",
+        "lateNoPromotedOne": "No hay nadie en espera: queda 1 lugar libre.",
+        "lateNoPromotedMany": "No hay nadie en espera: quedan {count} lugares libres.",
+        "swapOne": "{in} entra de la lista de espera y ocupa su lugar en {team}.",
+        "swapMany": "Entran de la lista de espera: {pairs}.",
+        "swapPair": "{in} por {left} ({team})",
+        "teamsOk": "No hace falta tocar los equipos.",
+        "promotedTeamYou": "Jugás en {slot}.",
+        "promotedTeam": "Juega en {slot}."
+      },
+      "lineup": {
+        "staleBody": "Se bajó alguien sin nadie en espera para reemplazarlo, o se sumó un jugador sin lugar en los equipos. Revisalos antes de jugar."
+      },
+      "attendanceOnly": {
+        "eyebrow": "Resultado",
+        "badge": "Solo asistencia",
+        "body": "No se armaron equipos en fulbot, así que este partido no tiene resultado ni MVP. La asistencia de los confirmados ya quedó registrada.",
+        "adminHint": "Si alguien no vino, marcalo en la lista de confirmados."
+      },
+      "finish": {
+        "pastTitle": "¿Ya se jugó?",
+        "pastBody": "El partido ya empezó y no tiene equipos. Finalizalo para registrar la asistencia de los confirmados, o armá los equipos si querés cargar el resultado.",
+        "pastShortBody": "El partido ya empezó y no tiene equipos. Finalizalo para registrar la asistencia de los confirmados.",
+        "withoutTeams": "Finalizar sin equipos",
+        "withoutTeamsConfirm": "Se registra la asistencia de los {n} confirmados. Sin equipos no hay resultado ni MVP, y después no se pueden armar.",
+        "notStarted": "Sin equipos, el partido se puede finalizar recién cuando empieza."
+      },
+      "guestPriority": {
+        "windowTitle": "Prioridad para los miembros hasta el {date} a las {time}",
+        "reservedTitle": "Lugares reservados para los miembros hasta el {date} a las {time}",
+        "body": "Si te anotás ahora, quedás en lista de espera y entrás automáticamente si queda lugar.",
+        "waitlistedWindow": "Los miembros del grupo tienen prioridad hasta el {date} a las {time}. Si queda lugar, entrás automáticamente.",
+        "waitlistedReserved": "Los últimos lugares están reservados para los miembros hasta el {date} a las {time}. Si queda lugar, entrás automáticamente.",
+        "joinWaitlist": "Anotarme en la lista de espera"
       }
     },
     "matchLifecycle": {
@@ -1287,7 +1325,7 @@
       "error": "No se pudo eliminar el grupo. Probá de nuevo."
     },
     "adminActions": {
-      "noTeamsHint": "Sin equipos no se puede cerrar el partido: armá los equipos primero.",
+      "noTeamsHint": "Sin equipos, el partido se cierra solo con la asistencia: no hay resultado ni MVP.",
       "edit": "Editar partido",
       "markFinished": "Marcar como finalizado",
       "cancel": "Cancelar partido",
@@ -1491,7 +1529,7 @@
       "prefMatchUpdatedTitle": "Cambios en el partido",
       "prefMatchUpdatedDesc": "Cuando cambia el día, la hora o la cancha de un partido en el que estás anotado",
       "prefLineupChangedTitle": "Bajas con equipos armados",
-      "prefLineupChangedDesc": "Solo admins y capitanes: cuando alguien se baja después de publicar los equipos"
+      "prefLineupChangedDesc": "Solo admins y capitanes: cuando alguien se baja con los equipos armados o a pocas horas del partido"
     },
     "report": {
       "stepScore": "Resultado",

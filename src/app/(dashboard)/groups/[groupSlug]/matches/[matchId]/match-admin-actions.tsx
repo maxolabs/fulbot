@@ -18,9 +18,11 @@ interface MatchAdminActionsProps {
   groupSlug: string
   currentStatus: string
   hasEnoughPlayers: boolean
-  /** Teams exist for this match; without them the status can never reach 'finished'. */
   secondaryOnly?: boolean
+  /** Teams exist for this match; without them a started match finishes with attendance only (00034). */
   hasTeams?: boolean
+  /** Kickoff has passed (a match without teams can only be finished after it). */
+  hasStarted?: boolean
   /** Deleting is admin-only (matches DELETE policy); captains don't get the button. */
   canDelete?: boolean
   /** Called after a navigation so the popover / sheet can close. */
@@ -37,6 +39,7 @@ export function MatchAdminActions({
   currentStatus,
   hasEnoughPlayers,
   hasTeams = true,
+  hasStarted = false,
   canDelete = false,
   secondaryOnly = false,
   onNavigate,
@@ -103,17 +106,17 @@ export function MatchAdminActions({
     currentStatus === 'cancelled'
 
   const canEdit = currentStatus !== 'finished' && currentStatus !== 'cancelled'
+  const signupPhase = currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed'
   if (!hasActions && !canEdit) return null
 
   return (
     <div className="space-y-2">
       {error && <FormNotice kind="error">{error}</FormNotice>}
-      {!secondaryOnly && !hasTeams &&
-        (currentStatus === 'signup_open' || currentStatus === 'full' || currentStatus === 'signup_closed') && (
-          <p className="text-xs text-muted-foreground text-pretty">
-            {t('ui.adminActions.noTeamsHint')}
-          </p>
-        )}
+      {!secondaryOnly && !hasTeams && signupPhase && (
+        <p className="text-xs text-muted-foreground text-pretty">
+          {t(hasStarted ? 'ui.adminActions.noTeamsHint' : 'ui.lifecycle.finish.notStarted')}
+        </p>
+      )}
 
       {/* Edit */}
       {canEdit && (
@@ -197,8 +200,8 @@ export function MatchAdminActions({
         )
       ))}
 
-      {/* Mark as finished */}
-      {!secondaryOnly && currentStatus === 'teams_created' && (
+      {/* Mark as finished: with teams, or without them once the match started (attendance only) */}
+      {!secondaryOnly && (currentStatus === 'teams_created' || (!hasTeams && hasStarted && signupPhase)) && (
         <Button
           variant="outline"
           className="w-full justify-start"
@@ -210,7 +213,7 @@ export function MatchAdminActions({
           ) : (
             <CheckCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           )}
-          {t('ui.adminActions.markFinished')}
+          {t(currentStatus === 'teams_created' ? 'ui.adminActions.markFinished' : 'ui.lifecycle.finish.withoutTeams')}
         </Button>
       )}
 

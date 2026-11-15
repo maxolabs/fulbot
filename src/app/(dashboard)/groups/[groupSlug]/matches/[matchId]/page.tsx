@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Trophy, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getAppBaseUrl } from '@/lib/app-url'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -23,6 +24,7 @@ import { ShareActions } from '@/components/share-actions'
 import { MatchResults } from './match-results'
 import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
+import { AttendanceOnlyResult } from './attendance-only-result'
 import type { MatchResultStatus, WaitlistReason } from '@/types/database'
 import { MatchReportsTable } from './match-reports-table'
 import { ConductCheck } from './conduct-check'
@@ -283,6 +285,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .filter(s => s.player_profiles !== null)
     .map(s => s.player_profiles as { id: string; display_name: string; nickname: string | null; main_position: string })
 
+  // Deleted accounts (player_profiles.deleted_at, T1) stay in the history as
+  // "Jugador eliminado" but cannot be rated or voted MVP.
+  const deletedPlayerIds = new Set<string>()
+  if (match.status === 'finished' && matchPlayers.length > 0) {
+    const { data: deletedRows } = await supabase
+      .from('player_profiles')
+      .select('id')
+      .in('id', matchPlayers.map(p => p.id))
+      .not('deleted_at', 'is', null) as { data: { id: string }[] | null }
+    for (const row of deletedRows || []) deletedPlayerIds.add(row.id)
+  }
+  const votablePlayers = matchPlayers.filter(p => !deletedPlayerIds.has(p.id))
+
   // Check if current user is signed up
   const currentUserSignup = (signups || []).find(
     s => s.player_profiles?.id === playerProfile.id
@@ -430,11 +445,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // A locked result is final and visible to everyone (a late report can't be
   // anchored into changing it), as is anything after the window closed.
   const resultLocked = match.result_status === 'locked'
+  // Finished without teams (00034, OD-3): attendance only, so no report, no
+  // MVP and no consensus card; the attendance-only block takes their place.
+  const attendanceOnly = match.status === 'finished' && matchTeams.length === 0
   // mvp_player_id follows every vote; the hero names the MVP only once the
   // result counts (consensus or locked), like mvp_count and the badge.
   const resultSettled = match.result_status === 'consensus' || resultLocked
   const showConsensus =
-    match.status === 'finished' && (ownReport !== null || !viewerCanReport || resultLocked)
+    match.status === 'finished' && !attendanceOnly && (ownReport !== null || !viewerCanReport || resultLocked)
   // Admin/captain tools follow the same rule: an admin who played reports
   // first like everyone else; one who did not play sees them right away.
   const showAdminTools = isAdminOrCaptain && showConsensus
@@ -473,8 +491,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     player_name: e.player_profiles?.display_name || e.guest_players?.display_name || null,
   }))
 
-  // Whether teams exist (only fetched above for finished matches): the admin
-  // actions explain that a match without teams can't be finished (§5.1), the
+  // Whether teams exist (only fetched above for finished matches): without
+  // them a started match finishes with attendance only (00034, OD-3), the
   // action bar offers "Armar equipos" while they are missing and "Ver equipos"
   // once they exist — for members too (03-screens §4), so the count is read
   // for every viewer, not only admins.
@@ -549,6 +567,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
     <MatchAdminActions
       secondaryOnly
       hasTeams={hasTeams}
+      hasStarted={isPast}
       canDelete={membership.role === 'admin'}
       matchId={match.id}
       groupSlug={groupSlug}
@@ -611,7 +630,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       lockedBy={match.result_locked_by ?? null}
       lockedAt={match.result_locked_at ?? null}
       mvpPlayerId={match.mvp_player_id}
-      mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+      mvpCandidates={votablePlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
       timeZone={timeZone}
     />
   ) : null
@@ -621,7 +640,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const showQuickStats = !isFinished && match.status !== 'cancelled'
   const hasAside = showAnnouncement || !!addGuest || !!rules || showQuickStats
 
-  const statusBadge = <MatchStatusBadge status={match.status} label={statusLabel} />
+  const statusBadge = attendanceOnly ? (
+    <span className="flex flex-wrap items-center gap-2">
+      <MatchStatusBadge status={match.status} label={statusLabel} />
+      <Badge variant="outline">{t('ui.lifecycle.attendanceOnly.badge')}</Badge>
+    </span>
+  ) : (
+    <MatchStatusBadge status={match.status} label={statusLabel} />
+  )
 
   return (
     <RealtimeWrapper matchId={matchId}>
@@ -712,13 +738,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
           {isAdminOrCaptain && lineupStale && (
             <LineupStaleNotice
               title={t('ui.matchLifecycle.lineupStaleTitle')}
-              body={t('ui.matchLifecycle.lineupStaleBody')}
+              body={t('ui.lifecycle.lineup.staleBody')}
               actionLabel={t('ui.matchLifecycle.reviewTeams')}
               href={`${matchHref}/teams`}
             />
           )}
 
-          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} lineupStale={lineupStale} />
+          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} lineupStale={lineupStale} started={isPast} attendanceOnly={attendanceOnly} />
 
           {heroScore && (
             <details className="rounded-md border border-border bg-card p-4">
@@ -736,6 +762,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   <span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">{t('ui.matchScreens.match.notes')}</span>{' '}
                   {match.notes}
                 </p>
+              )}
+
+              {attendanceOnly && (
+                <AttendanceOnlyResult
+                  eyebrow={t('ui.lifecycle.attendanceOnly.eyebrow')}
+                  body={t('ui.lifecycle.attendanceOnly.body')}
+                  hint={isAdminOrCaptain ? t('ui.lifecycle.attendanceOnly.adminHint') : undefined}
+                />
               )}
 
               {/* Member scoring policy notice (docs/member-scoring.md §6): renders nothing unless it applies */}
@@ -823,7 +857,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <ReportForm
                   matchId={match.id}
                   teams={reportTeams}
-                  mvpCandidates={matchPlayers.filter(p => p.id !== playerProfile.id)}
+                  mvpCandidates={votablePlayers.filter(p => p.id !== playerProfile.id)}
                   existingReport={ownReport}
                   agreement={agreement}
                   windowOpen={reportWindowOpen}
@@ -880,11 +914,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
               )}
 
               {/* Optional teammate ratings - only for players of the match */}
-              {isFinished && viewerPlayed && matchPlayers.length > 1 && (
+              {isFinished && viewerPlayed && votablePlayers.length > 1 && (
                 <PostMatchVoting
                   matchId={match.id}
                   currentPlayerId={playerProfile.id}
-                  players={matchPlayers}
+                  players={votablePlayers}
                   windowOpen={reportWindowOpen}
                 />
               )}

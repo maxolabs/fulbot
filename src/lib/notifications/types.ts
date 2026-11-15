@@ -57,6 +57,10 @@ export interface WaitlistPromotedPayload {
   // (not a guest) -- emit_notification() reads this key to set
   // notifications.recipient_player_id.
   recipient_player_id: string | null
+  // 00034 (OD-2): with the teams already published, the promoted player takes
+  // the leaver's slot; these say which one. Null/absent before the teams.
+  team?: 'dark' | 'light' | null
+  position?: string | null
 }
 
 export interface TeamsCreatedPayload {
@@ -112,16 +116,31 @@ export interface LineupChangedPlayer {
   guest: boolean
 }
 
+// One taken-over slot (00034, OD-2): `in` got `left`'s team and position.
+export interface LineupSwap {
+  left: string
+  in: string
+  team: 'dark' | 'light'
+  position: string
+}
+
 // In-app only (no outbox row), one row per admin/captain with
-// recipient_player_id set (00030): a confirmed player dropped out of a match
-// whose teams were already published. `promoted` is who came in from the
-// waitlist in the same transaction (empty when nobody did).
+// recipient_player_id set (00030, 00034): a confirmed player dropped out of a
+// match whose teams were already published (phase 'teams'), or of a match
+// still taking signups inside the late-cancel window (phase 'late', OD-11).
+// `promoted` is who came in from the waitlist in the same transaction (empty
+// when nobody did); `swaps` says whose slot each of them took. Rows written
+// before 00034 have neither phase nor swaps and read as phase 'teams'.
 export interface LineupChangedPayload {
   match_id: string
   group_name: string
   date_time: string // ISO timestamp
+  phase?: 'teams' | 'late'
   left: LineupChangedPlayer[]
   promoted: LineupChangedPlayer[]
+  swaps?: LineupSwap[]
+  /** The lineup still has a gap or someone without a slot (lineup_needs_review). */
+  needs_review?: boolean
   spots_left: number
   recipient_player_id: string
 }

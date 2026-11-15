@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CheckCircle, Clock } from 'lucide-react'
+import { CheckCircle, Clock, Hourglass, Lock } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,9 +12,10 @@ import { Sheet } from '@/components/ui/sheet'
 import { ActionBar } from '@/components/layout/action-bar'
 import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
-import { useT } from '@/i18n/provider'
+import { useLanguage, useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
-import type { Database } from '@/types/database'
+import { formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
+import type { Database, GuestPriorityHold, WaitlistReason } from '@/types/database'
 import { signupErrorKey } from '@/app/(dashboard)/groups/[groupSlug]/matches/[matchId]/use-signup-action'
 import { isRemovedByAdminError } from '@/lib/membership-errors'
 
@@ -33,6 +34,7 @@ interface MemberSignup {
 interface GuestSignup {
   status: 'confirmed' | 'waitlist'
   waitlistPosition: number | null
+  waitlistReason?: WaitlistReason | null
 }
 
 interface PublicMatchActionsProps {
@@ -44,6 +46,10 @@ interface PublicMatchActionsProps {
   isMember: boolean
   memberSignup: MemberSignup | null
   guestSignup: GuestSignup | null
+  /** The group's member priority period, for guests (00034, OD-8); null when none runs. */
+  guestHold?: GuestPriorityHold | null
+  /** The group's time zone, for the end of the priority period. */
+  timeZone: string
   inviteCode: string | null
   /** An admin removed the signed-in visitor from the group: no join path (OD-1). */
   removedByAdmin?: boolean
@@ -66,6 +72,21 @@ function StatusLine({ kind, children }: { kind: 'confirmed' | 'waitlist'; childr
   )
 }
 
+// Guests come after the members while the priority policy runs (OD-8). Same
+// look as SignupPolicyNoticeView, guest wording.
+function GuestPriorityNotice({ reason, title, body }: { reason: 'priority_window' | 'reserved'; title: string; body: string }) {
+  const Icon = reason === 'reserved' ? Lock : Hourglass
+  return (
+    <div role="status" className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3">
+      <Icon className="mt-0.5 h-5 w-5 shrink-0 text-warning" strokeWidth={1.75} aria-hidden="true" />
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-sm font-medium text-foreground text-pretty">{title}</p>
+        <p className="text-sm text-muted-foreground text-pretty">{body}</p>
+      </div>
+    </div>
+  )
+}
+
 export function PublicMatchActions({
   matchId,
   groupSlug,
@@ -75,11 +96,18 @@ export function PublicMatchActions({
   isMember,
   memberSignup,
   guestSignup,
+  guestHold = null,
+  timeZone,
   inviteCode,
   removedByAdmin = false,
   children,
 }: PublicMatchActionsProps) {
   const t = useT()
+  const language = useLanguage()
+  // When the members' priority ends, in the group's wall clock.
+  const holdWhen = guestHold
+    ? { date: formatMatchDateShort(guestHold.until, timeZone, language), time: formatMatchTime(guestHold.until, timeZone) }
+    : null
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
@@ -289,13 +317,31 @@ export function PublicMatchActions({
     )
   } else if (guestSignup) {
     // Case 2: a guest cookie ties this visitor to an active signup
+    const heldReason =
+      guestSignup.status === 'waitlist' &&
+      (guestSignup.waitlistReason === 'priority_window' || guestSignup.waitlistReason === 'reserved')
+        ? guestSignup.waitlistReason
+        : null
     inline =
       guestSignup.status === 'confirmed' ? (
         <StatusLine kind="confirmed">{t('ui.screens.publicMatch.guestIn')}</StatusLine>
       ) : (
-        <StatusLine kind="waitlist">
-          {t('ui.screens.publicMatch.guestWaitlisted', { n: guestSignup.waitlistPosition ?? '' })}
-        </StatusLine>
+        <div className="space-y-1.5">
+          <StatusLine kind="waitlist">
+            {t('ui.screens.publicMatch.guestWaitlisted', { n: guestSignup.waitlistPosition ?? '' })}
+          </StatusLine>
+          {/* Waiting for the members' priority to end (OD-8), not for a free spot. */}
+          {heldReason && holdWhen && (
+            <p className="pl-6 text-sm text-muted-foreground text-pretty">
+              {t(
+                heldReason === 'reserved'
+                  ? 'ui.lifecycle.guestPriority.waitlistedReserved'
+                  : 'ui.lifecycle.guestPriority.waitlistedWindow',
+                holdWhen
+              )}
+            </p>
+          )}
+        </div>
       )
     bar = (
       <Button size="xl" variant="outline" onClick={() => setLeaveTarget('guest')} disabled={loading}>
@@ -307,28 +353,47 @@ export function PublicMatchActions({
     // Case 1, closed: nothing to do
     inline = <p className="text-sm text-muted-foreground">{t('ui.screens.publicMatch.closed')}</p>
   } else {
-    // Case 1: anonymous visitor with no active guest signup -- the name form
+    // Case 1: anonymous visitor with no active guest signup -- the name form.
+    // While the members' priority holds, the guest is told before signing up
+    // that they go to the waitlist (OD-8).
+    const held = !isFull && guestHold?.holds && holdWhen ? guestHold.reason : null
     inline = (
-      <form id={GUEST_FORM_ID} onSubmit={handleGuestSignUp} className="space-y-1.5">
-        <Label htmlFor="guest-name">{t('ui.screens.publicMatch.yourName')}</Label>
-        <Input
-          id="guest-name"
-          name="displayName"
-          autoComplete="name"
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          placeholder={t('ui.screens.publicMatch.namePlaceholder')}
-          maxLength={60}
-          required
-          disabled={loading}
-        />
-        <p className="text-xs text-muted-foreground">{t('ui.screens.publicMatch.guestHint')}</p>
-      </form>
+      <div className="space-y-4">
+        {held && holdWhen && (
+          <GuestPriorityNotice
+            reason={held}
+            title={t(
+              held === 'reserved' ? 'ui.lifecycle.guestPriority.reservedTitle' : 'ui.lifecycle.guestPriority.windowTitle',
+              holdWhen
+            )}
+            body={t('ui.lifecycle.guestPriority.body')}
+          />
+        )}
+        <form id={GUEST_FORM_ID} onSubmit={handleGuestSignUp} className="space-y-1.5">
+          <Label htmlFor="guest-name">{t('ui.screens.publicMatch.yourName')}</Label>
+          <Input
+            id="guest-name"
+            name="displayName"
+            autoComplete="name"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+            placeholder={t('ui.screens.publicMatch.namePlaceholder')}
+            maxLength={60}
+            required
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">{t('ui.screens.publicMatch.guestHint')}</p>
+        </form>
+      </div>
     )
     bar = (
       <Button size="xl" type="submit" form={GUEST_FORM_ID} disabled={loading}>
         {loading && <Spinner size="sm" />}
-        {isFull ? t('ui.screens.publicMatch.fullJoinWaitlist') : t('ui.screens.publicMatch.signUpAsGuest')}
+        {isFull
+          ? t('ui.screens.publicMatch.fullJoinWaitlist')
+          : held
+            ? t('ui.lifecycle.guestPriority.joinWaitlist')
+            : t('ui.screens.publicMatch.signUpAsGuest')}
       </Button>
     )
   }

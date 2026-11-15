@@ -207,7 +207,15 @@ export default async function MatchesListPage({ params }: PageProps) {
                               <span className="font-mono text-xs tabular-nums text-muted-foreground">
                                 {t('ui.matchScreens.list.players', { n: confirmedCount.get(m.id) || 0 })}
                               </span>
-                              <MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />
+                              <MatchStatusBadge
+                                status={m.status}
+                                label={
+                                  // Finished without teams (00034, OD-3): attendance only.
+                                  m.status === 'finished' && (m.teams?.length ?? 0) === 0
+                                    ? t('ui.lifecycle.attendanceOnly.badge')
+                                    : t(`matches.status.${m.status}`)
+                                }
+                              />
                             </>
                           )
                         }

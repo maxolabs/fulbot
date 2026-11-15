@@ -175,7 +175,9 @@ export function NotificationList({
           {items.map((n) => {
             const Icon = TYPE_ICON[n.type] ?? Bell
             const isRead = readIds.has(n.id)
-            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : n.type === 'lineup_changed' ? '/teams' : ''
+            // A late drop-out before the teams (phase 'late', 00034) has no teams page to open.
+            const lineupToTeams = n.type === 'lineup_changed' && (n.payload as { phase?: string } | null)?.phase !== 'late'
+            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : lineupToTeams ? '/teams' : ''
             // Score nudges are addressed to one member and land on their own
             // player page in that group (docs/member-scoring.md §10.4).
             const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'

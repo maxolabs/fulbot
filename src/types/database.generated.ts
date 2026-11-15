@@ -1998,6 +1998,7 @@ export type Database = {
         }[]
       }
       get_unread_notification_count: { Args: never; Returns: number }
+      guest_priority_hold: { Args: { p_match_id: string }; Returns: Json }
       insert_member_event: {
         Args: {
           p_group_id: string
@@ -2065,6 +2066,7 @@ export type Database = {
           player_id: string
         }[]
       }
+      match_has_teams: { Args: { p_match_id: string }; Returns: boolean }
       match_report_url: { Args: { p_match_id: string }; Returns: string }
       match_report_window_open: {
         Args: { p_match_id: string }

@@ -179,7 +179,11 @@ Implement or at least scaffold these flows.
 * Each group has:
 
   * Admins (can manage group settings, matches, players, rules, WhatsApp integration).
-  * Captains (can manage teams for a match: regenerate teams, drag-and-drop players).
+  * Captains are **co-organizers** of the group's matches (owner decision OD-7, 2026-11-15):
+    they can edit and cancel a match, change its status (open, close, finish) and its player
+    cap, add guests, remove signups, manage the teaming rules, and generate, edit and publish
+    the teams. Creating and deleting matches, group settings, roles, notification settings and
+    the recurring pattern stay admin-only.
   * Members (can sign up, rate, vote, view stats).
 
 * Support multiple groups per user.
@@ -212,13 +216,20 @@ Implement or at least scaffold these flows.
 
 * If a confirmed player cancels:
 
-  * First player in waitlist automatically moves to `confirmed`.
-  * Notify the group via in-app notification (and WhatsApp if configured).
+  * First player in waitlist automatically moves to `confirmed` (and is told so).
+  * If the teams were already published, the promoted player takes the leaver's team and
+    position, so the lineup stays valid (OD-2). When nobody is waiting, the leaver's slot is
+    removed and the organizers are asked to review the teams.
+  * Drop-outs notify the group's admins and captains only (in-app), and only once the teams
+    exist or inside the late-cancel window; never the whole group (OD-11).
 
 * Support adding **Guest players**:
 
-  * Admin can quickly add a guest with just a name.
+  * Admins and captains can quickly add a guest with just a name.
   * Guests can be added directly to confirmed or waitlist.
+  * Guests can also sign up themselves from the public match link. While the group's
+    member-scoring priority policy is active (priority window or reserved spots), they go to
+    the waitlist like members below the threshold and move up automatically when it ends (OD-8).
 
 #### 4.5 AI-based team generation
 
@@ -285,7 +296,12 @@ Implement or at least scaffold these flows.
 
 #### 4.7 Ratings, MVP & gamification
 
-* After a match is finished (status `finished`):
+* A match finishes when an admin or captain marks it, or on its own once its duration has
+  passed since kickoff. A match that never got teams in the app finishes with **attendance
+  only** (OD-3): attendance, no-shows and member scoring still count, but there is no result
+  report and no MVP vote for it.
+
+* After a match is finished (status `finished`) with teams:
 
   * Players get a request (non-mandatory) to:
 
@@ -332,6 +348,8 @@ Implement or at least scaffold these flows.
 
     * a spot opens and someone from waitlist is promoted.
     * teams are generated.
+    * a confirmed player drops out after the teams are out or shortly before kickoff: in-app,
+      admins and captains only, saying who replaced whom.
 
 * In the code, abstract this so later we can plug a real WhatsApp API or a webhook.
 

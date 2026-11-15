@@ -389,7 +389,7 @@ In-app `notifications` rows inserted directly (never through
 | Players list (`players/`) | Score column when visibility is `group` or viewer is admin/captain |
 | Profile (`profile/`) | Per-group score list instead of the single global reliability bar |
 | Match page signup box (`signup-actions.tsx`) | During a priority window, below-threshold members see "Inscripción prioritaria hasta las 21:00. Te anotás en lista de espera y pasás automáticamente si queda lugar." |
-| Public match page (`/m/[matchId]`) | Same message for logged-in members; guests unaffected |
+| Public match page (`/m/[matchId]`) | Same message for logged-in members. Self-signup guests are held like below-threshold members while the window or the reserved period runs (00034, OD-8) and see their own notice |
 
 ## 7. Fairness rules baked in
 
@@ -404,7 +404,10 @@ In-app `notifications` rows inserted directly (never through
 - **Never bump a confirmed player.**
 - **Newcomers are neutral**, never top or bottom.
 - **Only admins/captains can report negatives**; peers only positives.
-- **Guests are outside the system**: they sign up through admins anyway.
+- **Guests are outside the system**: they have no score. Since 00034 (OD-8) a guest signing
+  up from the public link during the priority window or the reserved period is waitlisted
+  like a below-threshold member (`waitlist_reason` `priority_window` / `reserved`) and is
+  promoted by the same window-close job.
 
 ## 8. Status and backlog
 
