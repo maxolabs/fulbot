@@ -386,6 +386,20 @@ After the first deploy and after any auth change:
 If a change was ever applied by hand in the SQL editor, record it instead of
 re-running it: `supabase migration repair --status applied 000NN`.
 
+**Linking without the database password.** When `supabase link` is run
+without the password, the CLI connects through a temporary role
+(`cli_login_postgres`, "Initialising login role…") whose `search_path` lacks
+the `extensions` schema. Any migration that calls an extension function
+without a schema (`uuid_generate_v4()` in 00001, `gen_random_bytes()`, …)
+then fails with "function … does not exist". Link with the database password
+(the CLI then connects as `postgres`, whose `search_path` includes
+`extensions`), or schema-qualify those calls in new migrations
+(`extensions.uuid_generate_v4()`). On 2026-11-15 the production rebuild hit
+this; the 37 migrations were applied in order as `postgres` through the
+Management API (`POST /v1/projects/<ref>/database/query`), each in a
+transaction together with its row in `supabase_migrations.schema_migrations`,
+so `supabase migration list` shows them as applied.
+
 ## 8. Monitoring
 
 `GET /api/health` answers `200 {"status":"ok"}` or `503 {"status":"degraded"}`.
