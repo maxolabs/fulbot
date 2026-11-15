@@ -269,6 +269,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .filter(s => s.player_profiles !== null)
     .map(s => s.player_profiles as { id: string; display_name: string; nickname: string | null; main_position: string })
 
+  // Deleted accounts (player_profiles.deleted_at, T1) stay in the history as
+  // "Jugador eliminado" but cannot be rated or voted MVP.
+  const deletedPlayerIds = new Set<string>()
+  if (match.status === 'finished' && matchPlayers.length > 0) {
+    const { data: deletedRows } = await supabase
+      .from('player_profiles')
+      .select('id')
+      .in('id', matchPlayers.map(p => p.id))
+      .not('deleted_at', 'is', null) as { data: { id: string }[] | null }
+    for (const row of deletedRows || []) deletedPlayerIds.add(row.id)
+  }
+  const votablePlayers = matchPlayers.filter(p => !deletedPlayerIds.has(p.id))
+
   // Check if current user is signed up
   const currentUserSignup = (signups || []).find(
     s => s.player_profiles?.id === playerProfile.id
@@ -601,7 +614,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       lockedBy={match.result_locked_by ?? null}
       lockedAt={match.result_locked_at ?? null}
       mvpPlayerId={match.mvp_player_id}
-      mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+      mvpCandidates={votablePlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
       timeZone={timeZone}
     />
   ) : null
@@ -738,7 +751,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
               {attendanceOnly && (
                 <AttendanceOnlyResult
                   eyebrow={t('ui.lifecycle.attendanceOnly.eyebrow')}
-                  badge={t('ui.lifecycle.attendanceOnly.badge')}
                   body={t('ui.lifecycle.attendanceOnly.body')}
                   hint={isAdminOrCaptain ? t('ui.lifecycle.attendanceOnly.adminHint') : undefined}
                 />
@@ -829,7 +841,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <ReportForm
                   matchId={match.id}
                   teams={reportTeams}
-                  mvpCandidates={matchPlayers.filter(p => p.id !== playerProfile.id)}
+                  mvpCandidates={votablePlayers.filter(p => p.id !== playerProfile.id)}
                   existingReport={ownReport}
                   agreement={agreement}
                   windowOpen={reportWindowOpen}
@@ -886,11 +898,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
               )}
 
               {/* Optional teammate ratings - only for players of the match */}
-              {isFinished && viewerPlayed && matchPlayers.length > 1 && (
+              {isFinished && viewerPlayed && votablePlayers.length > 1 && (
                 <PostMatchVoting
                   matchId={match.id}
                   currentPlayerId={playerProfile.id}
-                  players={matchPlayers}
+                  players={votablePlayers}
                   windowOpen={reportWindowOpen}
                 />
               )}

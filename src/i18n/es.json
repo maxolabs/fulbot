@@ -1167,7 +1167,7 @@
         "swapOne": "{in} entra de la lista de espera y ocupa su lugar en {team}.",
         "swapMany": "Entran de la lista de espera: {pairs}.",
         "swapPair": "{in} por {left} ({team})",
-        "teamsOk": "Los equipos siguen armados.",
+        "teamsOk": "No hace falta tocar los equipos.",
         "promotedTeamYou": "Jugás en {slot}.",
         "promotedTeam": "Juega en {slot}."
       },

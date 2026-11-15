@@ -177,18 +177,23 @@ export default async function GroupsPage() {
 
     const { data: finishedRows } = await supabase
       .from('matches')
-      .select('id, group_id, date_time, result_status, finished_at, duration_minutes')
+      .select('id, group_id, date_time, result_status, finished_at, duration_minutes, teams ( id )')
       .in('group_id', groupIds)
       .eq('status', 'finished')
       .neq('result_status', 'locked')
       .or(`date_time.gte.${earliest.toISOString()},finished_at.gte.${earliest.toISOString()}`)
       .order('date_time', { ascending: false }) as {
-        data: { id: string; group_id: string; date_time: string; result_status: string; finished_at: string | null; duration_minutes: number | null }[] | null
+        data: {
+          id: string; group_id: string; date_time: string; result_status: string; finished_at: string | null
+          duration_minutes: number | null; teams: { id: string }[] | null
+        }[] | null
       }
 
     // Same anchor as match_report_window_open (00026): finished_at, or else
     // start + duration.
+    // A match finished without teams (attendance only, 00034) has nothing to report.
     const finishedMatches = (finishedRows || []).filter((m) => {
+      if ((m.teams?.length ?? 0) === 0) return false
       const endMs = m.finished_at
         ? new Date(m.finished_at).getTime()
         : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000

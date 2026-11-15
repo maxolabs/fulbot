@@ -1167,7 +1167,7 @@
         "swapOne": "{in} comes in from the waitlist and takes their place on {team}.",
         "swapMany": "In from the waitlist: {pairs}.",
         "swapPair": "{in} for {left} ({team})",
-        "teamsOk": "The teams stay as they are.",
+        "teamsOk": "No need to change the teams.",
         "promotedTeamYou": "You play for {slot}.",
         "promotedTeam": "They play for {slot}."
       },
