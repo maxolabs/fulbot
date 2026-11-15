@@ -10,6 +10,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/i18n/provider'
 import { FormNotice, Toggle } from '@/components/form-controls'
+import { checkWebhookUrl, type WebhookUrlProblem } from '@/lib/notifications/webhook-url'
+
+const WEBHOOK_PROBLEM_KEY: Record<WebhookUrlProblem, string> = {
+  invalid: 'ui.notify.webhookInvalid',
+  https: 'ui.notify.webhookHttps',
+  credentials: 'ui.notify.webhookCredentials',
+  host: 'ui.notify.webhookHost',
+}
 
 interface NotificationSettingsProps {
   groupId: string
@@ -40,14 +48,30 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
   const supabase = createClient()
 
   const [settings, setSettings] = useState(initialSettings)
+  const [reminderText, setReminderText] = useState(String(initialSettings.reminder_hours_before))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   const handleSave = async () => {
-    setSaving(true)
     setError(null)
     setSuccess(false)
+
+    // Validate before writing: a bad number used to become 0 and silently
+    // switch reminders off, and the webhook URL is fetched by the server.
+    const hours = settings.reminder_hours_before
+    if (!Number.isInteger(hours) || hours < 0 || hours > 48) {
+      setError(t('ui.notify.reminderInvalid'))
+      return
+    }
+    const webhookUrl = settings.whatsapp_webhook_url?.trim() || null
+    const webhookProblem = webhookUrl ? checkWebhookUrl(webhookUrl) : null
+    if (webhookProblem) {
+      setError(t(WEBHOOK_PROBLEM_KEY[webhookProblem]))
+      return
+    }
+
+    setSaving(true)
 
     try {
       const data = {
@@ -56,7 +80,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         reminder_hours_before: settings.reminder_hours_before,
         notify_on_waitlist_promotion: settings.notify_on_waitlist_promotion,
         notify_on_teams_created: settings.notify_on_teams_created,
-        whatsapp_webhook_url: settings.whatsapp_webhook_url || null,
+        whatsapp_webhook_url: webhookUrl,
         default_duration_minutes: settings.default_duration_minutes,
         default_results_request_delay_minutes: settings.default_results_request_delay_minutes,
         results_reminder_hours: settings.results_reminder_hours,
@@ -65,8 +89,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
 
       if (settings.id) {
         // Update existing
-         
-        const { error: updateError } = await (supabase as any)
+        const { error: updateError } = await supabase
           .from('notification_settings')
           .update(data)
           .eq('id', settings.id)
@@ -74,8 +97,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
         if (updateError) throw updateError
       } else {
         // Insert new
-         
-        const { data: newSettings, error: insertError } = await (supabase as any)
+        const { data: newSettings, error: insertError } = await supabase
           .from('notification_settings')
           .insert(data)
           .select('id')
@@ -90,7 +112,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error saving notification settings:', err)
-      setError('Error al guardar la configuración')
+      setError(t('ui.notify.saveError'))
     } finally {
       setSaving(false)
     }
@@ -102,7 +124,7 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
     <div className="space-y-6">
       {error && <FormNotice kind="error">{error}</FormNotice>}
 
-      {success && <FormNotice kind="success">Configuración guardada correctamente</FormNotice>}
+      {success && <FormNotice kind="success">{t('ui.notify.saved')}</FormNotice>}
 
       {/* Auto-send signup link */}
       <div className="flex items-center justify-between gap-4">
@@ -132,10 +154,11 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <Clock className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-sm font-medium">Recordatorio antes del partido</p>
+            <p className="text-sm font-medium">{t('ui.notify.reminderTitle')}</p>
             <p className="text-sm text-muted-foreground">
-              Horas antes del partido para enviar recordatorio
+              {t('ui.notify.reminderDesc')}
             </p>
+            <p className="text-xs text-muted-foreground">{t('ui.notify.reminderHint')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -143,16 +166,20 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             type="number"
             min={0}
             max={48}
-            value={settings.reminder_hours_before}
-            onChange={(e) =>
+            step={1}
+            value={reminderText}
+            onChange={(e) => {
+              setReminderText(e.target.value)
               setSettings((prev) => ({
                 ...prev,
-                reminder_hours_before: parseInt(e.target.value) || 0,
+                // NaN / out of range is kept as typed and rejected on save.
+                reminder_hours_before: e.target.value.trim() === '' ? NaN : Number(e.target.value),
               }))
-            }
+            }}
+            aria-invalid={!Number.isInteger(settings.reminder_hours_before) || settings.reminder_hours_before < 0 || settings.reminder_hours_before > 48}
             className="w-20 text-center"
           />
-          <span className="text-sm text-muted-foreground">horas</span>
+          <span className="text-sm text-muted-foreground">{t('ui.notify.hours')}</span>
         </div>
       </div>
 
@@ -163,9 +190,9 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <Users className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-sm font-medium">Notificar promoción de lista de espera</p>
+            <p className="text-sm font-medium">{t('ui.notify.waitlistTitle')}</p>
             <p className="text-sm text-muted-foreground">
-              Avisar cuando un jugador pasa de lista de espera a confirmado
+              {t('ui.notify.waitlistDesc')}
             </p>
           </div>
         </div>
@@ -184,9 +211,9 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <Bell className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-sm font-medium">Notificar cuando se armen equipos</p>
+            <p className="text-sm font-medium">{t('ui.notify.teamsTitle')}</p>
             <p className="text-sm text-muted-foreground">
-              Avisar al grupo cuando se generan los equipos para un partido
+              {t('ui.notify.teamsDesc')}
             </p>
           </div>
         </div>
@@ -205,17 +232,16 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             <ClipboardList className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-sm font-medium">Resultado después del partido</p>
+            <p className="text-sm font-medium">{t('ui.notify.resultsTitle')}</p>
             <p className="text-sm text-muted-foreground">
-              Cuándo pedirle a los jugadores el resultado, los goles y el MVP. Los partidos
-              nuevos copian estos valores; cada partido puede cambiarlos.
+              {t('ui.notify.resultsDesc')}
             </p>
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="default_duration_minutes">Duración del partido</Label>
+            <Label htmlFor="default_duration_minutes">{t('ui.notify.durationLabel')}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="default_duration_minutes"
@@ -232,15 +258,15 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
                 }
                 className="w-24 text-center"
               />
-              <span className="text-sm text-muted-foreground">minutos</span>
+              <span className="text-sm text-muted-foreground">{t('ui.notify.minutes')}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              El partido se marca como terminado solo cuando pasa este tiempo.
+              {t('ui.notify.durationHint')}
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="default_results_request_delay_minutes">Pedir el resultado</Label>
+            <Label htmlFor="default_results_request_delay_minutes">{t('ui.notify.requestLabel')}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="default_results_request_delay_minutes"
@@ -260,12 +286,12 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
                 }
                 className="w-24 text-center"
               />
-              <span className="text-sm text-muted-foreground">minutos después del final</span>
+              <span className="text-sm text-muted-foreground">{t('ui.notify.minutesAfterEnd')}</span>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="results_reminder_hours">Recordatorio a los que faltan</Label>
+            <Label htmlFor="results_reminder_hours">{t('ui.notify.resultsReminderLabel')}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="results_reminder_hours"
@@ -281,13 +307,13 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
                 }
                 className="w-24 text-center"
               />
-              <span className="text-sm text-muted-foreground">horas después del pedido</span>
+              <span className="text-sm text-muted-foreground">{t('ui.notify.hoursAfterRequest')}</span>
             </div>
-            <p className="text-xs text-muted-foreground">0 = sin recordatorio.</p>
+            <p className="text-xs text-muted-foreground">{t('ui.notify.noReminder')}</p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="results_window_days">Ventana para reportar</Label>
+            <Label htmlFor="results_window_days">{t('ui.notify.windowLabel')}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="results_window_days"
@@ -303,10 +329,10 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
                 }
                 className="w-24 text-center"
               />
-              <span className="text-sm text-muted-foreground">días desde el partido</span>
+              <span className="text-sm text-muted-foreground">{t('ui.notify.daysAfterMatch')}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Después se cierra el resultado con lo que haya y se avisa a los admins si no hubo reportes.
+              {t('ui.notify.windowHint')}
             </p>
           </div>
         </div>
@@ -337,12 +363,12 @@ export function NotificationSettings({ groupId, settings: initialSettings }: Not
             {saving ? (
               <>
                 <Spinner size="sm" />
-                Guardando...
+                {t('ui.notify.saving')}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                Guardar cambios
+                {t('ui.notify.save')}
               </>
             )}
           </Button>

@@ -26,6 +26,8 @@ export interface PitchPlayer {
   position: string
   /** Overall rating, shown only when `showRatings` is set. */
   rating?: number
+  /** Short marker after the name, e.g. "inv." for a guest. */
+  tag?: string
 }
 
 export type PitchTeam = 'dark' | 'light'
@@ -86,7 +88,12 @@ function Dot({ placed, team, x, y, showRatings, labels }: DotProps) {
         className="mt-0.5 flex flex-col items-center whitespace-nowrap font-mono text-[9px] font-medium leading-[11px]"
         style={{ color: TEAM_LIGHT, textShadow: '0 1px 2px rgba(0,0,0,.7)' }}
       >
-        {labels !== 'position' && <span>{player.name}</span>}
+        {labels !== 'position' && (
+          <span>
+            {player.name}
+            {player.tag && <span style={{ color: CHALK }}> {player.tag}</span>}
+          </span>
+        )}
         {labels !== 'name' && (
           <span style={{ color: CHALK }} className="text-[8px] tracking-[.08em]">
             {slot.position}

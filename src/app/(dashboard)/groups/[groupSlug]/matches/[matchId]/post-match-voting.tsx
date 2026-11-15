@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 
-// Optional teammate ratings (1-5) after a match. The MVP vote moved into the
+// Optional player ratings (1-5) after a match: everyone who played, both teams. The MVP vote moved into the
 // report form (report-form.tsx); this card is independent of it and can be
 // filled or edited any time inside the reporting window (RLS allows own
 // UPDATE/DELETE there, see 00020_match_reports.sql).
@@ -33,6 +34,7 @@ export function PostMatchVoting({
   windowOpen,
 }: PostMatchVotingProps) {
   const supabase = createClient()
+  const t = useT()
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [saved, setSaved] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
@@ -97,7 +99,7 @@ export function PostMatchVoting({
       await loadExisting()
     } catch (err) {
       console.error('Error saving ratings:', err)
-      setError(err instanceof Error ? err.message : 'No se pudieron guardar las calificaciones')
+      setError(t('ui.ratingsCard.saveError'))
     } finally {
       setLoading(false)
     }
@@ -113,24 +115,26 @@ export function PostMatchVoting({
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
-            Calificaciones
+            {t('ui.ratingsCard.title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             {savedCount > 0
-              ? `Calificaste a ${savedCount} ${savedCount === 1 ? 'compañero' : 'compañeros'}. Solo vos ves tus calificaciones.`
-              : 'No calificaste a nadie en este partido.'}
+              ? savedCount === 1
+                ? t('ui.postMatch.ratedOne')
+                : t('ui.postMatch.ratedMany', { count: savedCount })
+              : t('ui.ratingsCard.none')}
           </p>
           {windowOpen ? (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil className="mr-2 h-4 w-4" />
-              {savedCount > 0 ? 'Editar' : 'Calificar'}
+              {savedCount > 0 ? t('common.edit') : t('ui.ratingsCard.rate')}
             </Button>
           ) : (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              La ventana para calificar cerró
+              {t('ui.ratingsCard.closed')}
             </p>
           )}
         </CardContent>
@@ -143,9 +147,9 @@ export function PostMatchVoting({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <Star className="h-5 w-5 text-primary" strokeWidth={1.75} />
-          Calificá a tus compañeros
+          {t('ui.postMatch.rateTitle')}
         </CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">Opcional y privado: nadie más ve tus calificaciones.</p>
+        <p className="text-sm text-muted-foreground mt-1">{t('ui.ratingsCard.privateHint')}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3">
@@ -164,7 +168,7 @@ export function PostMatchVoting({
                       }))
                     }}
                     className="p-0.5"
-                    aria-label={`${star} ${star === 1 ? 'estrella' : 'estrellas'} para ${player.display_name}`}
+                    aria-label={star === 1 ? t('ui.ratingsCard.starOne', { name: player.display_name }) : t('ui.ratingsCard.starMany', { n: star, name: player.display_name })}
                   >
                     <Star
                       className={`h-5 w-5 transition-colors ${
@@ -185,11 +189,11 @@ export function PostMatchVoting({
         <div className="flex gap-2">
           <Button onClick={handleSubmit} disabled={loading} className="flex-1">
             {loading ? <Spinner size="sm" className="mr-2" /> : <Check className="mr-2 h-4 w-4" />}
-            Guardar calificaciones
+            {t('ui.ratingsCard.save')}
           </Button>
           {savedCount > 0 && (
             <Button variant="ghost" onClick={() => { setRatings(saved); setEditing(false) }} disabled={loading}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
           )}
         </div>

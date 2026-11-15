@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Shield, ShieldCheck, User, MoreVertical, UserMinus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Sheet } from '@/components/ui/sheet'
+import { FormNotice } from '@/components/form-controls'
 import { Avatar } from '@/components/ui/avatar'
 import { Popover } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
@@ -38,13 +41,17 @@ export function MembersManager({ members }: MembersManagerProps) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  // Member waiting for the removal confirmation Sheet.
+  const [pendingRemoval, setPendingRemoval] = useState<{ membershipId: string; displayName: string } | null>(null)
 
   const adminCount = members.filter((m) => m.role === 'admin').length
 
   const handleRoleChange = async (membershipId: string, newRole: 'admin' | 'captain' | 'member') => {
     setLoading(membershipId)
+    setError(null)
     try {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('group_memberships')
         .update({ role: newRole })
         .eq('id', membershipId)
@@ -53,30 +60,31 @@ export function MembersManager({ members }: MembersManagerProps) {
       router.refresh()
     } catch (err) {
       console.error('Error changing role:', err)
-      alert(t('ui.screens.members.roleError'))
+      setError(t('ui.screens.members.roleError'))
     } finally {
       setLoading(null)
     }
   }
 
-  const handleRemoveMember = async (membershipId: string, displayName: string) => {
-    if (!confirm(t('ui.screens.members.removeConfirm', { name: displayName }))) {
-      return
-    }
-
+  const handleRemoveMember = async (membershipId: string) => {
     setLoading(membershipId)
+    setError(null)
     try {
-      const { error } = await (supabase as any)
-        .from('group_memberships')
-        .update({ is_active: false })
-        .eq('id', membershipId)
+      // admin_remove_member (00033) deactivates the membership, records the
+      // removal (no rejoining with the invite link until an admin re-adds them)
+      // and cancels the member's signups on upcoming matches, teams_created
+      // included, without a cancel penalty; the waitlist promotes.
+      const { error } = await supabase.rpc('admin_remove_member', {
+        p_membership_id: membershipId,
+      })
 
       if (error) throw error
       router.refresh()
     } catch (err) {
       console.error('Error removing member:', err)
-      alert(t('ui.screens.members.removeError'))
+      setError(t('ui.screens.members.removeError'))
     } finally {
+      setPendingRemoval(null)
       setLoading(null)
     }
   }
@@ -94,6 +102,7 @@ export function MembersManager({ members }: MembersManagerProps) {
 
   return (
     <div className="space-y-4">
+      {error && <FormNotice kind="error">{error}</FormNotice>}
       <ul className="[&>li:last-child]:border-b-0">
         {members.map((member) => (
           <li
@@ -177,7 +186,7 @@ export function MembersManager({ members }: MembersManagerProps) {
                           type="button"
                           onClick={() => {
                             close()
-                            handleRemoveMember(member.membershipId, member.displayName)
+                            setPendingRemoval({ membershipId: member.membershipId, displayName: member.displayName })
                           }}
                           className={cn(menuItemClassName, 'text-destructive')}
                         >
@@ -205,6 +214,27 @@ export function MembersManager({ members }: MembersManagerProps) {
           <strong className="font-medium text-foreground">{t('groups.roles.member')}:</strong> {t('ui.screens.members.memberHint')}
         </p>
       </div>
+
+      <Sheet
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => { if (!open && loading === null) setPendingRemoval(null) }}
+        title={pendingRemoval ? t('ui.screens.members.removeConfirm', { name: pendingRemoval.displayName }) : ''}
+        description={t('ui.membership.removeBody')}
+      >
+        <div className="flex flex-wrap gap-3 pt-4">
+          <Button
+            variant="destructive"
+            disabled={loading !== null}
+            onClick={() => pendingRemoval && handleRemoveMember(pendingRemoval.membershipId)}
+          >
+            {loading !== null && <Spinner size="sm" />}
+            {t('ui.screens.members.remove')}
+          </Button>
+          <Button variant="outline" disabled={loading !== null} onClick={() => setPendingRemoval(null)}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      </Sheet>
     </div>
   )
 }

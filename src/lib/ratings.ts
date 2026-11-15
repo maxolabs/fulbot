@@ -1,12 +1,21 @@
-// Initial scoring: shared vocabulary for peer ratings (see migration 00018_peer_ratings.sql).
+// Initial scoring: shared vocabulary for peer ratings (see migrations 00018_peer_ratings.sql
+// and 00035_teams_ratings_privacy.sql).
 //
 // Peers rate each other per group on four 1-5 dimensions plus structured tags. The
-// database aggregates everything into player_rating_summary, which only admins and
-// captains can read; the pieces below are what the rating form, the score displays
-// and the team generator agree on.
+// database aggregates everything into player_rating_summary, one row per (group, player)
+// built from that group's peer ratings and post-match ratings only (OD-9), readable only
+// by the group's admins and captains. Every reader filters on the current group
+// (`.eq('group_id', groupId)`): a player in two groups has two independent rows. The
+// pieces below are what the rating form, the score displays and the team generator
+// agree on.
 
 export const RATING_DIMENSIONS = ['goalkeeping', 'defense', 'attack', 'physical'] as const
 export type RatingDimension = (typeof RATING_DIMENSIONS)[number]
+
+// The Spanish constants below are the canonical vocabulary: the team generator
+// prompt (src/lib/ai) reads them and must stay stable. Screens translate with
+// the ui.ratings.* keys through the helpers at the end of this block, which use
+// the same stable ids (dimension names, 1-5, tag keys).
 
 export const DIMENSION_LABELS: Record<RatingDimension, string> = {
   goalkeeping: 'Arquero',
@@ -65,6 +74,32 @@ export function tagLabel(key: string): string {
   return TAG_LABELS[key] ?? key
 }
 
+type Translate = (key: string, params?: Record<string, string | number>) => string
+
+export function dimensionLabel(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.dimensions.${dim}`)
+}
+
+export function dimensionShort(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.short.${dim}`)
+}
+
+export function dimensionHint(t: Translate, dim: RatingDimension): string {
+  return t(`ui.ratings.hints.${dim}`)
+}
+
+export function scaleLabel(t: Translate, value: number): string {
+  return t(`ui.ratings.scale.${value}`)
+}
+
+// Unknown tag keys (stored before a tag was renamed) fall back to the raw key,
+// like tagLabel.
+export function translatedTagLabel(t: Translate, key: string): string {
+  const path = `ui.ratings.tags.${key}`
+  const label = t(path)
+  return label === path ? tagLabel(key) : label
+}
+
 export const DEFAULT_OVERALL = 3
 
 export interface PlayerSkills {
@@ -74,7 +109,12 @@ export interface PlayerSkills {
   physical: number
 }
 
-// Row shape of player_rating_summary as the app reads it.
+// Columns every reader selects from player_rating_summary (always with
+// `.eq('group_id', …)`, see the header).
+export const RATING_SUMMARY_COLUMNS =
+  'player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated' as const
+
+// Row shape of player_rating_summary as the app reads it (one group's row).
 export interface RatingSummary {
   player_id: string
   goalkeeping: number | null

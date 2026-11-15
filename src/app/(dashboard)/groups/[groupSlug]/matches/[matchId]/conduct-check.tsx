@@ -71,8 +71,7 @@ export function ConductCheck({ matchId, groupId, role }: ConductCheckProps) {
       }
       setCanReport(true)
 
-      // The Database type has no relationship metadata, so the embedded select is untyped.
-      const { data: signups, error: signupsError } = await (supabase as any)
+      const { data: signups, error: signupsError } = await supabase
         .from('match_signups')
         .select('id, player_id, guest_player_id, signup_time, player_profiles ( id, display_name ), guest_players ( id, display_name )')
         .eq('match_id', matchId)

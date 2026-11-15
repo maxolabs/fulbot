@@ -15,10 +15,12 @@ import { placePlayersInFormation, type PlacedPlayer } from '@/lib/formations'
 import { TEAM_DARK, TEAM_LIGHT, TEAM_LIGHT_INK } from '@/lib/brand'
 import { useLanguage, useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { Sheet } from '@/components/ui/sheet'
 import { DraggableTeams } from './draggable-teams'
-import { normalizePosition } from '@/lib/teams/manual'
+import { normalizePosition, type PairRule } from '@/lib/teams/manual'
 import { WhatsAppShare, generateShareMessage, shareName } from './whatsapp-share'
+import { LineupStaleNotice } from './lineup-stale-notice'
 
 // Teams screen (docs/ui-rework/03-screens.md §4). Browser: PageHeader, two
 // dashed cards with one Pitch each, then the analysis and warnings cards.
@@ -76,6 +78,10 @@ interface TeamsViewProps {
   isAdminOrCaptain: boolean
   hasTeams: boolean
   matchStatus?: string
+  /** The confirmed list changed after publishing (00029); organizers only. */
+  lineupStale?: boolean
+  /** Active avoid/force pair rules, for the manual builder's warnings. */
+  pairRules?: PairRule[]
 }
 
 // "1-3-2-1": players per line from the keeper up, read off the formation
@@ -89,9 +95,9 @@ function formationShape(placed: PlacedPlayer<PitchPlayer>[]): string {
     .join('-')
 }
 
-function toPitchPlayers(list: TeamPlayer[]): PlacedPlayer<PitchPlayer>[] {
+function toPitchPlayers(list: TeamPlayer[], guestTag: string): PlacedPlayer<PitchPlayer>[] {
   return placePlayersInFormation(
-    list.map((p) => ({ id: p.id, name: shareName(p), position: p.position, rating: p.overallRating }))
+    list.map((p) => ({ id: p.id, name: shareName(p), position: p.position, rating: p.overallRating, tag: p.isGuest ? guestTag : undefined }))
   )
 }
 
@@ -114,6 +120,8 @@ export function TeamsView({
   isAdminOrCaptain,
   hasTeams,
   matchStatus,
+  lineupStale = false,
+  pairRules = [],
 }: TeamsViewProps) {
   const t = useT()
   const language = useLanguage()
@@ -135,8 +143,12 @@ export function TeamsView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(t('ui.teamsScreen.generateError'))
+      // The route answers with an already translated { error } message.
+      const data = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) {
+        setError(data?.error || t('ui.teamsScreen.generateError'))
+        return
+      }
       startRefresh(() => { setEditing(false); router.refresh() })
     } catch (err) {
       console.error('Error generating teams:', err)
@@ -167,8 +179,8 @@ export function TeamsView({
 
   const darkPlayers = resolve(darkTeam.assignments)
   const lightPlayers = resolve(lightTeam.assignments)
-  const darkPlaced = toPitchPlayers(darkPlayers)
-  const lightPlaced = toPitchPlayers(lightPlayers)
+  const darkPlaced = toPitchPlayers(darkPlayers, t('ui.teamsAi.guestTag'))
+  const lightPlaced = toPitchPlayers(lightPlayers, t('ui.teamsAi.guestTag'))
 
   const assignedIds = new Set([
     ...darkTeam.assignments.map((a) => a.player_id || a.guest_player_id),
@@ -184,8 +196,8 @@ export function TeamsView({
     n === 1 ? t('ui.teamsScreen.playersOne') : t('ui.teamsScreen.players', { n })
   const levelLabel = (list: TeamPlayer[]) => t('ui.teamsScreen.level', { n: average(list).toFixed(1) })
 
-  const shareInput = { matchUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
-    copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing') } }
+  const shareInput = { matchUrl: `${getAppBaseUrl()}/m/${matchId}`, groupName, dateLabel: shareDateLabel, darkPlayers, lightPlayers,
+    copy: { dark: t('ui.teamsScreen.shareDark'), light: t('ui.teamsScreen.shareLight'), closing: t('ui.teamsScreen.shareClosing'), guest: t('ui.teamsAi.guestTag') } }
 
   const copySimple = async () => {
     try {
@@ -247,6 +259,7 @@ export function TeamsView({
             position: normalizePosition(player.mainPosition),
           }))}
           hasTeams={hasTeams}
+          pairRules={pairRules}
           onSaved={() => startRefresh(() => { setEditing(false); router.refresh() })}
           onCancel={() => setEditing(false)}
         />
@@ -281,6 +294,10 @@ export function TeamsView({
           <CircleAlert className="h-4 w-4 shrink-0" strokeWidth={1.75} />
           {error}
         </p>
+      )}
+
+      {canEditTeams && hasTeams && lineupStale && (
+        <LineupStaleNotice title={t('ui.matchLifecycle.lineupStaleTitle')} body={t('ui.matchLifecycle.lineupStaleBody')} />
       )}
 
       {canEditTeams && players.length < 4 && (
@@ -394,7 +411,8 @@ export function TeamsView({
             })}
           </div>
 
-          {unassignedPlayers.length > 0 && (
+          {/* Organizers place newcomers; members just see the published lineup. */}
+          {isAdminOrCaptain && unassignedPlayers.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -448,7 +466,7 @@ export function TeamsView({
         </Card>
       )}
 
-      {aiReasoning && (
+      {isAdminOrCaptain && aiReasoning && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2">
@@ -479,11 +497,12 @@ export function TeamsView({
                 <span className="font-mono text-sm tabular-nums">{Math.round(balanceScore * 100)}%</span>
               </div>
             )}
+            <p className="text-xs text-muted-foreground">{t('ui.teamsPrivacy.analysisPrivate')}</p>
           </CardContent>
         </Card>
       )}
 
-      {warnings && warnings.length > 0 && (
+      {isAdminOrCaptain && warnings && warnings.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

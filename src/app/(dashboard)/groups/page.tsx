@@ -34,7 +34,11 @@ type NextMatch = {
   date_time: string
   max_players: number
   confirmedCount: number
+  waitlistCount: number
 }
+
+// Same set as the dashboard layout's UPCOMING_STATUSES ((dashboard)/layout.tsx).
+const UPCOMING_STATUSES = ['signup_open', 'full', 'signup_closed', 'teams_created'] as const
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
@@ -56,34 +60,34 @@ export default async function GroupsPage() {
 
   const t = getT(userData?.preferred_language ?? 'es')
 
-  // Get player profile
+  // Get player profile. Without one (signup trigger failed) the user has no
+  // memberships yet: render the empty state with create / join instead of a
+  // blank page.
   const { data: playerProfile } = await supabase
     .from('player_profiles')
     .select('id')
     .eq('user_id', user.id)
-    .single() as { data: { id: string } | null }
-
-  if (!playerProfile) {
-    return null
-  }
+    .maybeSingle() as { data: { id: string } | null }
 
   // Get user's groups with membership info
-  const { data: memberships } = await supabase
-    .from('group_memberships')
-    .select(`
-      role,
-      groups (
-        id,
-        name,
-        slug,
-        description,
-        default_match_day,
-        default_match_time,
-        timezone
-      )
-    `)
-    .eq('player_id', playerProfile.id)
-    .eq('is_active', true) as { data: Array<{ role: 'admin' | 'captain' | 'member', groups: GroupWithRole | null }> | null }
+  const { data: memberships } = playerProfile
+    ? await supabase
+        .from('group_memberships')
+        .select(`
+          role,
+          groups (
+            id,
+            name,
+            slug,
+            description,
+            default_match_day,
+            default_match_time,
+            timezone
+          )
+        `)
+        .eq('player_id', playerProfile.id)
+        .eq('is_active', true) as { data: Array<{ role: 'admin' | 'captain' | 'member', groups: GroupWithRole | null }> | null }
+    : { data: null }
 
   const groups: GroupWithRole[] = (memberships || [])
     .filter((m): m is { role: 'admin' | 'captain' | 'member', groups: GroupWithRole } => m.groups !== null)
@@ -111,7 +115,7 @@ export default async function GroupsPage() {
       .select('id, group_id, date_time, max_players, status')
       .in('group_id', groupIds)
       .gte('date_time', nowIso)
-      .in('status', ['signup_open', 'full', 'teams_created'])
+      .in('status', [...UPCOMING_STATUSES])
       .order('date_time', { ascending: true }) as {
         data: { id: string; group_id: string; date_time: string; max_players: number; status: string }[] | null
       }
@@ -130,11 +134,13 @@ export default async function GroupsPage() {
         .from('match_signups')
         .select('match_id, status')
         .in('match_id', matchIds)
-        .eq('status', 'confirmed') as { data: { match_id: string; status: string }[] | null }
+        .in('status', ['confirmed', 'waitlist']) as { data: { match_id: string; status: string }[] | null }
 
       const confirmedCounts = new Map<string, number>()
+      const waitlistCounts = new Map<string, number>()
       for (const s of signups || []) {
-        confirmedCounts.set(s.match_id, (confirmedCounts.get(s.match_id) || 0) + 1)
+        const counts = s.status === 'confirmed' ? confirmedCounts : waitlistCounts
+        counts.set(s.match_id, (counts.get(s.match_id) || 0) + 1)
       }
 
       for (const [groupId, match] of Array.from(earliestPerGroup.entries())) {
@@ -143,6 +149,7 @@ export default async function GroupsPage() {
           date_time: match.date_time,
           max_players: match.max_players,
           confirmedCount: confirmedCounts.get(match.id) || 0,
+          waitlistCount: waitlistCounts.get(match.id) || 0,
         })
       }
     }
@@ -153,14 +160,12 @@ export default async function GroupsPage() {
   type ResultNudge = { matchId: string; groupSlug: string; groupName: string; dateTime: string; timezone: string | null }
   let resultNudge: ResultNudge | null = null
 
-  if (groups.length > 0) {
+  if (playerProfile && groups.length > 0) {
     const groupIds = groups.map((g) => g.id)
 
     // The reporting window is a per-group setting (results_window_days, 00018).
     const { data: windowRows } = await supabase
-      .from('notification_settings')
-      .select('group_id, results_window_days')
-      .in('group_id', groupIds) as { data: { group_id: string; results_window_days: number | null }[] | null }
+      .rpc('get_results_window_days', { p_group_ids: groupIds }) as { data: { group_id: string; results_window_days: number | null }[] | null }
     const windowDaysByGroup = new Map<string, number>()
     for (const row of windowRows || []) windowDaysByGroup.set(row.group_id, row.results_window_days ?? 7)
     const windowDaysFor = (groupId: string) => windowDaysByGroup.get(groupId) ?? 7
@@ -172,18 +177,28 @@ export default async function GroupsPage() {
 
     const { data: finishedRows } = await supabase
       .from('matches')
-      .select('id, group_id, date_time, result_status')
+      .select('id, group_id, date_time, result_status, finished_at, duration_minutes, teams ( id )')
       .in('group_id', groupIds)
       .eq('status', 'finished')
       .neq('result_status', 'locked')
-      .gte('date_time', earliest.toISOString())
+      .or(`date_time.gte.${earliest.toISOString()},finished_at.gte.${earliest.toISOString()}`)
       .order('date_time', { ascending: false }) as {
-        data: { id: string; group_id: string; date_time: string; result_status: string }[] | null
+        data: {
+          id: string; group_id: string; date_time: string; result_status: string; finished_at: string | null
+          duration_minutes: number | null; teams: { id: string }[] | null
+        }[] | null
       }
 
-    const finishedMatches = (finishedRows || []).filter(
-      (m) => now.getTime() - new Date(m.date_time).getTime() < windowDaysFor(m.group_id) * 24 * 60 * 60 * 1000
-    )
+    // Same anchor as match_report_window_open (00026): finished_at, or else
+    // start + duration.
+    // A match finished without teams (attendance only, 00034) has nothing to report.
+    const finishedMatches = (finishedRows || []).filter((m) => {
+      if ((m.teams?.length ?? 0) === 0) return false
+      const endMs = m.finished_at
+        ? new Date(m.finished_at).getTime()
+        : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000
+      return now.getTime() - endMs < windowDaysFor(m.group_id) * 24 * 60 * 60 * 1000
+    })
 
     if (finishedMatches.length > 0) {
       const matchIds = finishedMatches.map((m) => m.id)
@@ -302,7 +317,10 @@ export default async function GroupsPage() {
                             time: formatMatchTime(nextMatch.date_time, groupTimezone),
                             confirmed: nextMatch.confirmedCount,
                             max: nextMatch.max_players,
-                          })
+                          }) +
+                          (nextMatch.waitlistCount > 0
+                            ? t('ui.lifecycle.waitlistSuffix', { n: nextMatch.waitlistCount })
+                            : '')
                         : t('ui.matchScreens.groups.noUpcoming')}
                     </span>
                   </span>

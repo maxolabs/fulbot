@@ -1,7 +1,9 @@
-import type { PlayerInput, RuleInput, GeneratedTeams, TeamAssignment } from './team-generator'
+import type { PlayerInput, RuleInput, GeneratedTeams, TeamAssignment, PreviousLineup } from './team-generator'
 import { getFormation } from '@/lib/formations'
+import { getTranslation, type Language, type TranslateFn } from '@/i18n/core'
+import { defendersPolicy, gkScore, isDefenseCapable, isGoalkeeperWilling, sameSplit } from './constraints'
 
-// Deterministic team balancer used when OPENAI_API_KEY is missing, or when the AI
+// Rule-based team balancer used when OPENAI_API_KEY is missing, or when the AI
 // response keeps failing hard-constraint validation after a retry.
 //
 // Strategy:
@@ -12,15 +14,31 @@ import { getFormation } from '@/lib/formations'
 //    every other pick (1-2-2-1-1-2-2-1...), swapping a unit to the other team when it
 //    would violate an avoid_pair rule (if possible).
 // 4. Rebalance sizes if they ended up more than 1 apart.
-// 5. Assign positions within each team from a simple formation, matching each
-//    player's main/preferred position where possible, and picking the most
-//    goalkeeper-willing player for GK slots.
+// 5. Honor a min_defenders rule by swapping a defender for a non-defender of
+//    similar rating between the teams.
+// 6. Assign positions within each team from a simple formation, matching each
+//    player's main/preferred position where possible, and picking the best
+//    gkScore (willingness, can_keep tag, peer goalkeeping) for GK slots; ties
+//    go to the lower-rated player, so nobody's best outfield player is sent
+//    to goal just for being the best.
+//
+// Without a seed the result is deterministic. With a seed (sent on "Regenerar")
+// the draft order gets a small random jitter, several candidates are drawn and
+// one that differs from the previous lineup is chosen among the best balanced.
+
+export interface FallbackOptions {
+  language?: Language
+  previous?: PreviousLineup | null
+  seed?: number
+}
 
 interface Unit {
   ids: string[]
   members: PlayerInput[]
   rating: number
 }
+
+type Team = 'dark' | 'light'
 
 function findRoot(parents: Map<string, string>, id: string): string {
   let root = id
@@ -61,17 +79,38 @@ function buildUnits(players: PlayerInput[], rules: RuleInput[]): Unit[] {
 }
 
 // Standard 2-team snake draft order: pick1=dark, pick2=light, pick3=light, pick4=dark, ...
-function snakeTeamForPick(pick: number): 'dark' | 'light' {
+function snakeTeamForPick(pick: number): Team {
   const roundIndex = Math.floor((pick - 1) / 2)
   const positionInRound = (pick - 1) % 2
   const order: ['dark', 'light'] | ['light', 'dark'] = roundIndex % 2 === 0 ? ['dark', 'light'] : ['light', 'dark']
   return order[positionInRound]
 }
 
-export function generateFallbackTeams(
+// Small seeded PRNG (mulberry32): the same seed gives the same lineup.
+function seededRandom(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Rating jitter used to vary the draft order on regeneration. Big enough to
+// swap players of similar level, small enough to keep the teams balanced.
+const JITTER = 0.8
+const CANDIDATES = 12
+// Candidates this close to the best balance are all acceptable picks.
+const BALANCE_TOLERANCE = 0.05
+
+function balanceOnce(
   players: PlayerInput[],
-  rules: RuleInput[] = [],
-  teamSize?: number
+  rules: RuleInput[],
+  teamSize: number | undefined,
+  t: TranslateFn,
+  random: (() => number) | null
 ): GeneratedTeams {
   const warnings: string[] = []
   const n = players.length
@@ -86,31 +125,24 @@ export function generateFallbackTeams(
   const units = buildUnits(players, rules)
   const unitById = new Map<string, Unit>()
   for (const u of units) for (const id of u.ids) unitById.set(id, u)
+  const playerById = new Map(players.map((p) => [p.id, p]))
 
-  const teamMembers: Record<'dark' | 'light', string[]> = { dark: [], light: [] }
+  const teamMembers: Record<Team, string[]> = { dark: [], light: [] }
 
-  const placeUnit = (unit: Unit, team: 'dark' | 'light') => {
+  const placeUnit = (unit: Unit, team: Team) => {
     for (const id of unit.ids) teamMembers[team].push(id)
   }
 
-  const violatesAvoidPair = (unit: Unit, team: 'dark' | 'light') =>
-    avoidPairs.some(([a, b]) => {
-      const hasA = unit.ids.includes(a)
-      const hasB = unit.ids.includes(b)
-      if (hasA && teamMembers[team].includes(b)) return true
-      if (hasB && teamMembers[team].includes(a)) return true
-      return false
-    })
+  const conflicts = (ids: string[], teamIds: string[]) =>
+    avoidPairs.some(([a, b]) =>
+      (ids.includes(a) && teamIds.includes(b)) || (ids.includes(b) && teamIds.includes(a))
+    )
+  const violatesAvoidPair = (unit: Unit, team: Team) => conflicts(unit.ids, teamMembers[team])
 
   // Step 1: seed the two teams with the two most goalkeeper-willing (distinct) units
-  const gkSkill = (p: PlayerInput) => p.skills?.goalkeeping ?? 0
-  const gkSorted = [...players]
-    .filter((p) => p.goalkeeperWillingness >= 1)
-    .sort((a, b) =>
-      b.goalkeeperWillingness - a.goalkeeperWillingness ||
-      gkSkill(b) - gkSkill(a) ||
-      b.overallRating - a.overallRating
-    )
+  const gkSorted = players
+    .filter(isGoalkeeperWilling)
+    .sort((a, b) => gkScore(b) - gkScore(a) || a.overallRating - b.overallRating)
 
   const preassignedUnits = new Set<Unit>()
   const gkUnitsPicked: Unit[] = []
@@ -133,21 +165,17 @@ export function generateFallbackTeams(
     preassignedUnits.add(gkUnitsPicked[1])
     pickCounter++
   }
+  // A short GK pool is reported once by generateTeams (ui.teamsAi.gkNone/gkFew).
 
-  if (gkUnitsPicked.length === 0) {
-    warnings.push('Ningún jugador confirmado se ofrece como arquero; se asignará el arco de todos modos.')
-  } else if (gkUnitsPicked.length === 1) {
-    warnings.push('Sólo hay un jugador con disponibilidad para el arco; un equipo quedará sin arquero natural.')
-  }
-
-  // Step 2: snake draft the rest, sorted by rating descending
+  // Step 2: snake draft the rest, sorted by rating descending (jittered when seeded)
+  const draftRating = new Map(units.map((u) => [u, u.rating + (random ? (random() - 0.5) * JITTER : 0)]))
   const remainingUnits = units
     .filter((u) => !preassignedUnits.has(u))
-    .sort((a, b) => b.rating - a.rating)
+    .sort((a, b) => draftRating.get(b)! - draftRating.get(a)!)
 
   for (const unit of remainingUnits) {
     let team = snakeTeamForPick(pickCounter)
-    const other: 'dark' | 'light' = team === 'dark' ? 'light' : 'dark'
+    const other: Team = team === 'dark' ? 'light' : 'dark'
     const teamTarget = team === 'dark' ? targetDark : targetLight
     const otherTarget = team === 'dark' ? targetLight : targetDark
 
@@ -164,9 +192,7 @@ export function generateFallbackTeams(
       if (!violatesAvoidPair(unit, alt)) {
         team = alt
       } else {
-        warnings.push(
-          `No se pudo respetar la regla de separar jugadores para: ${unit.members.map((m) => m.displayName).join(', ')}`
-        )
+        warnings.push(t('ui.teamsAi.avoidPairFailed', { names: unit.members.map((m) => m.displayName).join(', ') }))
       }
     }
 
@@ -179,8 +205,8 @@ export function generateFallbackTeams(
   let guard = 0
   while (Math.abs(diff) > 1 && guard < players.length) {
     guard++
-    const bigger: 'dark' | 'light' = diff > 0 ? 'dark' : 'light'
-    const smaller: 'dark' | 'light' = bigger === 'dark' ? 'light' : 'dark'
+    const bigger: Team = diff > 0 ? 'dark' : 'light'
+    const smaller: Team = bigger === 'dark' ? 'light' : 'dark'
 
     const movableId = teamMembers[bigger].find((id) => {
       const unit = unitById.get(id)
@@ -194,10 +220,57 @@ export function generateFallbackTeams(
     diff = teamMembers.dark.length - teamMembers.light.length
   }
 
-  // Step 4: assign positions within each team
+  // Step 4: min_defenders. Swap a defense-capable player from the other team
+  // (which must keep its own minimum) for a non-defender of the closest
+  // rating. Only single-player units that weren't seeded as keepers move.
+  // When the pool can't cover both teams the rule is soft: still spread the
+  // defenders, but generateTeams reports the shortage once (minDefendersSoft).
+  const defenders = defendersPolicy(players, rules)
+  if (defenders.required > 0) {
+    const required = defenders.required
+    const isDef = (id: string) => {
+      const p = playerById.get(id)
+      return p ? isDefenseCapable(p) : false
+    }
+    const defCount = (team: Team) => teamMembers[team].filter(isDef).length
+    const movable = (id: string) => {
+      const unit = unitById.get(id)
+      return !!unit && unit.ids.length === 1 && !preassignedUnits.has(unit)
+    }
+    const rating = (id: string) => playerById.get(id)?.overallRating ?? 0
+
+    for (const team of ['dark', 'light'] as const) {
+      const other: Team = team === 'dark' ? 'light' : 'dark'
+      let swaps = 0
+      while (defCount(team) < required && swaps < players.length) {
+        swaps++
+        let best: { incoming: string; outgoing: string; gap: number } | null = null
+        if (defCount(other) - 1 >= required) {
+          for (const incoming of teamMembers[other].filter((id) => isDef(id) && movable(id))) {
+            for (const outgoing of teamMembers[team].filter((id) => !isDef(id) && movable(id))) {
+              const teamAfter = teamMembers[team].filter((id) => id !== outgoing)
+              const otherAfter = teamMembers[other].filter((id) => id !== incoming)
+              if (conflicts([incoming], teamAfter) || conflicts([outgoing], otherAfter)) continue
+              const gap = Math.abs(rating(incoming) - rating(outgoing))
+              if (!best || gap < best.gap) best = { incoming, outgoing, gap }
+            }
+          }
+        }
+        if (!best) break
+        const { incoming, outgoing } = best
+        teamMembers[team] = [...teamMembers[team].filter((id) => id !== outgoing), incoming]
+        teamMembers[other] = [...teamMembers[other].filter((id) => id !== incoming), outgoing]
+      }
+      if (defenders.hard && defCount(team) < required) {
+        warnings.push(t('ui.teamsAi.minDefendersFailed', { team: t(`ui.teamsScreen.${team}`), n: required }))
+      }
+    }
+  }
+
+  // Step 5: assign positions within each team
   const buildTeamAssignments = (ids: string[]): TeamAssignment[] => {
     const teamPlayers = ids
-      .map((id) => players.find((p) => p.id === id))
+      .map((id) => playerById.get(id))
       .filter((p): p is PlayerInput => Boolean(p))
       .sort((a, b) => b.overallRating - a.overallRating)
 
@@ -206,11 +279,17 @@ export function generateFallbackTeams(
     const assignments: TeamAssignment[] = []
 
     formation.forEach((pos) => {
-      if (pos !== 'GK') return
-      remaining.sort((a, b) => b.goalkeeperWillingness - a.goalkeeperWillingness || b.overallRating - a.overallRating)
-      const gk = remaining.shift()
+      if (pos !== 'GK' || remaining.length === 0) return
+      // Best gkScore; on a tie the lower-rated player keeps goal. `remaining`
+      // keeps its rating order for the outfield slots below.
+      let best = 0
+      for (let i = 1; i < remaining.length; i++) {
+        const diff = gkScore(remaining[i]) - gkScore(remaining[best])
+        if (diff > 0 || (diff === 0 && remaining[i].overallRating < remaining[best].overallRating)) best = i
+      }
+      const gk = remaining.splice(best, 1)[0]
       if (gk) {
-        assignments.push({ playerId: gk.id, position: 'GK', reason: 'Arquero por disponibilidad y balance de equipo' })
+        assignments.push({ playerId: gk.id, position: 'GK', reason: t('ui.teamsAi.reasonGoalkeeper') })
       }
     })
 
@@ -220,7 +299,7 @@ export function generateFallbackTeams(
       if (idx === -1) idx = 0
       const player = remaining.splice(idx, 1)[0]
       if (player) {
-        assignments.push({ playerId: player.id, position: pos, reason: 'Balanceo determinístico por rating y posición' })
+        assignments.push({ playerId: player.id, position: pos, reason: t('ui.teamsAi.reasonField') })
       }
     })
 
@@ -231,7 +310,7 @@ export function generateFallbackTeams(
   const lightAssignments = buildTeamAssignments(teamMembers.light)
 
   const avgRating = (ids: string[]) => {
-    const list = ids.map((id) => players.find((p) => p.id === id)).filter((p): p is PlayerInput => Boolean(p))
+    const list = ids.map((id) => playerById.get(id)).filter((p): p is PlayerInput => Boolean(p))
     return list.length > 0 ? list.reduce((s, p) => s + p.overallRating, 0) / list.length : 0
   }
 
@@ -243,8 +322,39 @@ export function generateFallbackTeams(
   return {
     dark: darkAssignments,
     light: lightAssignments,
-    reasoning: 'Balanceo determinístico',
+    reasoning: t('ui.teamsAi.fallbackReasoning'),
     balanceScore,
     warnings,
   }
+}
+
+export function generateFallbackTeams(
+  players: PlayerInput[],
+  rules: RuleInput[] = [],
+  teamSize?: number,
+  options: FallbackOptions = {}
+): GeneratedTeams {
+  const t = getTranslation(options.language ?? 'es')
+  const previous = options.previous ?? null
+
+  if (options.seed === undefined && !previous) {
+    return balanceOnce(players, rules, teamSize, t, null)
+  }
+
+  // Regeneration: draw a few jittered candidates, keep the ones that differ
+  // from the published lineup and pick one of the best balanced among them.
+  const random = seededRandom(options.seed ?? 1)
+  const candidates: GeneratedTeams[] = []
+  for (let i = 0; i < CANDIDATES; i++) {
+    candidates.push(balanceOnce(players, rules, teamSize, t, random))
+  }
+  const split = (c: GeneratedTeams) => ({ dark: c.dark.map((a) => a.playerId), light: c.light.map((a) => a.playerId) })
+  const different = previous ? candidates.filter((c) => !sameSplit(previous, split(c))) : candidates
+  if (different.length === 0) {
+    const result = balanceOnce(players, rules, teamSize, t, null)
+    return { ...result, warnings: [...result.warnings, t('ui.teamsAi.noAlternative')] }
+  }
+  const bestScore = Math.max(...different.map((c) => c.balanceScore))
+  const good = different.filter((c) => c.balanceScore >= bestScore - BALANCE_TOLERANCE)
+  return good[Math.floor(random() * good.length)]
 }

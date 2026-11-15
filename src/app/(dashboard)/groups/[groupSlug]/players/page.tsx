@@ -9,7 +9,7 @@ import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
 import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
-import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { overallOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
@@ -83,7 +83,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   type MembershipWithProfile = {
     id: string
     role: string
-    member_score: number | null
     player_profiles: {
       id: string
       display_name: string
@@ -100,7 +99,6 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
     .select(`
       id,
       role,
-      member_score,
       player_profiles (
         id,
         display_name,
@@ -114,11 +112,22 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
     .eq('group_id', group.id)
     .eq('is_active', true) as { data: MembershipWithProfile[] | null }
 
+  // The score columns are not selectable (00029): get_member_scores applies
+  // the same visibility rule on the server (everyone's rows for admins,
+  // captains or 'group' visibility, otherwise only the viewer's own).
+  const scoreByPlayer = new Map<string, number | null>()
+  if (scoringEnabled) {
+    const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: group.id })
+    for (const row of scoreRows || []) {
+      scoreByPlayer.set(row.player_id, row.member_score === null ? null : Number(row.member_score))
+    }
+  }
+
   const players = (memberships || [])
     .filter((m) => m.player_profiles !== null)
     .map((m) => ({
       role: m.role as 'admin' | 'captain' | 'member',
-      memberScore: m.member_score === null ? null : Number(m.member_score),
+      memberScore: scoreByPlayer.get(m.player_profiles!.id) ?? null,
       ...(m.player_profiles as NonNullable<MembershipWithProfile['player_profiles']>),
     }))
     .sort((a, b) => {
@@ -140,7 +149,8 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   if (isAdminOrCaptain && players.length > 0) {
     const { data: summaryRows } = await supabase
       .from('player_rating_summary')
-      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .select(RATING_SUMMARY_COLUMNS)
+      .eq('group_id', group.id)
       .in('player_id', players.map((p) => p.id)) as { data: RatingSummary[] | null }
     summaries = summariesById(summaryRows)
   }

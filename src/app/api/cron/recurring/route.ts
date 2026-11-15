@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 
+// Next 14 serves GET fetches from its Data Cache in a route handler that only
+// exports GET, and supabase-js reads are GET fetches: without these, a query
+// with a constant URL would return its first answer forever.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 // Sweep that materializes the next match instance for every active
 // recurring pattern, across all groups. Also called lazily, scoped to one
 // group, from the group page server component. Not registered in

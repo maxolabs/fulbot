@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ClipboardList, Check, AlertTriangle } from 'lucide-react'
+import { ClipboardList, Check, AlertTriangle, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage, useT } from '@/i18n/provider'
 import type { MatchReport, MatchReportStat, MatchResultStatus } from '@/types/database'
 
 interface MatchReportsTableProps {
@@ -15,6 +15,8 @@ interface MatchReportsTableProps {
   people: { id: string; display_name: string }[]
   /** Number of confirmed players (for "N de M reportaron"). */
   confirmedCount: number
+  /** The group's time zone: report times read like every other time in the app. */
+  timeZone: string
 }
 
 type ReportRow = MatchReport & { match_report_stats: MatchReportStat[] }
@@ -26,15 +28,16 @@ function fmtStat(stats: MatchReportStat[], teamId: string, key: 'goals' | 'assis
   return items.length > 0 ? items.join(', ') : '—'
 }
 
-export function MatchReportsTable({ matchId, resultStatus, teams, people, confirmedCount }: MatchReportsTableProps) {
+export function MatchReportsTable({ matchId, resultStatus, teams, people, confirmedCount, timeZone }: MatchReportsTableProps) {
   const supabase = createClient()
+  const t = useT()
+  const language = useLanguage()
   const [reports, setReports] = useState<ReportRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    // The Database type has no relationship metadata, so the embedded select is untyped.
-    ;(supabase as any)
+    supabase
       .from('match_reports')
       .select('*, match_report_stats(*)')
       .eq('match_id', matchId)
@@ -42,7 +45,9 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
       .then(({ data, error: qError }: { data: ReportRow[] | null; error: { message: string } | null }) => {
         if (cancelled) return
         if (qError) {
-          setError(qError.message)
+          // Never show raw PostgREST text to players.
+          console.error('Error loading match reports:', qError)
+          setError(true)
           setReports([])
           return
         }
@@ -54,13 +59,13 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, resultStatus])
 
-  const dark = teams.find(t => t.name === 'dark')
-  const light = teams.find(t => t.name === 'light')
+  const dark = teams.find(tm => tm.name === 'dark')
+  const light = teams.find(tm => tm.name === 'light')
   if (!dark || !light) return null
 
   const nameOf = (id: string | null | undefined) => {
-    if (!id) return 'Desconocido'
-    return people.find(p => p.id === id)?.display_name ?? 'Desconocido'
+    if (!id) return t('ui.reportsTable.unknown')
+    return people.find(p => p.id === id)?.display_name ?? t('ui.reportsTable.unknown')
   }
   const statName = (s: MatchReportStat) => nameOf(s.player_id ?? s.guest_player_id)
 
@@ -75,23 +80,31 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <ClipboardList className="h-5 w-5" />
-          Reportes de los jugadores
+          {t('ui.reportsTable.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {reports === null && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner size="sm" /> Cargando reportes...
+          // Skeleton rows while the client-side fetch runs (06-principles §7).
+          <div className="space-y-2" aria-busy="true" aria-label={t('ui.reportsTable.loading')}>
+            <div className="h-5 w-2/3 rounded-sm bg-muted animate-pulse" />
+            <div className="h-9 rounded-sm bg-muted animate-pulse" />
+            <div className="h-9 rounded-sm bg-muted animate-pulse" />
           </div>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p className="flex items-center gap-1.5 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {t('ui.reportsTable.loadError')}
+          </p>
+        )}
         {reports !== null && reports.length === 0 && !error && (
-          <p className="text-sm text-muted-foreground">Todavía nadie reportó este partido.</p>
+          <p className="text-sm text-muted-foreground">{t('ui.reportsTable.empty')}</p>
         )}
         {reports !== null && reports.length > 0 && (
           <>
             <p className="text-sm text-muted-foreground">
-              {usable.length} de {confirmedCount} reportaron · {agreeing} coinciden con el resultado actual{' '}
+              {t('ui.reportsTable.summary', { reported: usable.length, confirmed: confirmedCount, agreeing })}{' '}
               <span className="font-medium text-foreground">
                 {dark.score}–{light.score}
               </span>
@@ -100,12 +113,12 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-muted-foreground border-b">
-                    <th className="py-2 pr-3 font-medium">Jugador</th>
-                    <th className="py-2 pr-3 font-medium">Resultado</th>
-                    <th className="py-2 pr-3 font-medium">Goles</th>
-                    <th className="py-2 pr-3 font-medium">Asistencias</th>
-                    <th className="py-2 pr-3 font-medium">MVP</th>
-                    <th className="py-2 font-medium">Cuándo</th>
+                    <th className="py-2 pr-3 font-medium">{t('ui.reportsTable.colPlayer')}</th>
+                    <th className="py-2 pr-3 font-medium">{t('ui.reportsTable.colScore')}</th>
+                    <th className="py-2 pr-3 font-medium">{t('ui.reportsTable.colGoals')}</th>
+                    <th className="py-2 pr-3 font-medium">{t('ui.reportsTable.colAssists')}</th>
+                    <th className="py-2 pr-3 font-medium">{t('ui.reportsTable.colMvp')}</th>
+                    <th className="py-2 font-medium">{t('ui.reportsTable.colWhen')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -122,7 +135,7 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                           {nameOf(r.reporter_player_id)}
                           {r.submitted_after_lock && (
                             <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
-                              <AlertTriangle className="h-3 w-3" /> después del cierre
+                              <AlertTriangle className="h-3 w-3" /> {t('ui.reportsTable.afterLock')}
                             </span>
                           )}
                         </td>
@@ -137,28 +150,28 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                               {r.dark_score}–{r.light_score}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">no recuerda</span>
+                            <span className="text-muted-foreground">{t('ui.reportsTable.noScore')}</span>
                           )}
                         </td>
                         <td className="py-2 pr-3">
                           <div>
-                            <span className="text-muted-foreground">Osc: </span>
+                            <span className="text-muted-foreground">{t('ui.reportsTable.darkShort')} </span>
                             {fmtStat(stats, dark.id, 'goals', statName)}
-                            {r.dark_goals_complete && <span className="text-xs text-muted-foreground"> (completo)</span>}
+                            {r.dark_goals_complete && <span className="text-xs text-muted-foreground"> {t('ui.reportsTable.complete')}</span>}
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Cla: </span>
+                            <span className="text-muted-foreground">{t('ui.reportsTable.lightShort')} </span>
                             {fmtStat(stats, light.id, 'goals', statName)}
-                            {r.light_goals_complete && <span className="text-xs text-muted-foreground"> (completo)</span>}
+                            {r.light_goals_complete && <span className="text-xs text-muted-foreground"> {t('ui.reportsTable.complete')}</span>}
                           </div>
                         </td>
                         <td className="py-2 pr-3">
                           <div>
-                            <span className="text-muted-foreground">Osc: </span>
+                            <span className="text-muted-foreground">{t('ui.reportsTable.darkShort')} </span>
                             {fmtStat(stats, dark.id, 'assists', statName)}
                           </div>
                           <div>
-                            <span className="text-muted-foreground">Cla: </span>
+                            <span className="text-muted-foreground">{t('ui.reportsTable.lightShort')} </span>
                             {fmtStat(stats, light.id, 'assists', statName)}
                           </div>
                         </td>
@@ -166,7 +179,11 @@ export function MatchReportsTable({ matchId, resultStatus, teams, people, confir
                           {r.mvp_candidate_id ? nameOf(r.mvp_candidate_id) : '—'}
                         </td>
                         <td className="py-2 whitespace-nowrap text-muted-foreground">
-                          {new Date(r.updated_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+                          {new Date(r.updated_at).toLocaleString(language === 'en' ? 'en-US' : 'es-AR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                            timeZone,
+                          })}
                         </td>
                       </tr>
                     )

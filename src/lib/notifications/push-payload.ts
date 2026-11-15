@@ -16,6 +16,8 @@ const labels = {
   es: {
     match_created: 'Se abrió la lista', waitlist_promoted: '¡Entraste al partido!',
     teams_created: 'Los equipos están listos', match_reminder: 'Se viene el partido',
+    match_cancelled: 'Se suspendió el partido',
+    match_updated: 'Cambió el partido', lineup_changed: 'Cambió la lista del partido',
     results_posted: 'Ya está el resultado', results_request: '¿Cómo salió el partido?',
     results_reminder: 'Falta tu resultado',
     open: 'Tocá para ver el partido.', signup: 'Tocá para anotarte.',
@@ -24,6 +26,8 @@ const labels = {
   en: {
     match_created: 'Signups are open', waitlist_promoted: 'You’re in!',
     teams_created: 'Teams are ready', match_reminder: 'Your match is coming up',
+    match_cancelled: 'Match cancelled',
+    match_updated: 'Match details changed', lineup_changed: 'The match lineup changed',
     results_posted: 'The result is in', results_request: 'How did the match go?',
     results_reminder: 'Your result is still missing',
     open: 'Tap to view the match.', signup: 'Tap to sign up.',
@@ -53,7 +57,7 @@ export function buildPushPayload(event: PushEvent) {
     // Republished teams/results replace the previous alert for that match.
     tag: event.match_id && ['teams_created', 'results_posted', 'results_reminder'].includes(event.type)
       ? `fulbot-${event.type}-${event.match_id}` : `fulbot-${event.notification_id}`,
-    url: `${matchPath}${reporting ? '#reportar' : event.type === 'teams_created' ? '/teams' : ''}`,
+    url: `${matchPath}${reporting ? '#reportar' : event.type === 'teams_created' || (event.type === 'lineup_changed' && event.payload.phase !== 'late') ? '/teams' : ''}`,
   }
 }
 

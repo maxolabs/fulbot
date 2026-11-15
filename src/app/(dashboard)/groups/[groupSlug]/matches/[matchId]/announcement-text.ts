@@ -1,3 +1,4 @@
+import { getAppBaseUrl } from '@/lib/app-url'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
 export interface AnnouncementInput {
@@ -28,7 +29,7 @@ export function buildAnnouncementText({
   const timeLabel = formatMatchTime(dateTime, timeZone)
   const spotsLeft = Math.max(0, maxPlayers - confirmedCount)
   const spotsLabel = spotsLeft > 0 ? `faltan ${spotsLeft} lugares` : 'no quedan lugares'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl = getAppBaseUrl()
   const signupUrl = `${appUrl}/m/${matchId}`
 
   return (

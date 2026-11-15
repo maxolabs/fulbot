@@ -219,7 +219,7 @@ export function MemberScoringSettingsCard({ groupId }: MemberScoringSettingsCard
       }
       const nextSettings = { ...existingSettings, member_scoring: memberScoring }
 
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('groups')
         .update({ settings: nextSettings })
         .eq('id', groupId)

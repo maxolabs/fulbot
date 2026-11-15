@@ -7,12 +7,29 @@ import {
   PlayerInput,
   RuleInput,
   MatchHistoryEntry,
+  PreviousLineup,
 } from '@/lib/ai/team-generator'
 import type { Json } from '@/types/database'
-import { overallOf, skillsOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { getT, type Language } from '@/i18n/server'
+import { overallOf, skillsOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
+import { rulesForPlayers } from '@/lib/ai/constraints'
+
+// The OpenAI attempts stop at ~25s (team-generator.ts) and the fallback runs
+// after that, so the whole request fits in a minute.
+export const maxDuration = 60
 
 interface RouteContext {
   params: Promise<{ matchId: string }>
+}
+
+// publish_match_teams raises Spanish messages meant for logs; the client gets
+// a translated key instead (never the raw database error).
+function publishErrorKey(message: string): string {
+  if (message.includes('La lista de confirmados cambió') || message.includes('Asignaciones inválidas')) return 'rosterChanged'
+  if (message.includes('No tenés permiso')) return 'forbidden'
+  if (message.includes('no permite modificar')) return 'notAllowed'
+  if (message.includes('al menos 4')) return 'needPlayers'
+  return 'saveFailed'
 }
 
 const KNOWN_RULE_TYPES = new Set<RuleInput['type']>([
@@ -23,6 +40,10 @@ const KNOWN_RULE_TYPES = new Set<RuleInput['type']>([
 ])
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  // Spanish until we know who is asking (the app's default language)
+  let t = getT('es')
+  const fail = (key: string, status: number) =>
+    NextResponse.json({ error: t(`ui.teamsAi.errors.${key}`) }, { status })
   try {
     const { matchId } = await context.params
     const supabase = await createClient()
@@ -30,8 +51,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+      return fail('unauthorized', 401)
     }
+
+    // Errors and the AI's reasoning/warnings come back in the caller's language
+    const { data: userData } = await supabase
+      .from('users')
+      .select('preferred_language')
+      .eq('id', user.id)
+      .single() as { data: { preferred_language: Language } | null }
+    const language: Language = userData?.preferred_language === 'en' ? 'en' : 'es'
+    t = getT(language)
 
     // Get user's player profile
     const { data: playerProfile } = await supabase
@@ -41,7 +71,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!playerProfile) {
-      return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 400 })
+      return fail('profileNotFound', 400)
     }
 
     // Get match with group info
@@ -52,7 +82,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!match) {
-      return NextResponse.json({ error: 'Partido no encontrado' }, { status: 404 })
+      return fail('matchNotFound', 404)
     }
 
     // Check if user is admin or captain of the group
@@ -65,17 +95,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
-      return NextResponse.json({ error: 'No tenés permiso para armar equipos en este grupo' }, { status: 403 })
+      return fail('forbidden', 403)
     }
 
-    if (!['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
-      return NextResponse.json({ error: 'Este partido no permite modificar equipos' }, { status: 409 })
+    if (!match.status || !['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)) {
+      return fail('notAllowed', 409)
     }
 
     // Get confirmed signups with player profiles and guest players.
-    // The hand-written Database type doesn't carry FK relationship metadata, so the
-    // client can't infer the shape of this embedded select on its own - we assert the
-    // known shape here instead (same pattern used elsewhere in this codebase).
+    // Asserts the known shape: several profile columns are nullable in the schema
+    // (DEFAULT without NOT NULL) but always set in practice.
     type SignupWithPlayer = {
       id: string
       player_id: string | null
@@ -96,7 +125,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       guest_players: {
         id: string
         display_name: string
-        estimated_rating: number
         preferred_positions: string[]
       } | null
     }
@@ -123,7 +151,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
         guest_players (
           id,
           display_name,
-          estimated_rating,
           preferred_positions
         )
       `)
@@ -135,41 +162,47 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (signupsError) {
       console.error('Error fetching signups:', signupsError)
-      return NextResponse.json({ error: 'No se pudieron obtener los jugadores anotados' }, { status: 500 })
+      return fail('signupsFailed', 500)
     }
 
     if (!signups || signups.length < 4) {
-      return NextResponse.json(
-        { error: 'Se necesitan al menos 4 jugadores confirmados para armar equipos' },
-        { status: 400 }
-      )
+      return fail('needPlayers', 400)
     }
 
     // Scores come from player_rating_summary (peer ratings blended with post-match
-    // ratings). The caller is an admin/captain, so RLS lets them read it.
+    // ratings), this group's row only (OD-9): a level earned in another group
+    // says little here. The caller is an admin/captain, so RLS lets them read it.
     const ratedIds = signups
       .map((s) => s.player_profiles?.id)
       .filter((id): id is string => !!id)
     const { data: summaryRows } = ratedIds.length > 0
       ? await supabase
           .from('player_rating_summary')
-          .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+          .select(RATING_SUMMARY_COLUMNS)
+          .eq('group_id', match.group_id)
           .in('player_id', ratedIds) as { data: RatingSummary[] | null }
       : { data: [] as RatingSummary[] }
     const summaries = summariesById(summaryRows)
 
     // Member score ("Compromiso") of each registered player in the match's group
     // (docs/member-scoring.md §5.3). NULL (newcomer) and guests fall back to neutral.
+    // The score columns are not selectable (00029): get_member_scores returns
+    // every row of the group to an admin/captain, which the caller is.
     const { data: membershipRows } = ratedIds.length > 0
-      ? await supabase
-          .from('group_memberships')
-          .select('player_id, member_score')
-          .eq('group_id', match.group_id)
-          .in('player_id', ratedIds) as { data: { player_id: string; member_score: number | null }[] | null }
-      : { data: [] as { player_id: string; member_score: number | null }[] }
+      ? await supabase.rpc('get_member_scores', { p_group_id: match.group_id })
+      : { data: [] }
     const memberScoreById = new Map(
       (membershipRows || []).map((m) => [m.player_id, m.member_score === null ? null : Number(m.member_score)])
     )
+
+    // Guest levels are organizer-only columns (00035); the caller is one.
+    const guestRatingById = new Map<string, number | null>()
+    if (signups.some((s) => s.guest_players)) {
+      const { data: guestRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+      for (const row of guestRows || []) {
+        guestRatingById.set(row.guest_player_id, row.estimated_rating === null ? null : Number(row.estimated_rating))
+      }
+    }
 
     // Convert to PlayerInput format (registered players + guests)
     const players: PlayerInput[] = signups
@@ -201,7 +234,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id: gp.id,
           displayName: gp.display_name,
           preferredPositions: gp.preferred_positions,
-          estimatedRating: gp.estimated_rating,
+          estimatedRating: guestRatingById.get(gp.id) ?? null,
         })
       })
 
@@ -217,7 +250,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .or(`group_id.eq.${match.group_id},match_id.eq.${matchId}`)
       .eq('is_active', true)
 
-    const ruleInputs: RuleInput[] = (rules || [])
+    // Pair rules about players who aren't in this match are dropped (they would
+    // reach the prompt and the snapshot as raw ids).
+    const ruleInputs: RuleInput[] = rulesForPlayers(players, (rules || [])
       .filter((r) => KNOWN_RULE_TYPES.has(r.rule_type as RuleInput['type']))
       .map((r) => {
         const d = (r.data ?? {}) as { player_ids?: string[]; min_count?: number }
@@ -226,7 +261,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           playerIds: d.player_ids,
           value: d.min_count,
         }
-      })
+      }))
 
     // Recent match history, for teammate-pair rotation
     const { data: historyRows } = await supabase.rpc('get_recent_match_history', {
@@ -241,13 +276,41 @@ export async function POST(request: NextRequest, context: RouteContext) {
       lightTeamPlayers: (row.light_team_players as { player_id: string; name: string }[] | null) ?? null,
     }))
 
+    // "Regenerar": the lineup already published, so the new proposal can differ
+    // from it (the model is told to, the fallback draws a varied candidate).
+    const { data: currentTeams } = await supabase
+      .from('teams')
+      .select('id, name')
+      .eq('match_id', matchId) as { data: { id: string; name: 'dark' | 'light' }[] | null }
+    let previous: PreviousLineup | null = null
+    if (currentTeams && currentTeams.length > 0) {
+      const { data: currentAssignments } = await supabase
+        .from('team_assignments')
+        .select('team_id, player_id, guest_player_id')
+        .in('team_id', currentTeams.map((team) => team.id)) as {
+          data: { team_id: string; player_id: string | null; guest_player_id: string | null }[] | null
+        }
+      const idsOf = (name: 'dark' | 'light') => {
+        const teamId = currentTeams.find((team) => team.name === name)?.id
+        return (currentAssignments || [])
+          .filter((a) => a.team_id === teamId)
+          .map((a) => a.player_id ?? a.guest_player_id)
+          .filter((id): id is string => !!id)
+      }
+      previous = { dark: idsOf('dark'), light: idsOf('light') }
+    }
+
     // Generate teams (OpenAI with hard-constraint validation, falls back to the
-    // deterministic balancer when the key is missing or the AI keeps failing)
+    // rule-based balancer when the key is missing or the AI keeps failing)
     const teamSize = Math.ceil(players.length / 2)
-    const generatedTeams = await generateTeams(players, ruleInputs, teamSize, historyEntries)
+    const generatedTeams = await generateTeams(players, ruleInputs, teamSize, historyEntries, {
+      language,
+      previous,
+      seed: previous ? Math.floor(Math.random() * 2 ** 31) : undefined,
+    })
 
     // Persist teams + assignments atomically through the shared RPC (also used by
-    // manual drag/drop edits), then update match status + AI snapshot.
+    // manual drag/drop edits), which also sets the status and stores the snapshot.
     const assignmentsPayload = [
       ...generatedTeams.dark.map((a, index) => ({
         team: 'dark' as const,
@@ -267,29 +330,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })),
     ]
 
-    const generatedAt = new Date().toISOString()
+    // What the organizer analysis card shows, and nothing else (OD-6): the
+    // snapshot lives in match_ai_snapshots (admins and captains only), and
+    // publish_match_teams whitelists the same fields again, so ratings, member
+    // scores and the prompt never reach the database. A manual publish
+    // (draggable-teams) sends NULL, which removes it: the analysis describes
+    // the AI lineup, not one rearranged by hand.
     const snapshot = {
-      input: {
-        players: players.map((p) => ({
-          id: p.id,
-          name: p.displayName,
-          rating: p.overallRating,
-          memberScore: p.memberScore,
-          isGuest: p.isGuest ?? false,
-        })),
-        rules: ruleInputs,
-        recentMatchesConsidered: historyEntries.length,
-      },
       output: {
-        dark: generatedTeams.dark,
-        light: generatedTeams.light,
         reasoning: generatedTeams.reasoning,
         balanceScore: generatedTeams.balanceScore,
         warnings: generatedTeams.warnings,
       },
       provider: generatedTeams.provider,
       model: generatedTeams.model ?? null,
-      generatedAt,
+      generatedAt: new Date().toISOString(),
     } as unknown as Json
 
     const { error: saveError } = await supabase.rpc('publish_match_teams', {
@@ -298,7 +353,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       p_snapshot: snapshot,
     })
     if (saveError) {
-      return NextResponse.json({ error: saveError.message }, { status: 409 })
+      console.error('publish_match_teams failed:', saveError)
+      return fail(publishErrorKey(saveError.message), 409)
     }
     const { data: teams } = await supabase.from('teams').select('id, name').eq('match_id', matchId)
     const darkTeamId = teams?.find((team) => team.name === 'dark')?.id ?? null
@@ -323,9 +379,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
   } catch (error) {
     console.error('Team generation error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al generar equipos. Probá de nuevo en un momento.' },
-      { status: 500 }
-    )
+    return fail('generic', 500)
   }
 }

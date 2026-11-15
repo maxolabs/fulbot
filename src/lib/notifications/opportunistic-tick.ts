@@ -1,8 +1,9 @@
 // Opportunistic scheduler tick (docs/match-results-consensus.md §5, §11.2).
 //
-// A serverless deploy has no resident process, so if nobody runs
-// scripts/ticker.ts the only guaranteed driver is the daily Vercel cron. This
-// module lets ordinary traffic stand in for the ticker: the dashboard layout
+// In production the ticker is Supabase pg_cron + pg_net (migration 00036,
+// docs/deploy.md); scripts/ticker.ts drives it locally. This module is a
+// backstop for when that driver is down or not configured yet (Vault secrets
+// missing): ordinary traffic stands in for the ticker. The dashboard layout
 // calls maybeTick() on every render, and at most once a minute per instance
 // it runs the same runTick() the /api/cron/tick route uses -- after the
 // response, via @vercel/functions' waitUntil (a no-op outside Vercel, where

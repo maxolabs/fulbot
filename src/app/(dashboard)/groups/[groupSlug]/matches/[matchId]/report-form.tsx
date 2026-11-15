@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
 import { Spinner } from '@/components/ui/spinner'
+import { Sheet } from '@/components/ui/sheet'
 import { createClient } from '@/lib/supabase/client'
 import type { Json, MatchReportStatInput, MatchResultStatus } from '@/types/database'
 
@@ -72,7 +73,7 @@ interface ReportFormProps {
 
 type Counts = Record<string, { goals: number; assists: number }>
 
-const STEPS = ['Resultado', 'Goles', 'MVP'] as const
+const STEPS = ['ui.report.stepScore', 'ui.report.stepGoals', 'ui.report.stepMvp'] as const
 
 function statKey(teamId: string, playerKey: string) {
   return `${teamId}:${playerKey}`
@@ -89,14 +90,26 @@ function countsFromReport(report: OwnReport | null): Counts {
 }
 
 // supabase.rpc resolves with `{ error }` (a plain PostgrestError, not an Error
-// instance): read the SQL layer's Spanish message off `.message`.
-function errorMessage(err: unknown, fallback: string): string {
-  const message = (err as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message.trim() ? message : fallback
+// instance). The SQL layer raises Spanish text (submit_match_report /
+// delete_my_match_report, 00021): map the known ones to i18n keys and never
+// show the raw message.
+function errorKey(err: unknown, fallbackKey: string): string {
+  const raw = (err as { message?: unknown } | null)?.message
+  const message = typeof raw === 'string' ? raw : ''
+  if (message.includes('perfil de jugador')) return 'ui.report.errorNoProfile'
+  if (message.includes('Partido no encontrado')) return 'ui.report.errorNotFound'
+  if (message.includes('todavía no terminó')) return 'ui.report.errorNotFinished'
+  if (message.includes('No jugaste')) return 'ui.report.errorNotPlayed'
+  if (message.includes('ventana para reportar')) return 'ui.report.errorWindowClosed'
+  if (message.includes('votarte a vos mismo')) return 'ui.report.errorSelfMvp'
+  if (message.includes('El MVP tiene que haber jugado')) return 'ui.report.errorMvpNotPlayed'
+  if (message.includes('reporte está vacío')) return 'ui.report.emptyError'
+  if (message.includes('inválido')) return 'ui.report.errorInvalid'
+  return fallbackKey
 }
 
-function teamLabel(name: 'dark' | 'light') {
-  return name === 'dark' ? 'Oscuro' : 'Claro'
+function teamLabelKey(name: 'dark' | 'light') {
+  return name === 'dark' ? 'ui.report.dark' : 'ui.report.light'
 }
 
 export function ReportForm({
@@ -135,6 +148,8 @@ export function ReportForm({
   const [mvp, setMvp] = useState<string | null>(existingReport?.mvp_candidate_id ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const teamLabel = (name: 'dark' | 'light') => t(teamLabelKey(name))
 
   if (!darkTeam || !lightTeam) return null
 
@@ -206,7 +221,7 @@ export function ReportForm({
 
   const handleSubmit = async () => {
     if (isEmpty) {
-      setError('El reporte está vacío: cargá al menos el resultado, un gol o el MVP.')
+      setError(t('ui.report.emptyError'))
       return
     }
     setSaving(true)
@@ -227,14 +242,14 @@ export function ReportForm({
       setJustSaved(true)
       router.refresh()
     } catch (err) {
-      setError(errorMessage(err, 'No se pudo guardar el reporte'))
+      console.error('Error saving match report:', err)
+      setError(t(errorKey(err, 'ui.report.saveError')))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm('¿Borrar tu reporte de este partido?')) return
     setSaving(true)
     setError(null)
     try {
@@ -248,9 +263,12 @@ export function ReportForm({
       setComplete({ [darkTeam.id]: false, [lightTeam.id]: false })
       setEditing(true)
       setStep(0)
+      setDeleteOpen(false)
       router.refresh()
     } catch (err) {
-      setError(errorMessage(err, 'No se pudo borrar el reporte'))
+      console.error('Error deleting match report:', err)
+      setError(t(errorKey(err, 'ui.report.deleteError')))
+      setDeleteOpen(false)
     } finally {
       setSaving(false)
     }
@@ -260,7 +278,7 @@ export function ReportForm({
   if (!editing && existingReport) {
     const nameOf = (s: OwnReportStat) => {
       const key = s.player_id || s.guest_player_id
-      return teams.flatMap(t => t.players).find(p => p.key === key)?.display_name || 'Jugador'
+      return teams.flatMap(tm => tm.players).find(p => p.key === key)?.display_name || t('ui.report.player')
     }
     const mvpName = mvpCandidates.find(c => c.id === existingReport.mvp_candidate_id)?.display_name ?? null
     const hasScore = existingReport.dark_score !== null && existingReport.light_score !== null
@@ -270,17 +288,17 @@ export function ReportForm({
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <ClipboardList className="h-5 w-5" />
-            Tu reporte
+            {t('ui.report.yourReport')}
           </CardTitle>
           {agreement && agreement.total > 0 && hasScore && (
             <p className="text-sm text-muted-foreground mt-1">
-              Coincidís con {agreement.same} de {agreement.total} en el resultado
+              {t('ui.report.agreement', { same: agreement.same, total: agreement.total })}
             </p>
           )}
           {existingReport.submitted_after_lock && (
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <Lock className="h-3 w-3" />
-              Enviado después del cierre: no cambia el resultado
+              {t('ui.report.afterLock')}
             </p>
           )}
         </CardHeader>
@@ -298,12 +316,12 @@ export function ReportForm({
 
           <div className="flex items-center justify-center gap-4 text-center">
             <div>
-              <span className="text-xs text-muted-foreground">Oscuro</span>
+              <span className="text-xs text-muted-foreground">{t('ui.report.dark')}</span>
               <p className="text-2xl font-bold">{hasScore ? existingReport.dark_score : '?'}</p>
             </div>
             <span className="text-xl text-muted-foreground font-light">—</span>
             <div>
-              <span className="text-xs text-muted-foreground">Claro</span>
+              <span className="text-xs text-muted-foreground">{t('ui.report.light')}</span>
               <p className="text-2xl font-bold">{hasScore ? existingReport.light_score : '?'}</p>
             </div>
           </div>
@@ -320,9 +338,9 @@ export function ReportForm({
                       <p key={`${s.team_id}-${s.player_id || s.guest_player_id}`} className="pl-2">
                         <span className="font-medium">{nameOf(s)}</span>
                         <span className="text-muted-foreground">
-                          {s.goals > 0 && ` ${s.goals} ${s.goals === 1 ? 'gol' : 'goles'}`}
+                          {s.goals > 0 && ` ${s.goals === 1 ? t('ui.report.goalsOne') : t('ui.report.goalsMany', { count: s.goals })}`}
                           {s.goals > 0 && s.assists > 0 && ' ·'}
-                          {s.assists > 0 && ` ${s.assists} asist.`}
+                          {s.assists > 0 && ` ${t('ui.report.assistsShort', { count: s.assists })}`}
                         </span>
                       </p>
                     ))}
@@ -335,7 +353,7 @@ export function ReportForm({
           {mvpName && (
             <p className="flex items-center gap-1.5 text-sm text-warning">
               <Trophy className="h-4 w-4" />
-              Tu MVP: {mvpName}
+              {t('ui.report.yourMvp', { name: mvpName })}
             </p>
           )}
 
@@ -344,7 +362,7 @@ export function ReportForm({
           {canEdit && isLocked && !existingReport.submitted_after_lock && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              El resultado ya está cerrado por el admin; si lo editás, queda registrado igual.
+              {t('ui.report.lockedEditNote')}
             </p>
           )}
 
@@ -352,20 +370,38 @@ export function ReportForm({
             <div className="flex gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={startEditing} disabled={saving}>
                 <Pencil className="mr-2 h-4 w-4" />
-                Editar
+                {t('ui.report.edit')}
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleDelete} disabled={saving}>
+              <Button variant="ghost" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                Borrar
+                {t('ui.report.delete')}
               </Button>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" />
-              La ventana para reportar cerró
+              {t('ui.report.windowClosedShort')}
             </p>
           )}
         </CardContent>
+        {canEdit && (
+          <Sheet
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            title={t('ui.report.deleteConfirmTitle')}
+            description={t('ui.report.deleteConfirmBody')}
+          >
+            <div className="flex flex-wrap gap-3 pt-4">
+              <Button variant="destructive" disabled={saving} onClick={handleDelete}>
+                {saving ? <Spinner size="sm" /> : <Trash2 className="h-4 w-4" />}
+                {t('ui.report.delete')}
+              </Button>
+              <Button variant="outline" disabled={saving} onClick={() => setDeleteOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </Sheet>
+        )}
       </Card>
     )
   }
@@ -376,7 +412,7 @@ export function ReportForm({
       <Card id="reportar">
         <CardContent className="py-4 text-sm text-muted-foreground flex items-center gap-2">
           <Lock className="h-4 w-4" />
-          La ventana para reportar este partido cerró.
+          {t('ui.report.windowClosed')}
         </CardContent>
       </Card>
     )
@@ -390,11 +426,11 @@ export function ReportForm({
         <span className="text-sm text-muted-foreground">{label}</span>
       </div>
       <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.max(0, value - 1))} aria-label={`Menos ${label}`}>
+        <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.max(0, value - 1))} aria-label={t('ui.report.less', { label })}>
           <Minus className="h-4 w-4" />
         </Button>
         <span className="text-3xl sm:text-4xl font-bold w-10 sm:w-12 text-center tabular-nums">{value}</span>
-        <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.min(99, value + 1))} aria-label={`Más ${label}`}>
+        <Button type="button" variant="outline" size="icon" onClick={() => setValue(Math.min(99, value + 1))} aria-label={t('ui.report.more', { label })}>
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -414,7 +450,7 @@ export function ReportForm({
         onClick={() => bump(teamId, playerKey, field, -1)}
         disabled={value === 0}
         className="h-7 w-7 rounded-md border text-sm disabled:opacity-30 hover:bg-muted"
-        aria-label={`Quitar ${label}`}
+        aria-label={t('ui.report.removeStat', { label })}
       >
         −
       </button>
@@ -425,7 +461,7 @@ export function ReportForm({
         type="button"
         onClick={() => bump(teamId, playerKey, field, 1)}
         className="h-7 w-7 rounded-md border text-sm hover:bg-muted"
-        aria-label={`Sumar ${label}`}
+        aria-label={t('ui.report.addStat', { label })}
       >
         +
       </button>
@@ -451,7 +487,9 @@ export function ReportForm({
               overScore ? 'text-destructive' : matchesScore ? 'text-success' : 'text-muted-foreground'
             }`}
           >
-            {targetScore !== null ? `${totals.goals} / ${targetScore} goles` : `${totals.goals} goles`}
+            {targetScore !== null
+              ? t('ui.report.goalsVsScore', { goals: totals.goals, score: targetScore })
+              : t('ui.report.goalsCount', { goals: totals.goals })}
           </span>
         </div>
 
@@ -463,10 +501,10 @@ export function ReportForm({
               <div key={player.key} className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2">
                 <span className="flex-1 min-w-0 truncate text-sm">
                   {player.display_name}
-                  {foreign && <span className="text-xs text-muted-foreground ml-1">(otro equipo)</span>}
+                  {foreign && <span className="text-xs text-muted-foreground ml-1">{t('ui.report.otherTeam')}</span>}
                 </span>
-                {renderCounter(team.id, player.key, 'goals', value.goals, `gol de ${player.display_name}`)}
-                {renderCounter(team.id, player.key, 'assists', value.assists, `asistencia de ${player.display_name}`)}
+                {renderCounter(team.id, player.key, 'goals', value.goals, t('ui.report.goalOf', { name: player.display_name }))}
+                {renderCounter(team.id, player.key, 'assists', value.assists, t('ui.report.assistOf', { name: player.display_name }))}
               </div>
             )
           })}
@@ -480,7 +518,7 @@ export function ReportForm({
               checked={!!complete[team.id]}
               onChange={e => setComplete(prev => ({ ...prev, [team.id]: e.target.checked }))}
             />
-            Estos fueron todos los goles de este equipo
+            {t('ui.report.allGoals')}
           </label>
           {!showOthers[team.id] && (
             <button
@@ -488,7 +526,7 @@ export function ReportForm({
               className="text-xs text-muted-foreground underline-offset-2 hover:underline"
               onClick={() => setShowOthers(prev => ({ ...prev, [team.id]: true }))}
             >
-              ¿Alguien del otro equipo?
+              {t('ui.report.someoneElse')}
             </button>
           )}
         </div>
@@ -503,15 +541,15 @@ export function ReportForm({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <ClipboardList className="h-5 w-5" />
-          {existingReport ? 'Editá tu reporte' : 'Cargá el resultado'}
+          {existingReport ? t('ui.report.editTitle') : t('ui.report.newTitle')}
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          Cargá lo que te acuerdes, el resto lo completan los demás.
+          {t('ui.report.intro')}
         </p>
         {isLocked && (
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
             <Lock className="h-3 w-3" />
-            El resultado ya está cerrado por el admin; tu reporte queda registrado igual.
+            {t('ui.report.lockedNote')}
           </p>
         )}
         <ol className="flex flex-wrap items-center gap-2 mt-3 text-xs">
@@ -525,7 +563,7 @@ export function ReportForm({
                 }`}
               >
                 <span className="font-semibold">{i + 1}</span>
-                <span>{label}</span>
+                <span>{t(label)}</span>
               </button>
               {i < STEPS.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
             </li>
@@ -537,13 +575,13 @@ export function ReportForm({
           <div className="space-y-4">
             {scoreKnown ? (
               <div className="flex items-center justify-center gap-3 sm:gap-8">
-                {renderStepper('Oscuro', darkScore, setDarkScore, darkTeam.color_hex)}
+                {renderStepper(t('ui.report.dark'), darkScore, setDarkScore, darkTeam.color_hex)}
                 <span className="text-2xl text-muted-foreground font-light mt-5 hidden sm:inline">—</span>
-                {renderStepper('Claro', lightScore, setLightScore, lightTeam.color_hex)}
+                {renderStepper(t('ui.report.light'), lightScore, setLightScore, lightTeam.color_hex)}
               </div>
             ) : (
               <p className="text-center text-sm text-muted-foreground py-4">
-                Sin resultado: otros lo van a cargar.
+                {t('ui.report.noScore')}
               </p>
             )}
             <div className="flex justify-center">
@@ -552,7 +590,7 @@ export function ReportForm({
                 className="text-xs text-muted-foreground underline-offset-2 hover:underline"
                 onClick={() => setScoreKnown(v => !v)}
               >
-                {scoreKnown ? 'No me acuerdo el resultado' : 'Sí me acuerdo el resultado'}
+                {scoreKnown ? t('ui.report.forgotScore') : t('ui.report.rememberScore')}
               </button>
             </div>
           </div>
@@ -567,7 +605,7 @@ export function ReportForm({
 
         {step === 2 && (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">¿Quién fue el mejor jugador? (opcional)</p>
+            <p className="text-sm text-muted-foreground">{t('ui.report.mvpPrompt')}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {otherCandidates.map(player => (
                 <button
@@ -597,17 +635,17 @@ export function ReportForm({
         <div className="flex items-center justify-between gap-2 pt-1">
           <Button type="button" variant="ghost" size="sm" onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0}>
             <ChevronLeft className="mr-1 h-4 w-4" />
-            Atrás
+            {t('ui.report.back')}
           </Button>
           {step < STEPS.length - 1 ? (
             <Button type="button" size="sm" onClick={() => setStep(s => s + 1)}>
-              Siguiente
+              {t('ui.report.next')}
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           ) : (
             <Button type="button" size="sm" onClick={handleSubmit} disabled={saving}>
               {saving ? <Spinner size="sm" className="mr-2" /> : <Check className="mr-2 h-4 w-4" />}
-              {existingReport ? 'Guardar cambios' : 'Enviar reporte'}
+              {existingReport ? t('ui.report.saveChanges') : t('ui.report.send')}
             </Button>
           )}
         </div>

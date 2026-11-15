@@ -9,6 +9,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
 import type { Json } from '@/types/database'
+import { useT } from '@/i18n/provider'
+import { TimezoneSelect, isValidTimezone } from './timezone-select'
 
 interface GroupSettingsFormProps {
   group: {
@@ -19,6 +21,7 @@ interface GroupSettingsFormProps {
     default_match_day: number | null
     default_match_time: string | null
     default_max_players: number
+    timezone: string | null
     settings: Json | null
   }
 }
@@ -41,17 +44,12 @@ function readResultWeights(settings: Json | null): ResultWeights {
   return { admin: num('admin'), captain: num('captain'), member: num('member') }
 }
 
-const DAYS = [
-  { value: 0, label: 'Domingo' },
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
-]
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+const MIN_WEIGHT = 0.05
+const MAX_WEIGHT = 10
 
 export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
 
@@ -64,6 +62,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
   const [defaultMatchDay, setDefaultMatchDay] = useState(group.default_match_day ?? 1)
   const [defaultMatchTime, setDefaultMatchTime] = useState(group.default_match_time || '21:00')
   const [defaultMaxPlayers, setDefaultMaxPlayers] = useState(group.default_max_players)
+  const [timezone, setTimezone] = useState(group.timezone || 'America/Argentina/Buenos_Aires')
   const [weights, setWeights] = useState<ResultWeights>(() => readResultWeights(group.settings))
 
   const setWeight = (key: keyof ResultWeights, value: number) => {
@@ -77,11 +76,27 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
     setSuccess(false)
 
     try {
+      // groups_name_length (00027): trimmed, 1..50.
+      const trimmedName = name.trim()
+      if (!trimmedName) {
+        setError(t('ui.screens.groupSettings.nameRequired'))
+        setLoading(false)
+        return
+      }
+      setName(trimmedName)
+      const trimmedDescription = description.trim()
+      setDescription(trimmedDescription)
+
       const invalid = (Object.keys(weights) as (keyof ResultWeights)[]).some(
-        k => !Number.isFinite(weights[k]) || weights[k] <= 0 || weights[k] > 10
+        k => !Number.isFinite(weights[k]) || weights[k] < MIN_WEIGHT || weights[k] > MAX_WEIGHT
       )
       if (invalid) {
-        setError('Los pesos deben ser números entre 0.05 y 10')
+        setError(t('ui.screens.groupSettings.weightsInvalid'))
+        setLoading(false)
+        return
+      }
+      if (!isValidTimezone(timezone)) {
+        setError(t(timezone ? 'ui.lifecycle.invalidTimezone' : 'ui.lifecycle.timezoneRequired'))
         setLoading(false)
         return
       }
@@ -93,15 +108,15 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
           : {}
       const nextSettings = { ...existingSettings, result_weights: weights }
 
-       
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('groups')
         .update({
-          name,
-          description: description || null,
+          name: trimmedName,
+          description: trimmedDescription || null,
           default_match_day: defaultMatchDay,
           default_match_time: defaultMatchTime,
           default_max_players: defaultMaxPlayers,
+          timezone,
           settings: nextSettings,
         })
         .eq('id', group.id)
@@ -115,7 +130,16 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error updating group:', err)
-      setError('Error al guardar los cambios')
+      // groups_validate_timezone (00028) raises 22023 for a zone Postgres doesn't know.
+      const dbError = err as { code?: string; message?: string }
+      if (dbError?.code === '22023' || dbError?.message?.includes('invalid_timezone')) {
+        setError(t('ui.lifecycle.invalidTimezone'))
+      } else if (dbError?.code === '23514' && dbError.message?.includes('groups_name_length')) {
+        // The CHECK constraint is the server-side guard for a blank name.
+        setError(t('ui.screens.groupSettings.nameRequired'))
+      } else {
+        setError(t('ui.screens.groupSettings.saveError'))
+      }
     } finally {
       setLoading(false)
     }
@@ -124,10 +148,10 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <FormNotice kind="error">{error}</FormNotice>}
-      {success && <FormNotice kind="success">Cambios guardados correctamente</FormNotice>}
+      {success && <FormNotice kind="success">{t('ui.screens.groupSettings.saved')}</FormNotice>}
 
       <div className="space-y-1.5">
-        <Label htmlFor="name">Nombre del grupo</Label>
+        <Label htmlFor="name">{t('ui.screens.groupSettings.nameLabel')}</Label>
         <Input
           id="name"
           value={name}
@@ -139,36 +163,36 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="description">Descripción</Label>
+        <Label htmlFor="description">{t('ui.screens.groupSettings.descriptionLabel')}</Label>
         <Input
           id="description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={loading}
           maxLength={200}
-          placeholder="Opcional"
+          placeholder={t('ui.screens.groupSettings.descriptionPlaceholder')}
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <Label htmlFor="defaultMatchDay">Día habitual</Label>
+          <Label htmlFor="defaultMatchDay">{t('ui.screens.groupSettings.defaultDay')}</Label>
           <NativeSelect
             id="defaultMatchDay"
             value={defaultMatchDay}
             onChange={(e) => setDefaultMatchDay(Number(e.target.value))}
             disabled={loading}
           >
-            {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>
-                {day.label}
+            {DAY_KEYS.map((key, value) => (
+              <option key={key} value={value}>
+                {t(`days.${key}`)}
               </option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="defaultMatchTime">Hora habitual</Label>
+          <Label htmlFor="defaultMatchTime">{t('ui.screens.groupSettings.defaultTime')}</Label>
           <Input
             id="defaultMatchTime"
             type="time"
@@ -179,7 +203,7 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="defaultMaxPlayers">Jugadores máx.</Label>
+          <Label htmlFor="defaultMaxPlayers">{t('ui.screens.groupSettings.maxPlayers')}</Label>
           <Input
             id="defaultMaxPlayers"
             type="number"
@@ -192,22 +216,31 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
         </div>
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="groupTimezone">{t('ui.screens.groupSettings.timezone')}</Label>
+        <TimezoneSelect
+          id="groupTimezone"
+          value={timezone}
+          onChange={setTimezone}
+          disabled={loading}
+          extraOption={group.timezone}
+        />
+        <p className="text-xs text-muted-foreground">{t('ui.screens.groupSettings.timezoneHint')}</p>
+      </div>
+
       <div className="space-y-3">
         <div>
-          <p className="text-sm font-medium">Peso de los reportes de resultado</p>
-          <p className="text-xs text-muted-foreground">
-            Cuando los jugadores reportan el resultado, cada reporte pesa según el rol. Un poco más para
-            admins y capitanes; la mayoría manda igual. Por defecto 1.5 / 1.25 / 1.
-          </p>
+          <p className="text-sm font-medium">{t('ui.screens.groupSettings.weightsTitle')}</p>
+          <p className="text-xs text-muted-foreground text-pretty">{t('ui.screens.groupSettings.weightsHint')}</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="weightAdmin">Admin</Label>
+            <Label htmlFor="weightAdmin">{t('groups.roles.admin')}</Label>
             <Input
               id="weightAdmin"
               type="number"
-              min={0.05}
-              max={10}
+              min={MIN_WEIGHT}
+              max={MAX_WEIGHT}
               step={0.05}
               value={weights.admin}
               onChange={(e) => setWeight('admin', Number(e.target.value))}
@@ -215,12 +248,12 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="weightCaptain">Capitán</Label>
+            <Label htmlFor="weightCaptain">{t('groups.roles.captain')}</Label>
             <Input
               id="weightCaptain"
               type="number"
-              min={0.05}
-              max={10}
+              min={MIN_WEIGHT}
+              max={MAX_WEIGHT}
               step={0.05}
               value={weights.captain}
               onChange={(e) => setWeight('captain', Number(e.target.value))}
@@ -228,12 +261,12 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="weightMember">Miembro</Label>
+            <Label htmlFor="weightMember">{t('groups.roles.member')}</Label>
             <Input
               id="weightMember"
               type="number"
-              min={0.05}
-              max={10}
+              min={MIN_WEIGHT}
+              max={MAX_WEIGHT}
               step={0.05}
               value={weights.member}
               onChange={(e) => setWeight('member', Number(e.target.value))}
@@ -244,8 +277,8 @@ export function GroupSettingsForm({ group }: GroupSettingsFormProps) {
       </div>
 
       <Button type="submit" disabled={loading}>
-        {loading && <Spinner size="sm" className="mr-2" />}
-        Guardar cambios
+        {loading && <Spinner size="sm" />}
+        {t('ui.screens.groupSettings.save')}
       </Button>
     </form>
   )

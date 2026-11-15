@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { combineDateTimeInTimezone } from '@/lib/utils/datetime'
 import { useT } from '@/i18n/provider'
+import type { Database } from '@/types/database'
 
 interface EditMatchFormProps {
   matchId: string
@@ -47,15 +48,39 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
     setLoading(true)
     setError(null)
 
+    // The cap RPC commits on its own, before the plain-field UPDATE.
+    let capSaved = false
+
     try {
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
+
+      // The cap goes through the RPC: raising it promotes the waitlist and
+      // fixes full/signup_open; lowering it below the confirmed count fails.
+      if (maxPlayers !== defaults.maxPlayers) {
+        const args: Database['public']['Functions']['admin_set_match_max_players']['Args'] = {
+          p_match_id: matchId,
+          p_max_players: maxPlayers,
+        }
+        const { error: capError } = await supabase.rpc('admin_set_match_max_players', args)
+        if (capError) {
+          console.error('Error updating max players:', capError)
+          const message = capError.message ?? ''
+          setError(t(
+            message.includes('max_players_below_confirmed') ? 'ui.lifecycle.maxPlayersBelowConfirmed'
+              : message.includes('No se puede modificar') ? 'ui.lifecycle.matchNotEditable'
+              : message.includes('No tenés permiso') ? 'ui.lifecycle.noPermission'
+              : 'common.error'
+          ))
+          return
+        }
+        capSaved = true
+      }
 
       const { error: updateError } = await supabase
         .from('matches')
         .update({
           date_time: dateTime,
           location: location || null,
-          max_players: maxPlayers,
           notes: notes || null,
           duration_minutes: durationMinutes,
           results_request_delay_minutes: resultsRequestDelayMinutes,
@@ -63,6 +88,11 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
         .eq('id', matchId)
 
       if (updateError) {
+        // 00032: the match was finished or cancelled while the form was open.
+        if ((updateError.message ?? '').includes('No se puede modificar')) {
+          setError(t('ui.lifecycle.matchNotEditable'))
+          return
+        }
         throw updateError
       }
 
@@ -70,7 +100,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
       router.refresh()
     } catch (err) {
       console.error('Error updating match:', err)
-      setError(t('common.error'))
+      setError(t(capSaved ? 'ui.lifecycle.capSavedOtherFailed' : 'common.error'))
     } finally {
       setLoading(false)
     }
@@ -119,9 +149,10 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Cancha del club"
+          placeholder={t('ui.matchScreens.forms.locationPlaceholder')}
           maxLength={200}
         />
+        <p className="text-xs text-muted-foreground">{t('ui.matchScreens.forms.editNotifyHint')}</p>
       </div>
 
       <div className="space-y-1.5">
@@ -141,7 +172,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="durationMinutes">Duración (min)</Label>
+          <Label htmlFor="durationMinutes">{t('ui.matchScreens.forms.duration')}</Label>
           <Input
             id="durationMinutes"
             type="number"
@@ -155,11 +186,11 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Al pasar este tiempo el partido se da por terminado solo
+            {t('ui.matchScreens.forms.durationHint')}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
+          <Label htmlFor="resultsRequestDelayMinutes">{t('ui.matchScreens.forms.resultsDelay')}</Label>
           <Input
             id="resultsRequestDelayMinutes"
             type="number"
@@ -173,7 +204,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Cuándo se les pide a los jugadores que carguen el resultado
+            {t('ui.matchScreens.forms.resultsDelayHint')}
           </p>
         </div>
       </div>
@@ -185,7 +216,7 @@ export function EditMatchForm({ matchId, groupSlug, timezone, defaults }: EditMa
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Traer pechera"
+          placeholder={t('ui.matchScreens.forms.notesPlaceholder')}
           maxLength={500}
           rows={2}
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

@@ -1,0 +1,105 @@
+# Supabase CLI config for the LOCAL stack (`supabase start`). The hosted
+# project's auth settings are set in the dashboard or with the Management API
+# call in docs/deploy.md §2, which lists every setting below with its
+# production value. `supabase db push` (migrations) does not read them.
+#
+# Ports match the fulbot-ms stack used so far (API 56621, DB 56622, mail
+# 56624) so they don't collide with other local Supabase projects. Only the
+# services the app uses are on.
+
+project_id = "fulbot-ms"
+
+[api]
+enabled = true
+port = 56621
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 56622
+shadow_port = 56620
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+# Local mail catcher: confirmation and reset emails land at
+# http://127.0.0.1:56624 instead of a real inbox.
+[inbucket]
+enabled = true
+port = 56624
+
+[storage]
+enabled = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[auth]
+enabled = true
+# Production: Site URL = NEXT_PUBLIC_APP_URL (docs/deploy.md).
+site_url = "http://localhost:3000"
+# Every email link lands on /api/auth/confirm (templates) or
+# /api/auth/callback (default templates) with a ?next= target.
+additional_redirect_urls = [
+  "http://localhost:3000/api/auth/**",
+  "http://127.0.0.1:3000/api/auth/**",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 6
+
+[auth.rate_limit]
+email_sent = 30
+token_verifications = 30
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# Production keeps this on too (docs/deploy.md).
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "60s"
+otp_expiry = 3600
+
+# Email templates: Spanish (owner decision, 2026-11-15). Supabase takes one
+# template per email type, and the hosted project uses these same .es files
+# (docs/deploy.md §2); the .en.html files are kept as translations only.
+# Every link lands on /api/auth/confirm with a token hash, so it works in any
+# browser, the installed app or the mail app.
+[auth.email.template.confirmation]
+subject = "Confirmá tu cuenta de fulbot"
+content_path = "./supabase/templates/confirm-signup.es.html"
+
+[auth.email.template.recovery]
+subject = "Elegí una contraseña nueva para fulbot"
+content_path = "./supabase/templates/reset-password.es.html"
+
+# With double_confirm_changes on, Supabase sends this to the current and the
+# new address; each link verifies its own token and returns to /settings.
+[auth.email.template.email_change]
+subject = "Confirmá el cambio de email en fulbot"
+content_path = "./supabase/templates/email-change.es.html"
+
+[auth.sms]
+enable_signup = false

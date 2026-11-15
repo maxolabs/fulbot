@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { SkillSummaryCard } from '@/components/player-skills'
 import { MemberScoreBreakdown, MemberScoreStars } from '@/components/member-score'
 import { MemberEventDeleteButton, MemberScoreAdjust } from '@/components/member-score-adjust'
-import type { RatingSummary } from '@/lib/ratings'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -34,7 +34,7 @@ interface PageProps {
 // stats, aside = member score, badges, skills), stacked main-then-aside on
 // mobile.
 
-const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'mvp_streak', 'first_match'])
+const BADGE_KEYS = new Set(['hat_trick', 'playmaker', 'ironman', 'safe_hands', 'mvp', 'ejemplar'])
 
 export default async function PlayerProfilePage({ params }: PageProps) {
   const { groupSlug, playerId } = await params
@@ -107,14 +107,18 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const language: Language = userData?.preferred_language ?? 'es'
   const t = getT(language)
 
-  // The player's own role in this group, for the hero.
-  const { data: playerMembership } = await supabase
+  // The player's own membership in this group: a player who never belonged
+  // to it has no page here. Former (inactive) members keep theirs for the
+  // history; only an active membership shows a role in the hero.
+  const { data: targetMembership } = await supabase
     .from('group_memberships')
-    .select('role')
+    .select('role, is_active')
     .eq('group_id', group.id)
     .eq('player_id', playerId)
-    .eq('is_active', true)
-    .maybeSingle() as { data: { role: 'admin' | 'captain' | 'member' } | null }
+    .maybeSingle() as { data: { role: 'admin' | 'captain' | 'member'; is_active: boolean } | null }
+
+  if (!targetMembership) return notFound()
+  const playerMembership = targetMembership.is_active ? targetMembership : null
 
   // Member score ("Compromiso", docs/member-scoring.md §5.4): visible when the
   // group opted into 'group' visibility, or the viewer is admin/captain, or the
@@ -124,7 +128,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const canSeeScore = !!scoringSettings?.enabled
     && (scoringSettings.visibility === 'group' || isAdminOrCaptain || currentPlayer.id === playerId)
 
-  type MemberScoreRow = { member_score: number | null; member_breakdown: MemberBreakdown | null }
+  type MemberScoreRow = { player_id: string; is_active: boolean; member_score: number | null; member_breakdown: MemberBreakdown | null }
   type MemberEventRow = {
     id: string
     match_id: string | null
@@ -143,14 +147,10 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const reporterNameById = new Map<string, string>()
 
   if (canSeeScore) {
-    const { data: scoreRow } = await supabase
-      .from('group_memberships')
-      .select('member_score, member_breakdown')
-      .eq('group_id', group.id)
-      .eq('player_id', playerId)
-      .eq('is_active', true)
-      .maybeSingle() as { data: MemberScoreRow | null }
-    memberScore = scoreRow
+    // The score columns are not selectable (00029); get_member_scores applies
+    // the same visibility rule on the server.
+    const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: group.id })
+    memberScore = (scoreRows || []).find((row) => row.player_id === playerId && row.is_active) ?? null
 
     // The window is the group's last N finished matches (§3); match-less events
     // (adjustments, newcomer ratings) count from the oldest window match on.
@@ -194,7 +194,8 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   if (isAdminOrCaptain) {
     const { data: summaryRow } = await supabase
       .from('player_rating_summary')
-      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .select(RATING_SUMMARY_COLUMNS)
+      .eq('group_id', group.id)
       .eq('player_id', playerId)
       .maybeSingle() as { data: RatingSummary | null }
     ratingSummary = summaryRow
@@ -233,7 +234,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       match_id,
       status,
       signup_time,
-      matches (
+      matches!inner (
         id,
         date_time,
         location,
@@ -242,6 +243,9 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     `)
     .eq('player_id', playerId)
     .in('status', ['confirmed', 'did_not_show'])
+    // Only this group's matches that already happened.
+    .eq('matches.group_id', group.id)
+    .lt('matches.date_time', new Date().toISOString())
     .order('signup_time', { ascending: false })
     .limit(10) as { data: RecentMatch[] | null }
 
@@ -252,14 +256,14 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       ...(s.matches as { id: string; date_time: string; location: string | null; status: string }),
     }))
 
-  type RatingAgg = { rating: number }
-  const { data: ratingsReceived } = await supabase
-    .from('match_ratings')
-    .select('rating')
-    .eq('rated_player_id', playerId) as { data: RatingAgg[] | null }
-
-  const avgRating = ratingsReceived && ratingsReceived.length > 0
-    ? ratingsReceived.reduce((sum, r) => sum + r.rating, 0) / ratingsReceived.length
+  // Post-match ratings received in this group's matches only, like every
+  // rating on this page (OD-9). Individual ratings are private to their voter
+  // (00037), so the average comes from a members-only RPC.
+  const { data: ratingAvgRows } = await supabase
+    .rpc('get_player_match_rating_avg', { p_group_id: group.id, p_player_id: playerId })
+  const ratingAvgRow = ratingAvgRows?.[0]
+  const avgRating = ratingAvgRow && ratingAvgRow.ratings > 0 && ratingAvgRow.avg_rating != null
+    ? Number(ratingAvgRow.avg_rating)
     : null
 
   const positionLabel = (code: string) => {
@@ -512,6 +516,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>{t('ui.screens.player.groupRating')}</CardTitle>
+                <CardDescription className="text-pretty">{t('ui.teamsPrivacy.ratingScope')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <SkillSummaryCard summary={ratingSummary} language={language} />

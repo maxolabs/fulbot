@@ -1,3 +1,5 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import Link from 'next/link'
@@ -30,6 +32,10 @@ interface PublicGroup {
   default_match_time: string | null
   timezone: string | null
   member_count: number
+  // The visitor's own membership: a former member's row is invisible to them under
+  // RLS. 'inactive' left on their own (can rejoin); 'removed' was removed by an
+  // admin and cannot rejoin until re-added (OD-1, 00033).
+  viewer_membership: 'active' | 'inactive' | 'removed' | null
   next_match: {
     id: string
     date_time: string
@@ -41,6 +47,32 @@ interface PublicGroup {
 }
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+
+// One RPC per request for generateMetadata and the page.
+const getPublicGroup = cache(async (code: string): Promise<PublicGroup | null> => {
+  const supabase = await createClient()
+  const { data } = await supabase.rpc('get_public_group_by_invite', { p_invite_code: code })
+  return (data as PublicGroup | null) ?? null
+})
+
+// Link preview (PLAT-8): the group name only. Never indexed.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { code } = await params
+  const cookieStore = await cookies()
+  const t = getT(cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es')
+  const robots = { index: false, follow: false }
+  const group = await getPublicGroup(code)
+  if (!group) return { title: t('ui.meta.inviteFallback'), robots }
+  const title = t('ui.meta.inviteTitle', { group: group.name })
+  const description = t('ui.meta.inviteDescription', { group: group.name })
+  return {
+    title,
+    description,
+    robots,
+    openGraph: { title, description, type: 'website', siteName: 'fulbot' },
+    twitter: { card: 'summary', title, description },
+  }
+}
 
 function Message({ title, body, cta }: { title: string; body: string; cta: { href: string; label: string } }) {
   return (
@@ -69,8 +101,7 @@ export default async function InvitePage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // Public view of the group (works for anonymous visitors, includes the next open match)
-  const { data: groupData } = await supabase.rpc('get_public_group_by_invite', { p_invite_code: code })
-  const group = (groupData as PublicGroup | null) ?? null
+  const group = await getPublicGroup(code)
 
   if (!group) {
     return (
@@ -90,10 +121,13 @@ export default async function InvitePage({ params }: PageProps) {
   const nextMatchLine = match
     ? `${formatMatchDateShort(match.date_time, tz)} · ${formatMatchTime(match.date_time, tz)}${match.location ? ` · ${match.location}` : ''}`
     : null
-  const isFull = match ? match.confirmed_count >= match.max_players : false
+  // next_match can also be signup_closed or teams_created; only an open list
+  // takes guests or has a waitlist to join.
+  const signupOpen = match ? match.status === 'signup_open' || match.status === 'full' : false
+  const isFull = match && signupOpen ? match.confirmed_count >= match.max_players : false
 
-  let playerId: string | null = null
-  let wasInactive = false
+  let hasProfile = false
+  const wasInactive = group.viewer_membership === 'inactive'
 
   if (user) {
     const { data: playerProfile } = await supabase
@@ -111,19 +145,21 @@ export default async function InvitePage({ params }: PageProps) {
         />
       )
     }
-    playerId = playerProfile.id
+    hasProfile = true
 
-    const { data: existingMembership } = await supabase
-      .from('group_memberships')
-      .select('id, is_active')
-      .eq('group_id', group.id)
-      .eq('player_id', playerProfile.id)
-      .single() as { data: { id: string; is_active: boolean } | null }
-
-    if (existingMembership?.is_active) {
+    if (group.viewer_membership === 'active') {
       redirect(`/groups/${group.slug}`)
     }
-    wasInactive = existingMembership !== null && !existingMembership.is_active
+
+    if (group.viewer_membership === 'removed') {
+      return (
+        <Message
+          title={t('ui.membership.removedTitle', { group: group.name })}
+          body={t('ui.membership.removedByAdmin')}
+          cta={{ href: '/groups', label: t('ui.shell.myGroups') }}
+        />
+      )
+    }
   }
 
   return (
@@ -165,12 +201,11 @@ export default async function InvitePage({ params }: PageProps) {
               </div>
             </dl>
 
-            {user && playerId ? (
+            {user && hasProfile ? (
               <>
                 <JoinGroupButton
-                  groupId={group.id}
+                  inviteCode={code}
                   groupSlug={group.slug}
-                  playerId={playerId}
                   wasInactive={wasInactive}
                 />
                 <p className="text-center text-xs text-muted-foreground">{t('ui.screens.invite.joinHint')}</p>
@@ -192,7 +227,7 @@ export default async function InvitePage({ params }: PageProps) {
               </div>
             )}
 
-            {match && (
+            {match && signupOpen && (
               <div className="space-y-1 border-t border-border pt-4 text-center">
                 <Button asChild variant="link" className="text-foreground">
                   <Link href={`/m/${match.id}`}>{t('ui.screens.invite.guestPath')}</Link>

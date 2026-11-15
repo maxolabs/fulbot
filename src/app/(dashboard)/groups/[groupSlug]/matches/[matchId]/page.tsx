@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Trophy, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/app-url'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -13,14 +15,16 @@ import { MatchActionBar, SignupActions, SignupDetail, SignupProvider } from './s
 import { SignupPolicyNotice } from '@/components/signup-policy-notice'
 import { MatchAdminActions } from './match-admin-actions'
 import { MatchWorkflow } from './match-workflow'
+import { LineupStaleNotice } from './teams/lineup-stale-notice'
 import { AddGuestForm } from './add-guest-form'
 import { PostMatchVoting } from './post-match-voting'
-import { RulesManager } from './rules-manager'
+import { RulesManager } from '@/components/rules-manager'
 import { RealtimeWrapper } from './realtime-wrapper'
 import { ShareActions } from '@/components/share-actions'
 import { MatchResults } from './match-results'
 import { ReportForm, type OwnReport, type ReportTeam } from './report-form'
 import { ResultConsensus } from './result-consensus'
+import { AttendanceOnlyResult } from './attendance-only-result'
 import type { MatchResultStatus, WaitlistReason } from '@/types/database'
 import { MatchReportsTable } from './match-reports-table'
 import { ConductCheck } from './conduct-check'
@@ -91,6 +95,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .select('*')
     .eq('id', matchId)
     .eq('group_id', group.id)
+    // Several columns are nullable in the schema (DEFAULT without NOT NULL) but
+    // always set in practice; this narrows them for rendering.
     .single() as { data: {
       id: string
       group_id: string
@@ -101,8 +107,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
       notes: string | null
       results_finalized: boolean
       result_status: MatchResultStatus
+      result_locked_by: string | null
+      result_locked_at: string | null
       mvp_player_id: string | null
+      finished_at: string | null
+      duration_minutes: number
       created_at: string
+      /** 00029: the confirmed list changed after the teams were published. */
+      lineup_needs_review: boolean
     } | null }
 
   if (!match) return notFound()
@@ -138,13 +150,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
-      notes: string | null
-      estimated_rating: number
       preferred_positions: string[]
     } | null
   }
 
-  const { data: signups } = await supabase
+  const { data: signupRows } = await supabase
     .from('match_signups')
     .select(`
       id,
@@ -165,14 +175,36 @@ export default async function MatchDetailPage({ params }: PageProps) {
       guest_players (
         id,
         display_name,
-        notes,
-        estimated_rating,
         preferred_positions
       )
     `)
     .eq('match_id', matchId)
     .in('status', ['confirmed', 'waitlist', 'did_not_show'])
     .order('signup_time') as { data: SignupResult[] | null }
+
+  // A guest's estimated level and notes are for organizers only (TS-4): the
+  // columns are not selectable (00035), get_match_guest_ratings returns them
+  // to admins and captains, and members never get them in the payload.
+  const guestLevels = new Map<string, { estimated_rating: number | null; notes: string | null }>()
+  if (isAdminOrCaptain && (signupRows || []).some((s) => s.guest_players)) {
+    const { data: levelRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+    for (const row of levelRows || []) {
+      guestLevels.set(row.guest_player_id, {
+        estimated_rating: row.estimated_rating === null ? null : Number(row.estimated_rating),
+        notes: row.notes,
+      })
+    }
+  }
+  const signups = (signupRows || []).map((s) => s.guest_players
+    ? {
+        ...s,
+        guest_players: {
+          ...s.guest_players,
+          estimated_rating: guestLevels.get(s.guest_players.id)?.estimated_rating ?? null,
+          notes: guestLevels.get(s.guest_players.id)?.notes ?? null,
+        },
+      }
+    : s)
 
   const confirmedSignups = (signups || []).filter(s => s.status === 'confirmed')
   const noShowSignups = (signups || []).filter(s => s.status === 'did_not_show')
@@ -193,12 +225,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   ))
 
   // Scores are visible to admins and captains only (RLS on player_rating_summary
-  // enforces it; this just avoids a pointless query for members).
+  // enforces it; this just avoids a pointless query for members). Ratings are
+  // per group (OD-9): this group's row only.
   const ratingsById: Record<string, number> = {}
   if (isAdminOrCaptain && listedPlayerIds.length > 0) {
     const { data: summaryRows } = await supabase
       .from('player_rating_summary')
       .select('player_id, overall')
+      .eq('group_id', group.id)
       .in('player_id', listedPlayerIds) as { data: { player_id: string; overall: number }[] | null }
     for (const row of summaryRows || []) {
       ratingsById[row.player_id] = row.overall
@@ -250,6 +284,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const matchPlayers = confirmedSignups
     .filter(s => s.player_profiles !== null)
     .map(s => s.player_profiles as { id: string; display_name: string; nickname: string | null; main_position: string })
+
+  // Deleted accounts (player_profiles.deleted_at, T1) stay in the history as
+  // "Jugador eliminado" but cannot be rated or voted MVP.
+  const deletedPlayerIds = new Set<string>()
+  if (match.status === 'finished' && matchPlayers.length > 0) {
+    const { data: deletedRows } = await supabase
+      .from('player_profiles')
+      .select('id')
+      .in('id', matchPlayers.map(p => p.id))
+      .not('deleted_at', 'is', null) as { data: { id: string }[] | null }
+    for (const row of deletedRows || []) deletedPlayerIds.add(row.id)
+  }
+  const votablePlayers = matchPlayers.filter(p => !deletedPlayerIds.has(p.id))
 
   // Check if current user is signed up
   const currentUserSignup = (signups || []).find(
@@ -351,11 +398,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
       .rpc('member_scoring_settings', { p_group_id: group.id }) as { data: { enabled?: boolean } | null }
     scoringEnabled = !!scoringSettings?.enabled
 
-    const { data: settingsRow } = await supabase
-      .from('notification_settings')
-      .select('results_window_days')
-      .eq('group_id', group.id)
-      .maybeSingle() as { data: { results_window_days: number | null } | null }
+    const { data: windowRows } = await supabase
+      .rpc('get_results_window_days', { p_group_ids: [group.id] }) as { data: { results_window_days: number | null }[] | null }
+    const settingsRow = windowRows?.[0] ?? null
     resultsWindowDays = settingsRow?.results_window_days ?? 7
 
     const { data: reportRows } = await supabase
@@ -374,8 +419,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
     reports = reportRows || []
   }
 
-  const reportWindowOpen =
-    new Date().getTime() - new Date(match.date_time).getTime() < resultsWindowDays * 24 * 60 * 60 * 1000
+  // Same anchor as match_report_window_open (00026): the end of the match,
+  // finished_at or else start + duration, not the start time.
+  const matchEndMs = match.finished_at
+    ? new Date(match.finished_at).getTime()
+    : new Date(match.date_time).getTime() + (match.duration_minutes ?? 60) * 60 * 1000
+  const reportWindowOpen = new Date().getTime() - matchEndMs < resultsWindowDays * 24 * 60 * 60 * 1000
   const viewerPlayed = currentUserSignup?.status === 'confirmed'
   const viewerCanReport = match.status === 'finished' && viewerPlayed && reportWindowOpen
   const ownReportRow = reports.find(r => r.reporter_player_id === playerProfile.id) ?? null
@@ -396,8 +445,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // A locked result is final and visible to everyone (a late report can't be
   // anchored into changing it), as is anything after the window closed.
   const resultLocked = match.result_status === 'locked'
+  // Finished without teams (00034, OD-3): attendance only, so no report, no
+  // MVP and no consensus card; the attendance-only block takes their place.
+  const attendanceOnly = match.status === 'finished' && matchTeams.length === 0
+  // mvp_player_id follows every vote; the hero names the MVP only once the
+  // result counts (consensus or locked), like mvp_count and the badge.
+  const resultSettled = match.result_status === 'consensus' || resultLocked
   const showConsensus =
-    match.status === 'finished' && (ownReport !== null || !viewerCanReport || resultLocked)
+    match.status === 'finished' && !attendanceOnly && (ownReport !== null || !viewerCanReport || resultLocked)
   // Admin/captain tools follow the same rule: an admin who played reports
   // first like everyone else; one who did not play sees them right away.
   const showAdminTools = isAdminOrCaptain && showConsensus
@@ -436,8 +491,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     player_name: e.player_profiles?.display_name || e.guest_players?.display_name || null,
   }))
 
-  // Whether teams exist (only fetched above for finished matches): the admin
-  // actions explain that a match without teams can't be finished (§5.1), the
+  // Whether teams exist (only fetched above for finished matches): without
+  // them a started match finishes with attendance only (00034, OD-3), the
   // action bar offers "Armar equipos" while they are missing and "Ver equipos"
   // once they exist — for members too (03-screens §4), so the count is read
   // for every viewer, not only admins.
@@ -448,14 +503,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
       .select('id', { count: 'exact', head: true })
       .eq('match_id', matchId)
     hasTeams = (count ?? 0) > 0
-  }
-
-  // Result consensus/lock columns (00019). `select('*')` already returns them; the
-  // narrow cast above predates them, so read them through a local cast here.
-  const resultMeta = match as unknown as {
-    result_status?: MatchResultStatus
-    result_locked_by?: string | null
-    result_locked_at?: string | null
   }
 
   // Prepare teams data for MatchResults component
@@ -482,7 +529,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const heroDate = formatHeroDate(t, match.date_time, timeZone)
   const groupHref = `/groups/${groupSlug}`
   const matchHref = `${groupHref}/matches/${matchId}`
-  const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/m/${matchId}`
+  const shareUrl = `${getAppBaseUrl()}/m/${matchId}`
 
   const shareText = `${group.name} · ${heroDate}\n${match.location || ''}\n${shareUrl}`
 
@@ -509,6 +556,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const showAnnouncement = match.status === 'signup_open' || match.status === 'full'
   const showAddGuest = isAdminOrCaptain && !isFinished && match.status !== 'cancelled'
   const showRules = isAdminOrCaptain && ['signup_open', 'full', 'signup_closed', 'teams_created'].includes(match.status)
+  // The confirmed list changed after the teams were published (00029 trigger).
+  const lineupStale = match.status === 'teams_created' && !!match.lineup_needs_review
 
   // MatchAdminActions renders nothing once the match is finished; without
   // actions there is no "Gestionar" (the sheet would be empty too).
@@ -518,6 +567,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
     <MatchAdminActions
       secondaryOnly
       hasTeams={hasTeams}
+      hasStarted={isPast}
+      canDelete={membership.role === 'admin'}
       matchId={match.id}
       groupSlug={groupSlug}
       currentStatus={match.status}
@@ -563,7 +614,40 @@ export default async function MatchDetailPage({ params }: PageProps) {
     </>
   ) : undefined
 
-  const statusBadge = <MatchStatusBadge status={match.status} label={statusLabel} />
+  const resultsEditor = isFinished && showAdminTools && teamsForResults.length > 0 ? (
+    <MatchResults
+      matchId={match.id}
+      teams={teamsForResults}
+      existingEvents={matchEvents.map(e => ({
+        id: e.id,
+        team_id: e.team_id,
+        player_id: e.player_id,
+        guest_player_id: e.guest_player_id,
+        event_type: e.event_type,
+        linked_event_id: e.linked_event_id,
+      }))}
+      resultStatus={match.result_status ?? 'pending'}
+      lockedBy={match.result_locked_by ?? null}
+      lockedAt={match.result_locked_at ?? null}
+      mvpPlayerId={match.mvp_player_id}
+      mvpCandidates={votablePlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
+      timeZone={timeZone}
+    />
+  ) : null
+
+  // Signup numbers only mean something before the match; without them a
+  // finished match has nothing for the aside, so the main column takes it all.
+  const showQuickStats = !isFinished && match.status !== 'cancelled'
+  const hasAside = showAnnouncement || !!addGuest || !!rules || showQuickStats
+
+  const statusBadge = attendanceOnly ? (
+    <span className="flex flex-wrap items-center gap-2">
+      <MatchStatusBadge status={match.status} label={statusLabel} />
+      <Badge variant="outline">{t('ui.lifecycle.attendanceOnly.badge')}</Badge>
+    </span>
+  ) : (
+    <MatchStatusBadge status={match.status} label={statusLabel} />
+  )
 
   return (
     <RealtimeWrapper matchId={matchId}>
@@ -598,7 +682,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 ) : (
                   <span className="font-mono text-xs tabular-nums">{countLabel}</span>
                 )}
-                {mvpPlayerName && showConsensus && (
+                {mvpPlayerName && showConsensus && resultSettled && (
                   <span className="flex items-center gap-1">
                     <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
                     {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
@@ -643,7 +727,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <span>{t('ui.matchScreens.dashboard.light')}</span>
               </p>
             )}
-            {mvpPlayerName && showConsensus && (
+            {mvpPlayerName && showConsensus && resultSettled && (
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Trophy className="h-4 w-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
                 {t('ui.matchScreens.dashboard.mvp', { name: mvpPlayerName })}
@@ -651,7 +735,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} />
+          {isAdminOrCaptain && lineupStale && (
+            <LineupStaleNotice
+              title={t('ui.matchLifecycle.lineupStaleTitle')}
+              body={t('ui.lifecycle.lineup.staleBody')}
+              actionLabel={t('ui.matchLifecycle.reviewTeams')}
+              href={`${matchHref}/teams`}
+            />
+          )}
+
+          <MatchWorkflow matchId={matchId} matchHref={matchHref} status={match.status} confirmed={confirmedSignups.length} hasTeams={hasTeams} canManage={isAdminOrCaptain} reportHref={reportHref} lineupStale={lineupStale} started={isPast} attendanceOnly={attendanceOnly} />
 
           {heroScore && (
             <details className="rounded-md border border-border bg-card p-4">
@@ -660,7 +753,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </details>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className={hasAside ? 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]' : 'grid grid-cols-1 gap-6'}>
             {/* Main column */}
             <div className="min-w-0 space-y-6">
               {/* Notes */}
@@ -669,6 +762,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   <span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">{t('ui.matchScreens.match.notes')}</span>{' '}
                   {match.notes}
                 </p>
+              )}
+
+              {attendanceOnly && (
+                <AttendanceOnlyResult
+                  eyebrow={t('ui.lifecycle.attendanceOnly.eyebrow')}
+                  body={t('ui.lifecycle.attendanceOnly.body')}
+                  hint={isAdminOrCaptain ? t('ui.lifecycle.attendanceOnly.adminHint') : undefined}
+                />
               )}
 
               {/* Member scoring policy notice (docs/member-scoring.md §6): renders nothing unless it applies */}
@@ -745,6 +846,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                     showWaitlistPosition
                     emptyMessage={t('ui.matchScreens.match.waitlistEmpty')}
                     isAdminOrCaptain={isAdminOrCaptain}
+                    matchStatus={match.status}
                     ratingsById={ratingsById}
                   />
                 </section>
@@ -755,7 +857,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 <ReportForm
                   matchId={match.id}
                   teams={reportTeams}
-                  mvpCandidates={matchPlayers.filter(p => p.id !== playerProfile.id)}
+                  mvpCandidates={votablePlayers.filter(p => p.id !== playerProfile.id)}
                   existingReport={ownReport}
                   agreement={agreement}
                   windowOpen={reportWindowOpen}
@@ -773,41 +875,32 @@ export default async function MatchDetailPage({ params }: PageProps) {
                   reportersCount={reports.filter(r => !r.submitted_after_lock).length}
                   playersCount={confirmedSignups.filter(s => s.player_profiles !== null).length}
                   mvpName={mvpPlayerName}
+                  language={language}
                 />
               )}
 
-              {/* Match Results Editor - shown to admins when match is finished */}
-              {isFinished && showAdminTools && teamsForResults.length > 0 && (
-                <MatchResults
-                  matchId={match.id}
-                  teams={teamsForResults}
-                  existingEvents={matchEvents.map(e => ({
-                    id: e.id,
-                    team_id: e.team_id,
-                    player_id: e.player_id,
-                    guest_player_id: e.guest_player_id,
-                    event_type: e.event_type,
-                    linked_event_id: e.linked_event_id,
-                  }))}
-                  resultStatus={resultMeta.result_status ?? 'pending'}
-                  lockedBy={resultMeta.result_locked_by ?? null}
-                  lockedAt={resultMeta.result_locked_at ?? null}
-                  mvpPlayerId={match.mvp_player_id}
-                  mvpCandidates={matchPlayers.map(p => ({ id: p.id, display_name: p.display_name }))}
-                />
-              )}
+              {/* Match Results Editor - admins when the match is finished. Once the
+                  result card above shows a result, the editor folds away so the
+                  score isn't shown twice. */}
+              {resultsEditor && (match.result_status === 'pending' ? resultsEditor : (
+                <details className="rounded-md border border-border bg-card p-4">
+                  <summary className="-my-3 cursor-pointer py-3 text-sm font-semibold">{t('ui.postMatch.editResult')}</summary>
+                  <div className="pt-4">{resultsEditor}</div>
+                </details>
+              ))}
 
               {/* Player reports (who said what) - admins/captains only */}
               {isFinished && showAdminTools && teamsForResults.length > 0 && (
                 <MatchReportsTable
                   matchId={match.id}
-                  resultStatus={resultMeta.result_status ?? 'pending'}
+                  resultStatus={match.result_status ?? 'pending'}
                   teams={teamsForResults.map(t => ({ id: t.id, name: t.name, color_hex: t.color_hex, score: t.score }))}
                   people={[
                     ...matchPlayers.map(p => ({ id: p.id, display_name: p.display_name })),
                     ...teamsForResults.flatMap(t => t.players.map(p => ({ id: p.id, display_name: p.display_name }))),
                   ]}
                   confirmedCount={matchPlayers.length}
+                  timeZone={timeZone}
                 />
               )}
 
@@ -821,18 +914,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
               )}
 
               {/* Optional teammate ratings - only for players of the match */}
-              {isFinished && viewerPlayed && matchPlayers.length > 1 && (
+              {isFinished && viewerPlayed && votablePlayers.length > 1 && (
                 <PostMatchVoting
                   matchId={match.id}
                   currentPlayerId={playerProfile.id}
-                  players={matchPlayers}
+                  players={votablePlayers}
                   windowOpen={reportWindowOpen}
                 />
               )}
             </div>
 
             {/* Aside (browser only; on phones this content lives in the admin sheet) */}
-            <aside className="hidden min-w-0 space-y-6 lg:block">
+            <aside className={hasAside ? 'hidden min-w-0 space-y-6 lg:block' : 'hidden'}>
               {showAnnouncement && (
                 <MatchAnnouncement
                   groupName={group.name}
@@ -850,25 +943,27 @@ export default async function MatchDetailPage({ params }: PageProps) {
               {rules}
 
               {/* Quick Stats */}
-              <Card variant="solid">
-                <CardContent className="space-y-2 p-4 lg:p-5">
-                  <Eyebrow as="h2">{t('ui.matchScreens.match.stats')}</Eyebrow>
-                  <dl className="space-y-1.5 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsSigned')}</dt>
-                      <dd className="font-mono tabular-nums">{confirmedSignups.length}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsWaiting')}</dt>
-                      <dd className="font-mono tabular-nums">{waitlistSignups.length}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsAvailable')}</dt>
-                      <dd className="font-mono tabular-nums">{Math.max(0, match.max_players - confirmedSignups.length)}</dd>
-                    </div>
-                  </dl>
-                </CardContent>
-              </Card>
+              {showQuickStats && (
+                <Card variant="solid">
+                  <CardContent className="space-y-2 p-4 lg:p-5">
+                    <Eyebrow as="h2">{t('ui.matchScreens.match.stats')}</Eyebrow>
+                    <dl className="space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsSigned')}</dt>
+                        <dd className="font-mono tabular-nums">{confirmedSignups.length}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsWaiting')}</dt>
+                        <dd className="font-mono tabular-nums">{waitlistSignups.length}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">{t('ui.matchScreens.match.statsAvailable')}</dt>
+                        <dd className="font-mono tabular-nums">{Math.max(0, match.max_players - confirmedSignups.length)}</dd>
+                      </div>
+                    </dl>
+                  </CardContent>
+                </Card>
+              )}
             </aside>
           </div>
 

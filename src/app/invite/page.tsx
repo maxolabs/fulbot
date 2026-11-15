@@ -14,6 +14,15 @@ import { useT } from '@/i18n/provider'
 // Invite code entry (docs/ui-rework/03-screens.md §12): a dashed card with
 // one mono input and one cone button.
 
+// Players paste the whole WhatsApp link as often as the code: keep the last
+// path segment (dropping any query or hash) and lowercase it, since invite
+// codes are lowercase hex.
+function normalizeInviteCode(raw: string): string {
+  const withoutQuery = raw.trim().split(/[?#]/)[0]
+  const segments = withoutQuery.split('/').filter(Boolean)
+  return (segments[segments.length - 1] ?? '').trim().toLowerCase()
+}
+
 export default function InviteCodePage() {
   const t = useT()
   const [code, setCode] = useState('')
@@ -21,8 +30,9 @@ export default function InviteCodePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (code.trim()) {
-      router.push(`/invite/${code.trim()}`)
+    const normalized = normalizeInviteCode(code)
+    if (normalized) {
+      router.push(`/invite/${encodeURIComponent(normalized)}`)
     }
   }
 

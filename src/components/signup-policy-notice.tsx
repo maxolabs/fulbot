@@ -52,13 +52,10 @@ export async function SignupPolicyNotice({
 
   if (!settings?.enabled) return null
 
-  const { data: membership } = await supabase
-    .from('group_memberships')
-    .select('member_score, signup_cooldown')
-    .eq('group_id', groupId)
-    .eq('player_id', playerId)
-    .eq('is_active', true)
-    .maybeSingle() as { data: { member_score: number | null; signup_cooldown: boolean } | null }
+  // The score columns are not selectable (00029): the viewer's own row always
+  // comes back from get_member_scores, cooldown included.
+  const { data: scoreRows } = await supabase.rpc('get_member_scores', { p_group_id: groupId })
+  const membership = (scoreRows || []).find((row) => row.player_id === playerId && row.is_active) ?? null
 
   if (!membership) return null
 

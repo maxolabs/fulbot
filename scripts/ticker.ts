@@ -1,11 +1,12 @@
 // Scheduler ticker (docs/match-results-consensus.md §5, §11.2).
 //
-// The app has no resident process on a serverless host, so this tiny loop is
-// the "always-on" driver of the results scheduler: every TICKER_INTERVAL_MS it
+// The local-development driver of the scheduler: every TICKER_INTERVAL_MS it
 // POSTs /api/cron/tick with the CRON_SECRET, which claims and runs every due
 // `scheduled_jobs` row (auto-finish, result request, reminder, window close)
-// and drains the WhatsApp outbox. Run it anywhere that stays up: a laptop, a
-// Raspberry Pi, a small VPS, or the Dockerfile.ticker container.
+// and drains the WhatsApp outbox. In production the Supabase pg_cron job
+// (migration 00036, docs/deploy.md §4) makes the same call every minute, so
+// this script is for a local stack, or for hosting the app somewhere without
+// pg_cron (the Dockerfile.ticker container).
 //
 //   npm run ticker
 //   TICKER_INTERVAL_MS=30000 npm run ticker
@@ -48,6 +49,30 @@ function stamp(): string {
   return new Date().toISOString()
 }
 
+// A tick that "succeeds" can still carry failed jobs or failed sweeps. They
+// are logged as warnings (one line each) so `grep WARN` or a log alert finds
+// them; GET /api/health reports the same failures for an uptime monitor.
+function warnOnFailures(body: Record<string, unknown>): void {
+  const jobs = Array.isArray(body.jobs) ? (body.jobs as Array<Record<string, unknown>>) : []
+  for (const job of jobs) {
+    if (job.ok === false) {
+      console.warn(
+        `[ticker] ${stamp()} WARN job failed: ${String(job.job_type)} id=${String(job.id)} ` +
+          `match=${String(job.match_id ?? '-')}: ${String(job.error ?? 'unknown error')}`
+      )
+    }
+  }
+  const sweeps = (body.sweeps ?? {}) as Record<string, unknown>
+  for (const [name, error] of Object.entries(sweeps)) {
+    if (error) console.warn(`[ticker] ${stamp()} WARN ${name}: ${String(error)}`)
+  }
+  for (const key of ['outbox', 'push'] as const) {
+    const result = body[key] as Record<string, unknown> | undefined
+    if (result && 'error' in result) console.warn(`[ticker] ${stamp()} WARN ${key} drain: ${String(result.error)}`)
+    else if (Number(result?.failed ?? 0) > 0) console.warn(`[ticker] ${stamp()} WARN ${key}: ${String(result?.failed)} delivery failure(s)`)
+  }
+}
+
 async function tickOnce(url: string, secret: string): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
@@ -86,6 +111,7 @@ async function tickOnce(url: string, secret: string): Promise<void> {
       `[ticker] ${stamp()} ok in ${elapsed}ms: claimed=${String(body.claimed ?? 0)} ` +
         `done=${String(body.done ?? 0)} failed=${String(body.failed ?? 0)} ${outboxText} ${pushText}`
     )
+    warnOnFailures(body)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[ticker] ${stamp()} request failed: ${message}`)

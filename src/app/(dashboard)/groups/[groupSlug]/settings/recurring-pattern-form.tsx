@@ -10,6 +10,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { FormNotice, NativeSelect } from '@/components/form-controls'
+import { useT } from '@/i18n/provider'
+import { TimezoneSelect, isValidTimezone } from './timezone-select'
 
 interface RecurringPatternFormProps {
   groupId: string
@@ -33,26 +35,13 @@ interface RecurringPatternFormProps {
 }
 
 const DAYS = [
-  { value: 0, label: 'Domingo' },
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
-]
-
-// A handful of common Argentina/LatAm/EU zones; "Otra" lets an admin type
-// anything IANA-valid the select doesn't list.
-const TIMEZONE_PRESETS = [
-  'America/Argentina/Buenos_Aires',
-  'America/Montevideo',
-  'America/Santiago',
-  'America/Sao_Paulo',
-  'America/Bogota',
-  'America/Lima',
-  'America/Mexico_City',
-  'Europe/Madrid',
+  { value: 0, key: 'days.sunday' },
+  { value: 1, key: 'days.monday' },
+  { value: 2, key: 'days.tuesday' },
+  { value: 3, key: 'days.wednesday' },
+  { value: 4, key: 'days.thursday' },
+  { value: 5, key: 'days.friday' },
+  { value: 6, key: 'days.saturday' },
 ]
 
 function trimTime(t: string) {
@@ -63,11 +52,12 @@ function trimTime(t: string) {
 export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialPattern }: RecurringPatternFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const defaultWeekday = initialPattern?.weekday ?? groupDefaults.default_match_day ?? 1
   const defaultSignupWeekday = initialPattern?.signup_opens_weekday ?? ((defaultWeekday - 1 + 7) % 7)
+  // A new pattern starts in the group's zone; the form warns when they differ.
   const defaultTimezone = initialPattern?.timezone ?? groupDefaults.timezone ?? 'America/Argentina/Buenos_Aires'
-  const isPresetTimezone = TIMEZONE_PRESETS.includes(defaultTimezone)
 
   const [patternId, setPatternId] = useState(initialPattern?.id ?? null)
   const [isActive, setIsActive] = useState(initialPattern?.is_active ?? true)
@@ -81,26 +71,32 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
   const [signupOpensTime, setSignupOpensTime] = useState(
     initialPattern ? trimTime(initialPattern.signup_opens_time) : '12:00'
   )
-  const [timezoneChoice, setTimezoneChoice] = useState(isPresetTimezone ? defaultTimezone : '__custom__')
-  const [customTimezone, setCustomTimezone] = useState(isPresetTimezone ? '' : defaultTimezone)
+  const [timezone, setTimezone] = useState(defaultTimezone)
 
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const effectiveTimezone = timezoneChoice === '__custom__' ? customTimezone.trim() : timezoneChoice
+  const effectiveTimezone = timezone.trim()
+  const differsFromGroup =
+    !!groupDefaults.timezone && isValidTimezone(effectiveTimezone) && effectiveTimezone !== groupDefaults.timezone
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
     setSuccess(false)
 
-    try {
-      if (!effectiveTimezone) {
-        throw new Error('Ingresá una zona horaria')
-      }
+    if (!effectiveTimezone) {
+      setError(t('ui.lifecycle.timezoneRequired'))
+      return
+    }
+    if (!isValidTimezone(effectiveTimezone)) {
+      setError(t('ui.lifecycle.invalidTimezone'))
+      return
+    }
 
+    setLoading(true)
+    try {
       const payload = {
         group_id: groupId,
         weekday,
@@ -110,9 +106,9 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         signup_opens_weekday: signupOpensWeekday,
         signup_opens_time: signupOpensTime,
         timezone: effectiveTimezone,
-        is_active: true,
       }
 
+      // Saving keeps the current on/off state; only the toggle changes it.
       if (patternId) {
         const { error: updateError } = await supabase
           .from('recurring_patterns')
@@ -120,17 +116,15 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
           .eq('id', patternId)
 
         if (updateError) throw updateError
-        setIsActive(true)
       } else {
         const { data: created, error: insertError } = await supabase
           .from('recurring_patterns')
-          .insert(payload)
+          .insert({ ...payload, is_active: isActive })
           .select('id')
           .single()
 
         if (insertError) throw insertError
         setPatternId(created.id)
-        setIsActive(true)
       }
 
       setSuccess(true)
@@ -138,7 +132,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       console.error('Error saving recurring pattern:', err)
-      setError(err instanceof Error ? err.message : 'Error al guardar el partido recurrente')
+      // The DB trigger raises 22023 / invalid_timezone for a zone Postgres doesn't know.
+      const dbError = err as { code?: string; message?: string }
+      if (dbError?.code === '22023' || dbError?.message?.includes('invalid_timezone')) {
+        setError(t('ui.lifecycle.invalidTimezone'))
+      } else {
+        setError(t('ui.lifecycle.recurring.saveError'))
+      }
     } finally {
       setLoading(false)
     }
@@ -162,7 +162,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       router.refresh()
     } catch (err) {
       console.error('Error toggling recurring pattern:', err)
-      setError('Error al actualizar el partido recurrente')
+      setError(t('ui.lifecycle.recurring.toggleError'))
     } finally {
       setLoading(false)
     }
@@ -173,21 +173,21 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       <div className="flex items-center gap-2">
         <Repeat className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
-          Crea automáticamente el próximo partido cada semana, con inscripciones que abren solas.
+          {t('ui.lifecycle.recurring.intro')}
         </p>
         {patternId && (
           <Badge variant={isActive ? 'success' : 'outline'} className="ml-auto">
-            {isActive ? 'Activo' : 'Inactivo'}
+            {isActive ? t('ui.lifecycle.recurring.active') : t('ui.lifecycle.recurring.inactive')}
           </Badge>
         )}
       </div>
 
       {error && <FormNotice kind="error">{error}</FormNotice>}
-      {success && <FormNotice kind="success">Partido recurrente guardado correctamente</FormNotice>}
+      {success && <FormNotice kind="success">{t('ui.lifecycle.recurring.saved')}</FormNotice>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="weekday">Día del partido</Label>
+          <Label htmlFor="weekday">{t('ui.lifecycle.recurring.weekday')}</Label>
           <NativeSelect
             id="weekday"
             value={weekday}
@@ -195,13 +195,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
             disabled={loading}
           >
             {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>{day.label}</option>
+              <option key={day.value} value={day.value}>{t(day.key)}</option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="matchTime">Hora del partido</Label>
+          <Label htmlFor="matchTime">{t('ui.lifecycle.recurring.matchTime')}</Label>
           <Input
             id="matchTime"
             type="time"
@@ -213,19 +213,19 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="location">Lugar</Label>
+          <Label htmlFor="location">{t('ui.lifecycle.recurring.location')}</Label>
           <Input
             id="location"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             disabled={loading}
-            placeholder="Ej: Cancha del club"
+            placeholder={t('ui.lifecycle.recurring.locationPlaceholder')}
             maxLength={200}
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="maxPlayers">Jugadores máx.</Label>
+          <Label htmlFor="maxPlayers">{t('ui.lifecycle.recurring.maxPlayers')}</Label>
           <Input
             id="maxPlayers"
             type="number"
@@ -239,7 +239,7 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="signupOpensWeekday">Día en que abre inscripción</Label>
+          <Label htmlFor="signupOpensWeekday">{t('ui.lifecycle.recurring.signupWeekday')}</Label>
           <NativeSelect
             id="signupOpensWeekday"
             value={signupOpensWeekday}
@@ -247,13 +247,13 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
             disabled={loading}
           >
             {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>{day.label}</option>
+              <option key={day.value} value={day.value}>{t(day.key)}</option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="signupOpensTime">Hora en que abre inscripción</Label>
+          <Label htmlFor="signupOpensTime">{t('ui.lifecycle.recurring.signupTime')}</Label>
           <Input
             id="signupOpensTime"
             type="time"
@@ -265,26 +265,18 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="timezone">Zona horaria</Label>
-          <NativeSelect
+          <Label htmlFor="timezone">{t('ui.lifecycle.recurring.timezone')}</Label>
+          <TimezoneSelect
             id="timezone"
-            value={timezoneChoice}
-            onChange={(e) => setTimezoneChoice(e.target.value)}
+            value={timezone}
+            onChange={setTimezone}
             disabled={loading}
-          >
-            {TIMEZONE_PRESETS.map((tz) => (
-              <option key={tz} value={tz}>{tz}</option>
-            ))}
-            <option value="__custom__">Otra (escribir)…</option>
-          </NativeSelect>
-          {timezoneChoice === '__custom__' && (
-            <Input
-              value={customTimezone}
-              onChange={(e) => setCustomTimezone(e.target.value)}
-              disabled={loading}
-              placeholder="Ej: America/Cordoba"
-              className="mt-2 font-mono text-sm"
-            />
+            extraOption={groupDefaults.timezone}
+          />
+          {differsFromGroup && (
+            <p className="text-xs text-muted-foreground text-pretty">
+              {t('ui.lifecycle.recurring.timezoneDiffers', { zone: groupDefaults.timezone })}
+            </p>
           )}
         </div>
       </div>
@@ -292,12 +284,12 @@ export function RecurringPatternForm({ groupId, groupDefaults, pattern: initialP
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={loading}>
           {loading ? <Spinner size="sm" /> : <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
-          Guardar
+          {t('common.save')}
         </Button>
         {patternId && (
           <Button type="button" variant="outline" onClick={handleToggleActive} disabled={loading}>
             <Power className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {isActive ? 'Desactivar' : 'Activar'}
+            {isActive ? t('ui.lifecycle.recurring.deactivate') : t('ui.lifecycle.recurring.activate')}
           </Button>
         )}
       </div>

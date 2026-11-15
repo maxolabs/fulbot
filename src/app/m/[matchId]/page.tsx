@@ -1,7 +1,9 @@
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { Database } from '@/types/database'
+import type { Database, GuestPriorityHold, WaitlistReason } from '@/types/database'
 import Link from 'next/link'
 import { PublicFrame } from '@/components/layout/public-frame'
 import { Button } from '@/components/ui/button'
@@ -41,6 +43,60 @@ interface PublicMatch {
   timezone: string | null
 }
 
+// One RPC per request for generateMetadata and the page.
+const getPublicMatch = cache(async (matchId: string): Promise<PublicMatch | null> => {
+  const supabase = await createClient()
+  // get_public_match works for anonymous visitors too -- it's the only way
+  // this page reads match data, so RLS never needs to open matches to anon.
+  const args: Database['public']['Functions']['get_public_match']['Args'] = {
+    p_match_id: matchId,
+  }
+  const { data } = (await supabase.rpc('get_public_match', args)) as {
+    data: PublicMatch | null
+  }
+  return data?.id ? data : null
+})
+
+async function cookieLanguage(): Promise<Language> {
+  const cookieStore = await cookies()
+  return cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es'
+}
+
+// Link preview for WhatsApp (PLAT-8): group, date and time in the group's
+// time zone, location and spots. The image is ./opengraph-image.tsx. The page
+// is reachable by anyone with the link but never indexed.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { matchId } = await params
+  const t = getT(await cookieLanguage())
+  const robots = { index: false, follow: false }
+  const match = await getPublicMatch(matchId)
+  if (!match) return { title: t('ui.meta.matchFallback'), robots }
+
+  const date = new Date(match.date_time)
+  const timeZone = match.timezone || DEFAULT_TIMEZONE
+  const title = t('ui.meta.matchTitle', {
+    group: match.group_name,
+    date: `${formatRowDate(t, date, timeZone)} ${formatMatchTime(date, timeZone)}`,
+  })
+  const free = Math.max(0, match.max_players - match.confirmed_count)
+  const spots = !['signup_open', 'full'].includes(match.status)
+    ? t('ui.meta.matchClosed')
+    : free === 0
+      ? t('ui.meta.matchFull', { max: match.max_players })
+      : free === 1
+        ? t('ui.meta.matchOneSpot', { max: match.max_players })
+        : t('ui.meta.matchSpots', { free, max: match.max_players })
+  const description = [match.location, spots].filter(Boolean).join(' · ')
+
+  return {
+    title,
+    description,
+    robots,
+    openGraph: { title, description, type: 'website', url: `/m/${matchId}`, siteName: 'fulbot' },
+    twitter: { card: 'summary_large_image', title, description },
+  }
+}
+
 function Message({
   eyebrow,
   title,
@@ -74,20 +130,12 @@ export default async function PublicMatchPage({ params }: PageProps) {
   const { matchId } = await params
   const supabase = await createClient()
   const cookieStore = await cookies()
-  const langCookie = cookieStore.get('fulbot_lang')?.value
-  const language: Language = langCookie === 'en' ? 'en' : 'es'
+  const language = await cookieLanguage()
   const t = getT(language)
 
-  // get_public_match works for anonymous visitors too -- it's the only way
-  // this page reads match data, so RLS never needs to open matches to anon.
-  const args: Database['public']['Functions']['get_public_match']['Args'] = {
-    p_match_id: matchId,
-  }
-  const { data: match } = (await supabase.rpc('get_public_match', args)) as {
-    data: PublicMatch | null
-  }
+  const match = await getPublicMatch(matchId)
 
-  if (!match || !match.id) {
+  if (!match) {
     return (
       <Message
         title={t('ui.screens.publicMatch.notFoundTitle')}
@@ -122,6 +170,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
   let isMember = false
   let memberSignup: { id: string; status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
   let inviteCode: string | null = null
+  // An admin removed this visitor from the group (OD-1): no join path.
+  let removedByAdmin = false
   let groupId: string | null = null
   let profileId: string | null = null
 
@@ -134,20 +184,20 @@ export default async function PublicMatchPage({ params }: PageProps) {
 
     if (profile) {
       profileId = profile.id
-      const { data: groupRow } = await supabase
-        .from('groups')
-        .select('id, invite_code')
-        .eq('slug', match.group_slug)
-        .single() as { data: { id: string; invite_code: string } | null }
+      // groups is readable by members only; this RPC gives a signed-in visitor
+      // the group id and invite code the join-and-sign-up flow needs.
+      const { data: joinInfo } = await supabase.rpc('get_match_join_info', { p_match_id: matchId })
+      const groupRow = joinInfo as { group_id: string; invite_code: string | null; removed?: boolean } | null
 
       if (groupRow) {
         inviteCode = groupRow.invite_code
-        groupId = groupRow.id
+        removedByAdmin = groupRow.removed === true
+        groupId = groupRow.group_id
 
         const { data: membership } = await supabase
           .from('group_memberships')
           .select('id')
-          .eq('group_id', groupRow.id)
+          .eq('group_id', groupRow.group_id)
           .eq('player_id', profile.id)
           .eq('is_active', true)
           .single() as { data: { id: string } | null }
@@ -179,7 +229,23 @@ export default async function PublicMatchPage({ params }: PageProps) {
   // guest_players/match_signups aren't readable by anon, so this lookup goes
   // through the service-role client -- never trusting anything besides the
   // opaque token itself.
-  let guestSignup: { status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
+  let guestSignup: {
+    status: 'confirmed' | 'waitlist'
+    waitlistPosition: number | null
+    waitlistReason: WaitlistReason | null
+  } | null = null
+  // Members first while the group's priority policy runs (00034, OD-8): a
+  // guest signing up now may land on the waitlist, and the page says so.
+  let guestHold: GuestPriorityHold | null = null
+
+  if (!isMember && !isPast) {
+    try {
+      const { data: hold } = await createAdminClient().rpc('guest_priority_hold', { p_match_id: matchId })
+      guestHold = (hold as GuestPriorityHold | null) ?? null
+    } catch (err) {
+      console.error('Error reading the guest priority policy:', err)
+    }
+  }
 
   if (!isMember) {
     const guestToken = cookieStore.get(`fulbot_guest_${matchId}`)?.value
@@ -196,16 +262,19 @@ export default async function PublicMatchPage({ params }: PageProps) {
         if (guestRow) {
           const { data: signupRow } = await admin
             .from('match_signups')
-            .select('status, waitlist_position')
+            .select('status, waitlist_position, waitlist_reason')
             .eq('match_id', matchId)
             .eq('guest_player_id', guestRow.id)
             .in('status', ['confirmed', 'waitlist'])
-            .maybeSingle() as { data: { status: string; waitlist_position: number | null } | null }
+            .maybeSingle() as {
+              data: { status: string; waitlist_position: number | null; waitlist_reason: string | null } | null
+            }
 
           if (signupRow) {
             guestSignup = {
               status: signupRow.status as 'confirmed' | 'waitlist',
               waitlistPosition: signupRow.waitlist_position,
+              waitlistReason: (signupRow.waitlist_reason as WaitlistReason | null) ?? null,
             }
           }
         }
@@ -255,7 +324,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
       </header>
 
       <div className="mt-6">
-        {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests unaffected */}
+        {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests get theirs in PublicMatchActions (00034, OD-8) */}
         {!isPast && isMember && !memberSignup && match.status === 'signup_open' && groupId && profileId && (
           <div className="mb-6">
             <SignupPolicyNotice
@@ -276,7 +345,10 @@ export default async function PublicMatchPage({ params }: PageProps) {
           isMember={isMember}
           memberSignup={memberSignup}
           guestSignup={guestSignup}
+          guestHold={guestHold}
+          timeZone={timeZone}
           inviteCode={inviteCode}
+          removedByAdmin={removedByAdmin}
         >
           <section className="space-y-2">
             <Eyebrow as="h2">

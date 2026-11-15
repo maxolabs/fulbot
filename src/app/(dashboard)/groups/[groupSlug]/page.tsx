@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, Users } from 'lucide-react'
+import { ChevronRight, ClipboardList, MessageCircle, Plus, Settings, Star, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/app-url'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-created'
 import { Button } from '@/components/ui/button'
@@ -15,6 +17,7 @@ import { GroupSwitcherTitle } from '@/components/layout/group-switcher'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import { DEFAULT_TIMEZONE, formatMatchTime, weekdayIndexInTimezone } from '@/lib/utils/datetime'
+import { LeaveGroupRow } from '@/components/leave-group-row'
 import { InviteButton } from './invite-button'
 import { MatchRow, MatchStatusBadge, ScoreText } from './matches/match-row'
 import { formatHeroDate, formatRowDate, formatShortDate } from './matches/match-format'
@@ -119,6 +122,29 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .filter((m): m is MembershipResult & { player_profiles: NonNullable<MembershipResult['player_profiles']> } => m.player_profiles !== null)
     .map(m => ({ id: m.id, role: m.role, player: m.player_profiles }))
   const memberNameById = new Map(members.map(m => [m.player.id, m.player.display_name]))
+  const isLastAdmin = isAdmin && members.filter(m => m.role === 'admin').length <= 1
+
+  // "Contanos dónde jugás": until the player saves their profile (or hides the
+  // row) their positions are the column defaults, and the balancer would treat
+  // them as a CM (profile_completed_at, 00028).
+  const { data: profileState } = await supabase
+    .from('player_profiles')
+    .select('profile_completed_at')
+    .eq('id', playerProfile.id)
+    .maybeSingle()
+  const showProfilePrompt = !!profileState && profileState.profile_completed_at === null
+
+  async function dismissProfilePrompt() {
+    'use server'
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase
+      .from('player_profiles')
+      .update({ profile_completed_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+    revalidatePath(`/groups/${groupSlug}`)
+  }
 
   // Initial scoring: members the current player hasn't rated or skipped yet in this
   // group. RLS returns only the current voter's own peer_ratings rows.
@@ -227,6 +253,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
   }
   const recent = finished.slice(0, 3)
   const lastResultMatch = finished.find(m => scoreOf(m) !== null) ?? finished[0] ?? null
+  // Finished without teams (00034, OD-3): attendance only, there is no score to load.
+  const isAttendanceOnly = (m: FinishedRow) => (m.teams?.length ?? 0) === 0
+  const noScoreLabel = (m: FinishedRow) =>
+    isAttendanceOnly(m) ? t('ui.lifecycle.attendanceOnly.badge') : t('ui.matchScreens.dashboard.noScore')
 
   // Table · últimos 10 (PJ, G, MVP; rating for admin/captain). Members only.
   type TableRow = { id: string; name: string; played: number; goals: number; mvp: number; rating: number | null }
@@ -249,24 +279,26 @@ export default async function GroupDetailPage({ params }: PageProps) {
         .select('player_id')
         .in('match_id', finishedIds)
         .eq('status', 'confirmed')
-        .not('player_id', 'is', null) as unknown as Promise<{ data: { player_id: string }[] | null }>,
+        .not('player_id', 'is', null),
       supabase
         .from('match_events')
         .select('player_id')
         .in('match_id', finishedIds)
         .eq('event_type', 'goal')
-        .not('player_id', 'is', null) as unknown as Promise<{ data: { player_id: string }[] | null }>,
+        .not('player_id', 'is', null),
     ])
-    for (const r of playedRows || []) { const row = rowFor(r.player_id); if (row) row.played += 1 }
-    for (const r of goalRows || []) { const row = rowFor(r.player_id); if (row) row.goals += 1 }
+    for (const r of playedRows || []) { const row = r.player_id && rowFor(r.player_id); if (row) row.played += 1 }
+    for (const r of goalRows || []) { const row = r.player_id && rowFor(r.player_id); if (row) row.goals += 1 }
     for (const m of finished) { if (m.mvp_player_id) { const row = rowFor(m.mvp_player_id); if (row) row.mvp += 1 } }
 
     // Scores are visible to admins and captains only (RLS on player_rating_summary
-    // enforces it; this just avoids a pointless query for members).
+    // enforces it; this just avoids a pointless query for members). Ratings are
+    // per group (OD-9): this group's rows only.
     if (isAdminOrCaptain && tableById.size > 0) {
       const { data: summaryRows } = await supabase
         .from('player_rating_summary')
         .select('player_id, overall')
+        .eq('group_id', group.id)
         .in('player_id', Array.from(tableById.keys())) as { data: { player_id: string; overall: number }[] | null }
       for (const s of summaryRows || []) { const row = tableById.get(s.player_id); if (row) row.rating = s.overall }
     }
@@ -299,20 +331,25 @@ export default async function GroupDetailPage({ params }: PageProps) {
   // and has not reported. Reporting also counts as "+1 compromiso".
   let reportNudge: { id: string; date_time: string } | null = null
   if (finished.length > 0) {
-    const { data: settingsRow } = await supabase
-      .from('notification_settings')
-      .select('results_window_days')
-      .eq('group_id', group.id)
-      .maybeSingle() as { data: { results_window_days: number | null } | null }
+    const { data: windowRows } = await supabase
+      .rpc('get_results_window_days', { p_group_ids: [group.id] }) as { data: { results_window_days: number | null }[] | null }
+    const settingsRow = windowRows?.[0] ?? null
     const windowMs = (settingsRow?.results_window_days ?? 7) * 24 * 60 * 60 * 1000
     const now = new Date().getTime()
-    type NudgeCandidate = { id: string; date_time: string; result_status: string }
+    type NudgeCandidate = { id: string; date_time: string; result_status: string; finished_at: string | null; duration_minutes: number | null }
     const { data: candidateRows } = await supabase
       .from('matches')
-      .select('id, date_time, result_status')
+      .select('id, date_time, result_status, finished_at, duration_minutes')
       .in('id', finished.map(m => m.id))
       .neq('result_status', 'locked') as { data: NudgeCandidate[] | null }
-    const candidates = (candidateRows || []).filter(m => now - new Date(m.date_time).getTime() < windowMs)
+    // Same anchor as match_report_window_open (00026): finished_at, or else
+    // start + duration.
+    const endMs = (m: NudgeCandidate) => m.finished_at
+      ? new Date(m.finished_at).getTime()
+      : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000
+    // Attendance-only matches (no teams) have nothing to report.
+    const withTeams = new Set(finished.filter(m => !isAttendanceOnly(m)).map(m => m.id))
+    const candidates = (candidateRows || []).filter(m => withTeams.has(m.id) && now - endMs(m) < windowMs)
     if (candidates.length > 0) {
       const ids = candidates.map(m => m.id)
       const [{ data: mySignups }, { data: myReports }] = await Promise.all([
@@ -321,12 +358,12 @@ export default async function GroupDetailPage({ params }: PageProps) {
           .select('match_id')
           .in('match_id', ids)
           .eq('player_id', playerProfile.id)
-          .eq('status', 'confirmed') as unknown as Promise<{ data: { match_id: string }[] | null }>,
+          .eq('status', 'confirmed'),
         supabase
           .from('match_reports')
           .select('match_id')
           .in('match_id', ids)
-          .eq('reporter_player_id', playerProfile.id) as unknown as Promise<{ data: { match_id: string }[] | null }>,
+          .eq('reporter_player_id', playerProfile.id),
       ])
       const played = new Set((mySignups || []).map(s => s.match_id))
       const reported = new Set((myReports || []).map(r => r.match_id))
@@ -337,7 +374,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
     }
   }
 
-  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite/${group.invite_code}`
+  const inviteUrl = `${getAppBaseUrl()}/invite/${group.invite_code}`
 
   // Subtitle: "Lunes 20:00 · Cancha … · 14 lugares · 18 miembros"
   const subtitleParts: string[] = []
@@ -432,7 +469,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
       <TopBarConfig
         title={<GroupSwitcherTitle fallback={group.name} />}
         action={
-          isAdmin ? (
+          isAdminOrCaptain ? (
             <TopBarAction href={`/groups/${groupSlug}/settings`} label={t('ui.shell.groupSettings')}>
               <Settings className="h-5 w-5" strokeWidth={1.75} />
             </TopBarAction>
@@ -446,7 +483,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
         actions={
           <>
             <InviteButton inviteUrl={inviteUrl} />
-            {isAdminOrCaptain && (
+            {isAdmin && (
               <Button asChild variant={createIsPrimary ? 'default' : 'outline'}>
                 <Link href={`/groups/${groupSlug}/matches/new`}>
                   <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -463,7 +500,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
         <h1 className="sr-only">{group.name}</h1>
         <p className="text-sm text-muted-foreground text-pretty">{subtitle}</p>
         <div className="flex flex-wrap gap-2">
-          {isAdminOrCaptain && (
+          {isAdmin && (
             <Button asChild variant={createIsPrimary && !nextMatch ? 'default' : 'outline'}>
               <Link href={`/groups/${groupSlug}/matches/new`}>
                 <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -501,7 +538,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 <p className="text-sm text-muted-foreground text-pretty">
                   {otherUpcoming.length > 0
                     ? t('ui.polish.noOpenMatch')
-                    : isAdminOrCaptain
+                    : isAdmin
                       ? t('ui.matchScreens.dashboard.noNextMatchAdmin')
                       : t('ui.matchScreens.dashboard.noNextMatch')}
                 </p>
@@ -596,6 +633,31 @@ export default async function GroupDetailPage({ params }: PageProps) {
             )}
           </Card>
 
+          {showProfilePrompt && (
+            <div className="flex items-center border-y border-border">
+              <Link
+                href="/profile"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{t('ui.membership.profilePrompt')}</span>
+                  <span className="block text-xs text-muted-foreground text-pretty">{t('ui.membership.profilePromptBody')}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
+              </Link>
+              <form action={dismissProfilePrompt}>
+                <button
+                  type="submit"
+                  aria-label={t('ui.membership.profilePromptDismiss')}
+                  className="ml-1 inline-flex h-11 w-11 items-center justify-center rounded-[3px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              </form>
+            </div>
+          )}
+
           {/* Mobile: the aside collapses to two tiles */}
           <div className="grid grid-cols-2 gap-3 lg:hidden">
             <Link
@@ -620,7 +682,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                   <ScoreText dark={lastScore.dark} light={lastScore.light} className="text-lg leading-none" />
                 ) : (
                   <span className="truncate text-sm text-muted-foreground">
-                    {lastResultMatch ? t('ui.matchScreens.dashboard.noScore') : t('ui.matchScreens.dashboard.lastResultEmpty')}
+                    {lastResultMatch ? noScoreLabel(lastResultMatch) : t('ui.matchScreens.dashboard.lastResultEmpty')}
                   </span>
                 )}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
@@ -689,7 +751,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
                           score ? (
                             <ScoreText dark={score.dark} light={score.light} className="text-base" />
                           ) : (
-                            <MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />
+                            <MatchStatusBadge
+                              status={m.status}
+                              label={isAttendanceOnly(m) ? t('ui.lifecycle.attendanceOnly.badge') : t(`matches.status.${m.status}`)}
+                            />
                           )
                         }
                       />
@@ -699,6 +764,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
               </ul>
             </section>
           )}
+
+          <LeaveGroupRow
+            groupId={group.id}
+            groupName={group.name}
+            isLastAdmin={isLastAdmin}
+            className="border-b"
+          />
         </div>
 
         {/* Aside (browser only) */}
@@ -785,7 +857,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         <span>{t('ui.matchScreens.dashboard.light')}</span>
                       </span>
                     ) : (
-                      <span className="text-sm text-muted-foreground">{t('ui.matchScreens.dashboard.noScore')}</span>
+                      <span className="text-sm text-muted-foreground">{noScoreLabel(lastResultMatch)}</span>
                     )}
                   </Link>
                   <p className="text-xs text-muted-foreground">

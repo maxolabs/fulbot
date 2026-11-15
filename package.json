@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "ticker": "tsx --env-file-if-exists=.env.local scripts/ticker.ts"
   },
   "dependencies": {

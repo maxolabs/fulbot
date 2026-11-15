@@ -11,9 +11,15 @@ import { GroupSettingsForm } from './settings-form'
 import { MemberScoringSettingsCard } from './member-scoring-settings'
 import type { Json } from '@/types/database'
 import { MembersManager } from './members-manager'
+import { ExMembers, type ExMember } from './ex-members'
 import { NotificationSettings } from './notification-settings'
 import { RecurringPatternForm } from './recurring-pattern-form'
 import { DangerZone } from './danger-zone'
+import { InviteLinkSettings } from './invite-link-settings'
+import { LeaveGroupRow } from '@/components/leave-group-row'
+import { RulesManager } from '@/components/rules-manager'
+import { getAppBaseUrl } from '@/lib/app-url'
+import { DEFAULT_TIMEZONE, formatMatchDateNumeric } from '@/lib/utils/datetime'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 
@@ -75,9 +81,12 @@ export default async function GroupSettingsPage({ params }: PageProps) {
     .eq('is_active', true)
     .single() as { data: { role: string } | null }
 
-  if (!membership || membership.role !== 'admin') {
+  // Admins get every card. Captains co-organize teams, so they get the group's
+  // teaming rules only (OD-10).
+  if (!membership || (membership.role !== 'admin' && membership.role !== 'captain')) {
     redirect(`/groups/${groupSlug}`)
   }
+  const isAdmin = membership.role === 'admin'
 
   type MembershipWithProfile = {
     id: string
@@ -116,6 +125,57 @@ export default async function GroupSettingsPage({ params }: PageProps) {
       userId: (m.player_profiles as { user_id: string | null }).user_id,
       isCurrentUser: (m.player_profiles as { user_id: string | null }).user_id === user.id,
     }))
+
+  // "Reglas del grupo" (OD-10): group-wide rule_sets rows (match_id NULL),
+  // which the balancer applies to every match. Guests belong to one match, so
+  // only members are offered here.
+  const groupRulesCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('ui.groupRules.title')}</CardTitle>
+        <CardDescription className="text-pretty">{t('ui.groupRules.hint')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <RulesManager
+          groupId={group.id}
+          players={members.map((m) => ({ id: m.playerId, display_name: m.displayName }))}
+          bare
+        />
+      </CardContent>
+    </Card>
+  )
+
+  if (!isAdmin) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <TopBarConfig title={t('ui.shell.groupSettings')} back={`/groups/${groupSlug}`} />
+
+        <PageHeader title={t('ui.shell.groupSettings')} subtitle={group.name} />
+        <Eyebrow className="lg:hidden">{group.name}</Eyebrow>
+
+        {groupRulesCard}
+
+        <p className="text-sm text-muted-foreground text-pretty">{t('ui.groupRules.captainNote')}</p>
+      </div>
+    )
+  }
+
+  // Admin-removed players (OD-1): their profiles are not readable under RLS
+  // once they left every shared group, so the list comes from an admin RPC.
+  type RemovedRow = {
+    membership_id: string
+    display_name: string
+    removed_at: string
+    removed_by_name: string | null
+  }
+  const { data: removedRows } = await supabase
+    .rpc('admin_list_removed_members', { p_group_id: group.id }) as { data: RemovedRow[] | null }
+  const exMembers: ExMember[] = (removedRows || []).map((r) => ({
+    membershipId: r.membership_id,
+    displayName: r.display_name,
+    removedOn: formatMatchDateNumeric(r.removed_at, group.timezone || DEFAULT_TIMEZONE, userData?.preferred_language ?? 'es'),
+    removedBy: r.removed_by_name,
+  }))
 
   type NotificationSettingsType = {
     id: string
@@ -187,6 +247,16 @@ export default async function GroupSettingsPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('ui.screens.groupSettings.invite')}</CardTitle>
+          <CardDescription>{t('ui.screens.groupSettings.inviteHint')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <InviteLinkSettings groupId={group.id} baseUrl={getAppBaseUrl()} inviteCode={group.invite_code} />
+        </CardContent>
+      </Card>
+
       {/* Member scoring (docs/member-scoring.md §6, §10.2) */}
       <Card>
         <CardHeader>
@@ -213,14 +283,17 @@ export default async function GroupSettingsPage({ params }: PageProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <MembersManager
             groupId={group.id}
             members={members}
             currentUserId={user.id}
           />
+          <ExMembers exMembers={exMembers} />
         </CardContent>
       </Card>
+
+      {groupRulesCard}
 
       <Card>
         <CardHeader>
@@ -253,6 +326,14 @@ export default async function GroupSettingsPage({ params }: PageProps) {
           />
         </CardContent>
       </Card>
+
+      {/* Leaving is not destructive for the group, so it sits above the danger zone as a row. */}
+      <LeaveGroupRow
+        groupId={group.id}
+        groupName={group.name}
+        isLastAdmin={members.filter((m) => m.role === 'admin').length <= 1}
+        className="border-b"
+      />
 
       <Card variant="solid" className="border-destructive">
         <CardHeader>

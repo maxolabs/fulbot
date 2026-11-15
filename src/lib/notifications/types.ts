@@ -8,6 +8,9 @@ export type NotificationType =
   | 'waitlist_promoted'
   | 'teams_created'
   | 'match_reminder'
+  | 'match_cancelled'
+  | 'match_updated'
+  | 'lineup_changed'
   | 'results_posted'
   | 'rate_new_member'
   | 'results_request'
@@ -22,6 +25,9 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   'waitlist_promoted',
   'teams_created',
   'match_reminder',
+  'match_cancelled',
+  'match_updated',
+  'lineup_changed',
   'results_posted',
   'rate_new_member',
   'results_request',
@@ -38,6 +44,9 @@ export interface MatchCreatedPayload {
   date_time: string // ISO timestamp
   location: string | null
   max_players: number
+  // Capacity minus confirmed signups when the list opened (00026). Absent on
+  // older rows; the template falls back to max_players.
+  spots_left?: number
   signup_url: string
 }
 
@@ -48,6 +57,10 @@ export interface WaitlistPromotedPayload {
   // (not a guest) -- emit_notification() reads this key to set
   // notifications.recipient_player_id.
   recipient_player_id: string | null
+  // 00034 (OD-2): with the teams already published, the promoted player takes
+  // the leaver's slot; these say which one. Null/absent before the teams.
+  team?: 'dark' | 'light' | null
+  position?: string | null
 }
 
 export interface TeamsCreatedPayload {
@@ -61,6 +74,75 @@ export interface MatchReminderPayload {
   group_name: string
   time: string // "HH:MM" in the group's timezone
   location: string | null
+  // Added with 00030: the match start the reminder was sent for (the reminder
+  // dedupe in emit_notification is per date_time, so a rescheduled match gets
+  // a new one) and whether teams were already published (the text mentions
+  // shirts only then). Absent on older rows: the template falls back to
+  // "Hoy" and mentions shirts.
+  date_time?: string // ISO timestamp
+  has_teams?: boolean
+}
+
+// Emitted by a trigger on matches (00026) when a match with signups is
+// cancelled before it starts. One group-wide row (one WhatsApp message); the
+// app and device push show it only to the players confirmed at that moment.
+export interface MatchCancelledPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  location: string | null
+  player_ids: string[]
+}
+
+// Emitted by a trigger on matches (00030) when an announced match changes
+// date/time or location before it starts. Group-wide row (one WhatsApp
+// message); the app and device push show it only to player_ids (confirmed and
+// waitlist when it changed).
+export interface MatchUpdatedPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp, the new start
+  previous_date_time: string
+  location: string | null
+  previous_location: string | null
+  date_changed: boolean
+  location_changed: boolean
+  player_ids: string[]
+}
+
+export interface LineupChangedPlayer {
+  name: string
+  player_id: string | null
+  guest: boolean
+}
+
+// One taken-over slot (00034, OD-2): `in` got `left`'s team and position.
+export interface LineupSwap {
+  left: string
+  in: string
+  team: 'dark' | 'light'
+  position: string
+}
+
+// In-app only (no outbox row), one row per admin/captain with
+// recipient_player_id set (00030, 00034): a confirmed player dropped out of a
+// match whose teams were already published (phase 'teams'), or of a match
+// still taking signups inside the late-cancel window (phase 'late', OD-11).
+// `promoted` is who came in from the waitlist in the same transaction (empty
+// when nobody did); `swaps` says whose slot each of them took. Rows written
+// before 00034 have neither phase nor swaps and read as phase 'teams'.
+export interface LineupChangedPayload {
+  match_id: string
+  group_name: string
+  date_time: string // ISO timestamp
+  phase?: 'teams' | 'late'
+  left: LineupChangedPlayer[]
+  promoted: LineupChangedPlayer[]
+  swaps?: LineupSwap[]
+  /** The lineup still has a gap or someone without a slot (lineup_needs_review). */
+  needs_review?: boolean
+  spots_left: number
+  recipient_player_id: string
 }
 
 // Crowd-sourced results (docs/match-results-consensus.md §11.1). Emitted from
@@ -171,6 +253,9 @@ export interface NotificationPayloadMap {
   waitlist_promoted: WaitlistPromotedPayload
   teams_created: TeamsCreatedPayload
   match_reminder: MatchReminderPayload
+  match_cancelled: MatchCancelledPayload
+  match_updated: MatchUpdatedPayload
+  lineup_changed: LineupChangedPayload
   results_posted: ResultsPostedPayload
   rate_new_member: RateNewMemberPayload
   results_request: ResultsRequestPayload
@@ -188,6 +273,9 @@ export type NotificationEvent =
   | { type: 'waitlist_promoted'; payload: WaitlistPromotedPayload }
   | { type: 'teams_created'; payload: TeamsCreatedPayload }
   | { type: 'match_reminder'; payload: MatchReminderPayload }
+  | { type: 'match_cancelled'; payload: MatchCancelledPayload }
+  | { type: 'match_updated'; payload: MatchUpdatedPayload }
+  | { type: 'lineup_changed'; payload: LineupChangedPayload }
   | { type: 'results_posted'; payload: ResultsPostedPayload }
   | { type: 'rate_new_member'; payload: RateNewMemberPayload }
   | { type: 'results_request'; payload: ResultsRequestPayload }

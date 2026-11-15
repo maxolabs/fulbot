@@ -6,8 +6,10 @@ import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
 import { DeviceNotifications } from '@/components/device-notifications'
 import { SettingsForm } from './settings-form'
+import { AccountSection } from './account-section'
 import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Preferences (docs/ui-rework/03-screens.md §10): one column max-w-xl.
 export default async function SettingsPage() {
@@ -34,6 +36,31 @@ export default async function SettingsPage() {
   const t = getT(userData.preferred_language)
   const prefs = userData.notification_prefs || {}
 
+  // lineup_changed only reaches admins and captains (00030), so only they
+  // get its toggle.
+  const { data: playerProfile } = await supabase
+    .from('player_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .maybeSingle() as { data: { id: string } | null }
+  const { data: staffRoles } = playerProfile
+    ? await supabase
+        .from('group_memberships')
+        .select('role')
+        .eq('player_id', playerProfile.id)
+        .eq('is_active', true)
+        .in('role', ['admin', 'captain'])
+        .limit(1)
+    : { data: [] as { role: string }[] }
+  const isStaff = (staffRoles ?? []).length > 0
+
+  // "Borrar mi cuenta" is disabled, with the reason, while the user is the only
+  // admin of a group that has other members (00033 refuses it as well).
+  const { data: blockerRows } = playerProfile
+    ? await supabase.rpc('account_deletion_blockers') as { data: { group_name: string }[] | null }
+    : { data: [] as { group_name: string }[] }
+  const deletionBlockers = (blockerRows ?? []).map((b) => b.group_name)
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <TopBarConfig title={t('ui.shell.preferences')} back="/profile" />
@@ -49,11 +76,29 @@ export default async function SettingsPage() {
           waitlist_promoted: prefs.waitlist_promoted ?? true,
           teams_created: prefs.teams_created ?? true,
           match_reminder: prefs.match_reminder ?? true,
+          match_cancelled: prefs.match_cancelled ?? true,
+          match_updated: prefs.match_updated ?? true,
+          lineup_changed: prefs.lineup_changed ?? true,
           results_posted: prefs.results_posted ?? true,
           results_request: prefs.results_request ?? true,
           results_reminder: prefs.results_reminder ?? true,
         }}
+        showStaffPrefs={isStaff}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('ui.screens.preferences.accountTitle')}</CardTitle>
+          <CardDescription>{t('ui.screens.preferences.accountDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AccountSection
+            email={user.email ?? ''}
+            pendingEmail={user.new_email ?? null}
+            deletionBlockers={deletionBlockers}
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -4,6 +4,9 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   CalendarPlus,
+  CalendarX,
+  CalendarClock,
+  UserMinus,
   ArrowUpCircle,
   Users,
   Clock,
@@ -27,7 +30,7 @@ import { createClient } from '@/lib/supabase/client'
 import { renderNotificationText } from '@/lib/notifications/templates'
 import type { NotificationEvent, NotificationRow, RateNewMemberPayload } from '@/lib/notifications/types'
 import { formatMatchDayMonth, formatMatchTime } from '@/lib/utils/datetime'
-import { useT } from '@/i18n/provider'
+import { useLanguage, useT, type Language } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
 
 // Notification rows (docs/ui-rework/03-screens.md §10, 06-principles.md §9):
@@ -46,6 +49,9 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
   waitlist_promoted: ArrowUpCircle,
   teams_created: Users,
   match_reminder: Clock,
+  match_cancelled: CalendarX,
+  match_updated: CalendarClock,
+  lineup_changed: UserMinus,
   results_posted: Goal,
   rate_new_member: Star,
   results_request: ClipboardList,
@@ -60,33 +66,12 @@ const TYPE_ICON: Record<NotificationRow['type'], LucideIcon> = {
 // (docs/match-results-consensus.md §11.2), not the top of the page.
 const REPORT_ANCHOR_TYPES = new Set<NotificationRow['type']>(['results_request', 'results_reminder'])
 
-// results_reminder is one group-wide row per match carrying the ids of the
-// players who still haven't reported; everyone else already did their part
-// and shouldn't see it. Without a player id (no profile yet) hide it too.
-//
-// results_request is group-wide too; since the payload carries player_ids (the
-// confirmed players) only they see it. Rows without the field predate it and
-// stay visible to everyone.
-function isVisibleTo(item: NotificationItem, currentPlayerId: string | null): boolean {
-  if (item.type === 'results_reminder') {
-    const pending = (item.payload as { pending_player_ids?: unknown }).pending_player_ids
-    if (!Array.isArray(pending)) return false
-    return currentPlayerId !== null && pending.includes(currentPlayerId)
-  }
-  if (item.type === 'results_request') {
-    const players = (item.payload as { player_ids?: unknown }).player_ids
-    if (!Array.isArray(players)) return true
-    return currentPlayerId !== null && players.includes(currentPlayerId)
-  }
-  return true
-}
-
-function safeRenderText(item: NotificationItem): string {
+function safeRenderText(item: NotificationItem, language: Language): string {
   try {
     return renderNotificationText(
       { type: item.type, payload: item.payload } as unknown as NotificationEvent,
       item.groupTimezone,
-      { channel: 'inapp' }
+      { channel: 'inapp', language, now: new Date(item.created_at) }
     )
   } catch {
     return ''
@@ -95,16 +80,15 @@ function safeRenderText(item: NotificationItem): string {
 
 export function NotificationList({
   items,
-  prefs,
   currentPlayerId = null,
   extraActions,
 }: {
   items: NotificationItem[]
-  prefs: Record<string, boolean>
   currentPlayerId?: string | null
   extraActions?: React.ReactNode
 }) {
   const t = useT()
+  const language = useLanguage()
   const shell = useShell()
   const supabase = createClient()
   // Read state comes from notification_reads (per-player), passed in as
@@ -116,17 +100,17 @@ export function NotificationList({
   )
   const [marking, setMarking] = useState(false)
 
-  // Respect users.notification_prefs client-side -- never filter in SQL
-  // including the signup-opened preference, also used by device push.
-  const visibleItems = items.filter((n) => prefs[n.type] !== false && isVisibleTo(n, currentPlayerId))
-  const unreadIds = visibleItems.filter((n) => !readIds.has(n.id)).map((n) => n.id)
+  // Visibility (prefs, audience, "already reported") is decided in SQL by
+  // list_my_notifications, the same rule the unread dot uses (00026).
+  const unreadIds = items.filter((n) => !readIds.has(n.id)).map((n) => n.id)
   const canMark = !marking && unreadIds.length > 0
 
   const markAllRead = async () => {
     if (unreadIds.length === 0) return
     setMarking(true)
     try {
-      const { error } = await supabase.rpc('mark_notifications_read', { p_ids: unreadIds })
+      // Marks every visible row, including older ones past the loaded page.
+      const { error } = await supabase.rpc('mark_all_notifications_read')
       if (!error) {
         setReadIds((prev) => {
           const next = new Set(prev)
@@ -138,6 +122,17 @@ export function NotificationList({
     } finally {
       setMarking(false)
     }
+  }
+
+  // Opening a notification marks it read (fire and forget: navigation must
+  // not wait for it, and a failure only leaves the dot on).
+  const markOneRead = (id: string) => {
+    if (readIds.has(id)) return
+    setReadIds((prev) => new Set(prev).add(id))
+    if (shell) shell.setUnreadCount(Math.max(0, shell.unreadCount - 1))
+    void supabase.rpc('mark_notifications_read', { p_ids: [id] }).then(({ error }) => {
+      if (error) console.error('Error marking notification read:', error)
+    })
   }
 
   const title = t('ui.shell.notifications')
@@ -173,14 +168,16 @@ export function NotificationList({
         }
       />
 
-      {visibleItems.length === 0 ? (
+      {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('ui.screens.notifications.empty')}</p>
       ) : (
         <ul className="[&>li:last-child>*]:border-b-0">
-          {visibleItems.map((n) => {
+          {items.map((n) => {
             const Icon = TYPE_ICON[n.type] ?? Bell
             const isRead = readIds.has(n.id)
-            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : ''
+            // A late drop-out before the teams (phase 'late', 00034) has no teams page to open.
+            const lineupToTeams = n.type === 'lineup_changed' && (n.payload as { phase?: string } | null)?.phase !== 'late'
+            const anchor = REPORT_ANCHOR_TYPES.has(n.type) ? '#reportar' : lineupToTeams ? '/teams' : ''
             // Score nudges are addressed to one member and land on their own
             // player page in that group (docs/member-scoring.md §10.4).
             const isScoreNudge = n.type === 'member_score_dropped' || n.type === 'member_score_recovered'
@@ -211,7 +208,7 @@ export function NotificationList({
                 <span className="min-w-0 flex-1">
                   <span className={cn('block text-sm text-pretty', !isRead && 'font-semibold')}>
                     {!isRead && <span className="sr-only">{t('ui.screens.notifications.unread')} </span>}
-                    {safeRenderText(n)}
+                    {safeRenderText(n, language)}
                   </span>
                   {n.groupName && <span className="mt-0.5 block text-xs text-muted-foreground">{n.groupName}</span>}
                 </span>
@@ -225,11 +222,13 @@ export function NotificationList({
             return (
               <li key={n.id}>
                 {href ? (
-                  <Link href={href} className={rowClassName}>
+                  <Link href={href} className={rowClassName} onClick={() => markOneRead(n.id)}>
                     {content}
                   </Link>
                 ) : (
-                  <div className={rowClassName}>{content}</div>
+                  <button type="button" className={rowClassName} onClick={() => markOneRead(n.id)}>
+                    {content}
+                  </button>
                 )}
               </li>
             )

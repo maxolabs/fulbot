@@ -8,7 +8,7 @@
 // own schedule:
 //   0. scheduler tick: run every due scheduled_jobs row (auto_finish,
 //      results_request, results_reminder, results_window_close) and drain
-//      the outbox -- the daily floor when no scripts/ticker.ts is running
+//      the outbox -- a daily backstop behind the pg_cron minute ticker
 //      (docs/match-results-consensus.md §5).
 //   1. generate_recurring_matches + emit match_created for whatever it (or a
 //      racing group-page lazy call) just created (§2.4).
@@ -25,6 +25,12 @@ import { emitPendingMatchCreatedNotifications } from '@/lib/notifications/match-
 import { drainOutbox } from '@/lib/notifications/dispatch'
 import { emitMatchReminders } from '@/lib/notifications/reminders'
 import { runTick, type TickResult } from '@/lib/notifications/tick'
+
+// Next 14 serves GET fetches from its Data Cache in a route handler that only
+// exports GET, and supabase-js reads are GET fetches: without these, a query
+// with a constant URL would return its first answer forever.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Error desconocido'

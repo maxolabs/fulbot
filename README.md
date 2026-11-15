@@ -12,9 +12,32 @@ cp .env.local.example .env.local   # fill in Supabase keys, CRON_SECRET, NEXT_PU
 npm run dev
 ```
 
-Migrations live in `supabase/migrations` and are applied by hand (Supabase
-dashboard or `psql`). `supabase/seed.sql` builds a demo dataset for a local
-stack (every account's password is `password123`).
+Migrations live in `supabase/migrations`. Production applies them with the
+Supabase CLI (`supabase link` + `supabase db push`, tracked in
+`supabase_migrations.schema_migrations`); see docs/deploy.md. Scenario scripts
+for the SQL live in `supabase/tests/`. `supabase/seed.sql` builds a demo
+dataset for a local stack (every account's password is `password123`); it
+never runs on production.
+
+Checks (the same ones CI runs, `.github/workflows/ci.yml`):
+
+```bash
+npm run type-check
+npm run lint
+npm test          # node:test unit tests (src/**/*.test.ts) through tsx
+npm run build
+```
+
+`supabase/config.toml` configures a local Supabase stack (`supabase start`:
+API on 56621, database on 56622, the mail catcher on 56624) with email
+confirmation on and the Spanish templates from `supabase/templates/`.
+
+## Deploying
+
+Production setup (migrations with the Supabase CLI, Supabase Auth URLs,
+SMTP, the Spanish email templates, Vercel environment variables, the pg_cron
+ticker's Vault secrets, the post-deploy check and `/api/health` monitoring) is
+in [docs/deploy.md](docs/deploy.md).
 
 ## Device notifications and WhatsApp
 
@@ -32,7 +55,8 @@ To enable device delivery:
    Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and a real contact
    `VAPID_SUBJECT=mailto:you@your-domain.com` in the deployment, then rebuild.
    Keep the same key pair across deployments so existing subscriptions work.
-3. Run the minute ticker below. It now opens recurring match lists, checks
+3. Make sure the minute ticker runs (below): in production the pg_cron job
+   with its Vault secrets. Each tick opens recurring match lists, checks
    reminders, runs scheduled jobs, and drains the device-push queue (plus the
    optional WhatsApp webhook outbox, for groups that configured one).
    The daily cron alone does **not** provide timely notifications.
@@ -66,44 +90,35 @@ reminder, and closes the reporting window (see
 `/api/cron/tick` endpoint claims every due row, runs it and drains the WhatsApp
 outbox, and something has to call that endpoint regularly.
 
-Three drivers call the same endpoint; the work never depends on which one
+The drivers all call the same endpoint; the work never depends on which one
 fired, and calling it more often than needed is harmless:
 
-1. **The ticker script** (recommended). A loop that POSTs `/api/cron/tick`
-   every minute. Run it on anything that stays on: a laptop, a Raspberry Pi, a
-   small VPS.
+1. **Production: Supabase pg_cron** (migration 00036). The `fulbot-tick` job
+   runs every minute inside the database and POSTs `/api/cron/tick` through
+   pg_net, with the app URL and `CRON_SECRET` read from Vault
+   (`fulbot_app_url`, `fulbot_cron_secret`). Without those secrets it does
+   nothing, which is the case on a local stack. Setup and checks:
+   [docs/deploy.md](docs/deploy.md#4-ticker-pg_cron).
+
+2. **Local development: the ticker script.** A loop that POSTs
+   `/api/cron/tick` every minute.
 
    ```bash
    # reads NEXT_PUBLIC_APP_URL and CRON_SECRET from .env.local
    npm run ticker
-
-   # or explicitly
-   NEXT_PUBLIC_APP_URL=https://your-app.vercel.app CRON_SECRET=... npm run ticker
    ```
 
    Env: `NEXT_PUBLIC_APP_URL` (or `TICKER_APP_URL` to point at a different
    deployment), `CRON_SECRET`, optional `TICKER_INTERVAL_MS` (default 60000,
    minimum 5000). It logs one line per tick and never exits on a failed tick,
-   only on missing configuration.
+   only on missing configuration. `Dockerfile.ticker` packages it as a
+   container, for hosting the app somewhere without pg_cron.
 
-   As a container:
-
-   ```bash
-   docker build -f Dockerfile.ticker -t fulbot-ticker .
-   docker run -d --restart unless-stopped \
-     -e NEXT_PUBLIC_APP_URL=https://your-app.vercel.app \
-     -e CRON_SECRET=... \
-     fulbot-ticker
-   ```
-
-2. **The daily Vercel cron** (`vercel.json`, `/api/cron/daily`) runs a tick
-   first thing every day. With no ticker running this is the floor: a Monday
-   21:00 match gets its result request at the next 12:00 UTC run instead of an
-   hour after the final whistle.
-
-3. **Signed-in traffic.** The dashboard layout fires a detached tick at most
-   once a minute per instance, so the first player who opens the app after a
-   match triggers the request for everyone even if no ticker is up.
+3. **Backstops.** The daily Vercel cron (`vercel.json`, `/api/cron/daily`,
+   12:00 UTC) runs a tick and the daily sweeps, and the dashboard layout fires
+   a detached tick at most once a minute per instance on signed-in traffic.
+   Neither is a minute driver: without one, result requests and reminders
+   arrive late and `/api/health` reports `degraded`.
 
 To trigger a tick by hand:
 
@@ -113,3 +128,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app
 
 The response lists the jobs claimed in that pass (`claimed`, `done`, `failed`,
 `jobs[]`) and the outbox drain result.
+
+To know whether the scheduler is alive, point an uptime monitor at
+`GET /api/health` (200 `ok` / 503 `degraded`; details with the
+`CRON_SECRET` bearer). See [docs/deploy.md](docs/deploy.md#8-monitoring).

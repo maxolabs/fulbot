@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
-import { Syne, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import { cookies } from 'next/headers'
+import { getT } from '@/i18n/server'
+import { getAppBaseUrl } from '@/lib/app-url'
+import type { Language } from '@/i18n/core'
+import { fontVariables } from './fonts'
 import './globals.css'
 
 type ThemePreference = 'light' | 'dark' | 'system'
@@ -9,41 +12,28 @@ type ThemePreference = 'light' | 'dark' | 'system'
 // before first paint (no library, no flash of the wrong theme).
 const SYSTEM_THEME_SCRIPT = `(function(){try{var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var c=document.documentElement.classList;if(d){c.add('dark')}else{c.remove('dark')}}catch(e){}})();`
 
-// Pizarra type (docs/ui-rework/01-brand.md §2): Syne for display, IBM Plex
-// Sans for body, IBM Plex Mono for eyebrows, counts and positions. Exposed as
-// CSS variables on <html>; tailwind.config.ts maps them to font-display /
-// font-sans / font-mono.
-const fontDisplay = Syne({
-  subsets: ['latin'],
-  weight: ['700', '800'],
-  display: 'swap',
-  variable: '--font-display',
-})
+// Public pages and the root layout follow the fulbot_lang cookie, which login,
+// the auth callback and /settings keep in sync with users.preferred_language.
+async function getCookieLanguage(): Promise<Language> {
+  const cookieStore = await cookies()
+  return cookieStore.get('fulbot_lang')?.value === 'en' ? 'en' : 'es'
+}
 
-const fontBody = IBM_Plex_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  display: 'swap',
-  variable: '--font-body',
-})
-
-const fontMono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  display: 'swap',
-  variable: '--font-mono',
-})
-
-export const metadata: Metadata = {
-  title: 'fulbot — Organizá tus partidos',
-  description: 'Organizá partidos de fútbol amateur con tus amigos. Inscripciones, equipos balanceados con IA, y más.',
-  manifest: '/manifest.json',
-  icons: { apple: '/icons/icon-192.png' },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'fulbot',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const t = getT(await getCookieLanguage())
+  return {
+    // Absolute og:image / og:url for shared links (PLAT-8).
+    metadataBase: new URL(getAppBaseUrl()),
+    title: { default: t('ui.shell.metaTitle'), template: '%s · fulbot' },
+    description: t('ui.shell.metaDescription'),
+    manifest: '/manifest.json',
+    icons: { apple: '/icons/icon-192.png' },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: 'fulbot',
+    },
+  }
 }
 
 export const viewport: Viewport = {
@@ -58,6 +48,7 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const cookieStore = await cookies()
+  const language = await getCookieLanguage()
   const themeCookie = cookieStore.get('fulbot_theme')?.value
   const theme: ThemePreference =
     themeCookie === 'light' || themeCookie === 'dark' || themeCookie === 'system'
@@ -68,17 +59,11 @@ export default async function RootLayout({
   // 'light' -> render with no class (light palette is the :root default).
   // 'system' -> render with no class; the inline script below adds/removes
   //   it before paint based on prefers-color-scheme.
-  const htmlClassName = [
-    fontDisplay.variable,
-    fontBody.variable,
-    fontMono.variable,
-    theme === 'dark' ? 'dark' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
+  // Font variables: ./fonts.ts (self-hosted, next/font/local).
+  const htmlClassName = theme === 'dark' ? `${fontVariables} dark` : fontVariables
 
   return (
-    <html lang="es" className={htmlClassName} suppressHydrationWarning>
+    <html lang={language} className={htmlClassName} suppressHydrationWarning>
       <body className="font-sans">
         {theme === 'system' && (
           <script

@@ -77,6 +77,7 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
     await disableDevicePush().catch(() => {})
     await supabase.auth.signOut()
     router.push('/login')
+    router.refresh()
   }
 
   const slug = groupSlugFromPathname(pathname)
@@ -150,7 +151,7 @@ export function Sidebar({ user, groups, currentGroup, unreadCount: initialUnread
                   isActive(`${groupBase}/rate`),
                   <CountBadge count={pendingRatings} label={t('ui.shell.pendingRatings', { n: pendingRatings })} />
                 )}
-              {isAdmin && navItem(`${groupBase}/settings`, t('ui.shell.groupSettings'), Settings, isActive(`${groupBase}/settings`))}
+              {isAdminOrCaptain && navItem(`${groupBase}/settings`, t('ui.shell.groupSettings'), Settings, isActive(`${groupBase}/settings`))}
             </ul>
           </nav>
         </>

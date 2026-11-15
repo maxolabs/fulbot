@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, LogOut } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { FormNotice } from '@/components/form-controls'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/i18n/provider'
 
 interface DangerZoneProps {
   groupId: string
@@ -16,30 +18,40 @@ interface DangerZoneProps {
 export function DangerZone({ groupId, groupName }: DangerZoneProps) {
   const router = useRouter()
   const supabase = createClient()
+  const t = useT()
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleDeleteGroup = async () => {
     if (deleteConfirmText !== groupName) {
-      alert('El nombre no coincide')
+      setError(t('ui.dangerZone.mismatch'))
       return
     }
 
     setLoading(true)
+    setError(null)
 
     try {
-      // Delete the group (CASCADE will handle related records)
-      const { error } = await supabase.from('groups').delete().eq('id', groupId)
+      // Delete the group (CASCADE will handle related records). RLS filters the
+      // row out for non-admins, which deletes nothing without an error, so ask
+      // for the deleted row back and treat an empty result as a failure.
+      const { data, error } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', groupId)
+        .select('id')
 
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('Group not deleted')
 
       router.push('/groups')
       router.refresh()
     } catch (err) {
       console.error('Error deleting group:', err)
-      alert('Error al eliminar el grupo')
+      setError(t('ui.dangerZone.error'))
     } finally {
       setLoading(false)
     }
@@ -50,9 +62,9 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
       {!showDeleteConfirm ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-medium">Eliminar grupo</p>
+            <p className="font-medium">{t('ui.dangerZone.title')}</p>
             <p className="text-sm text-muted-foreground">
-              Elimina permanentemente el grupo y todos sus datos
+              {t('ui.dangerZone.description')}
             </p>
           </div>
           <Button
@@ -60,17 +72,15 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
             onClick={() => setShowDeleteConfirm(true)}
           >
             <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            Eliminar grupo
+            {t('ui.dangerZone.title')}
           </Button>
         </div>
       ) : (
         <div className="space-y-4 rounded-md border border-destructive p-4">
+          {error && <FormNotice kind="error">{error}</FormNotice>}
+          <p className="text-sm">{t('ui.dangerZone.warning')}</p>
           <p className="text-sm">
-            Esta acción <strong>no se puede deshacer</strong>. Se eliminarán todos los
-            partidos, inscripciones, equipos y estadísticas del grupo.
-          </p>
-          <p className="text-sm">
-            Escribe <strong>{groupName}</strong> para confirmar:
+            {t('ui.dangerZone.typeToConfirm')} <strong>{groupName}</strong>
           </p>
           <Input
             value={deleteConfirmText}
@@ -85,7 +95,7 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
               disabled={loading || deleteConfirmText !== groupName}
             >
               {loading && <Spinner size="sm" />}
-              Confirmar eliminación
+              {t('ui.dangerZone.confirm')}
             </Button>
             <Button
               variant="outline"
@@ -95,7 +105,7 @@ export function DangerZone({ groupId, groupName }: DangerZoneProps) {
               }}
               disabled={loading}
             >
-              Cancelar
+              {t('common.cancel')}
             </Button>
           </div>
         </div>

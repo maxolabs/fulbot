@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { createClient } from '@/lib/supabase/client'
 import { combineDateTimeInTimezone } from '@/lib/utils/datetime'
+import { useT } from '@/i18n/provider'
 
 interface CreateMatchFormProps {
   groupId: string
@@ -24,6 +25,7 @@ interface CreateMatchFormProps {
 }
 
 export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: CreateMatchFormProps) {
+  const t = useT()
   const router = useRouter()
   const supabase = createClient()
 
@@ -48,8 +50,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       // Combine date and time into an ISO datetime, honoring the group's timezone
       const dateTime = combineDateTimeInTimezone(date, time, timezone).toISOString()
 
-       
-      const { data: match, error: insertError } = await (supabase as any)
+      const { data: match, error: insertError } = await supabase
         .from('matches')
         .insert({
           group_id: groupId,
@@ -72,7 +73,10 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       router.refresh()
     } catch (err) {
       console.error('Error creating match:', err)
-      setError('Error al crear el partido')
+      // RLS rejects non-admins with 42501 / a row-level security message.
+      const e = err as { code?: string; message?: string } | null
+      const forbidden = e?.code === '42501' || (e?.message ?? '').includes('row-level security')
+      setError(t(forbidden ? 'ui.matchScreens.forms.createForbidden' : 'ui.matchScreens.forms.createError'))
     } finally {
       setLoading(false)
     }
@@ -89,7 +93,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="date">Fecha</Label>
+          <Label htmlFor="date">{t('ui.matchScreens.forms.date')}</Label>
           <Input
             id="date"
             type="date"
@@ -101,7 +105,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="time">Hora</Label>
+          <Label htmlFor="time">{t('ui.matchScreens.forms.time')}</Label>
           <Input
             id="time"
             type="time"
@@ -115,19 +119,19 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="location">Lugar (opcional)</Label>
+        <Label htmlFor="location">{t('ui.matchScreens.forms.locationOptional')}</Label>
         <Input
           id="location"
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Cancha del club"
+          placeholder={t('ui.matchScreens.forms.locationPlaceholder')}
           maxLength={200}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="maxPlayers">Jugadores máximo</Label>
+        <Label htmlFor="maxPlayers">{t('ui.matchScreens.forms.maxPlayers')}</Label>
         <Input
           id="maxPlayers"
           type="number"
@@ -140,13 +144,13 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           disabled={loading}
         />
         <p className="text-xs text-muted-foreground">
-          Cuando se alcance el límite, los siguientes quedarán en lista de espera
+          {t('ui.matchScreens.forms.maxPlayersHint')}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="durationMinutes">Duración (min)</Label>
+          <Label htmlFor="durationMinutes">{t('ui.matchScreens.forms.duration')}</Label>
           <Input
             id="durationMinutes"
             type="number"
@@ -160,11 +164,11 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Al pasar este tiempo el partido se da por terminado solo
+            {t('ui.matchScreens.forms.durationHint')}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="resultsRequestDelayMinutes">Pedir el resultado (min después del final)</Label>
+          <Label htmlFor="resultsRequestDelayMinutes">{t('ui.matchScreens.forms.resultsDelay')}</Label>
           <Input
             id="resultsRequestDelayMinutes"
             type="number"
@@ -178,19 +182,19 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
             disabled={loading}
           />
           <p className="text-xs text-muted-foreground">
-            Cuándo se les pide a los jugadores que carguen el resultado
+            {t('ui.matchScreens.forms.resultsDelayHint')}
           </p>
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="notes">Notas (opcional)</Label>
+        <Label htmlFor="notes">{t('ui.matchScreens.forms.notesOptional')}</Label>
         <textarea
           id="notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           disabled={loading}
-          placeholder="Ej: Traer pechera"
+          placeholder={t('ui.matchScreens.forms.notesPlaceholder')}
           maxLength={500}
           rows={2}
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -206,9 +210,9 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           className="h-4 w-4 rounded-sm border-input accent-chalk"
         />
         <div>
-          <p className="text-sm font-medium">Abrir inscripciones inmediatamente</p>
+          <p className="text-sm font-medium">{t('ui.matchScreens.forms.openSignup')}</p>
           <p className="text-xs text-muted-foreground">
-            Si no, el partido quedará como borrador
+            {t('ui.matchScreens.forms.openSignupHint')}
           </p>
         </div>
       </label>
@@ -216,7 +220,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
       <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row">
         <Button type="submit" disabled={loading} className="w-full sm:w-auto">
           {loading && <Spinner size="sm" className="mr-2" />}
-          Crear partido
+          {t('ui.matchScreens.forms.createMatch')}
         </Button>
         <Button
           type="button"
@@ -225,7 +229,7 @@ export function CreateMatchForm({ groupId, groupSlug, timezone, defaults }: Crea
           disabled={loading}
           className="w-full sm:w-auto"
         >
-          Cancelar
+          {t('ui.matchScreens.forms.cancel')}
         </Button>
       </div>
     </form>

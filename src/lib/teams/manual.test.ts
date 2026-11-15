@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { assignmentPayload, draftProblem, movePlayer, normalizePosition, syncRoster, type BuilderPlayer, type TeamDraft } from './manual'
+import { assignmentPayload, draftProblem, lineupWarnings, movePlayer, normalizePosition, syncRoster, type BuilderPlayer, type TeamDraft } from './manual'
 const player = (id: string, guest = false): BuilderPlayer => ({ id, playerId: guest ? null : id, guestPlayerId: guest ? id : null, displayName: id, nickname: null, mainPosition: 'CM', position: 'CM', overallRating: 2.5 })
 const initial = (): TeamDraft => ({ pool: [player('a'), player('b'), player('c'), player('guest', true)], dark: [], light: [] })
 
@@ -55,4 +55,26 @@ test('a changed roster keeps placements, drops leavers and pools newcomers', () 
   assert.deepEqual(synced.dark.map((p) => p.id), ['a'])
   assert.deepEqual(synced.light.map((p) => p.id), [])
   assert.deepEqual(synced.pool.map((p) => p.id), ['c', 'd'])
+})
+
+test('lineup warnings flag keepers per team and broken pair rules', () => {
+  const draft: TeamDraft = {
+    pool: [player('e')],
+    dark: [{ ...player('a'), position: 'GK' }, { ...player('b'), position: 'GK' }],
+    light: [player('c'), player('d')],
+  }
+  const warnings = lineupWarnings(draft, [
+    { type: 'avoid_pair', playerIds: ['a', 'b'] },
+    { type: 'force_pair', playerIds: ['a', 'c'] },
+    { type: 'force_pair', playerIds: ['a', 'e'] },
+    { type: 'avoid_pair', playerIds: ['a', 'outsider'] },
+  ])
+  assert.deepEqual(warnings, [
+    { kind: 'manyKeepers', team: 'dark', count: 2 },
+    { kind: 'noKeeper', team: 'light' },
+    { kind: 'avoidPairBroken', names: ['a', 'b'] },
+    { kind: 'forcePairBroken', names: ['a', 'c'] },
+  ])
+  const ok: TeamDraft = { pool: [], dark: [{ ...player('a'), position: 'GK' }], light: [{ ...player('b'), position: 'GK' }] }
+  assert.deepEqual(lineupWarnings(ok), [])
 })

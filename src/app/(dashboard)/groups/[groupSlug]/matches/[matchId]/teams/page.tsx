@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { overallOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
 import { TopBarConfig } from '@/components/layout/top-bar'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
+import { guestPlayerDefaults } from '@/lib/ai/team-generator'
+import type { PairRule } from '@/lib/teams/manual'
 import { TeamsView } from './teams-view'
 import { DEFAULT_TIMEZONE, formatMatchDateShort, formatMatchTime } from '@/lib/utils/datetime'
 
@@ -63,7 +65,7 @@ export default async function TeamsPage({ params }: PageProps) {
   // Get match details
   const { data: match } = await supabase
     .from('matches')
-    .select('id, date_time, status, max_players, ai_input_snapshot')
+    .select('*')
     .eq('id', matchId)
     .eq('group_id', group.id)
     .single() as { data: {
@@ -71,17 +73,30 @@ export default async function TeamsPage({ params }: PageProps) {
       date_time: string
       status: string
       max_players: number
-      ai_input_snapshot: {
-        output?: {
-          reasoning?: string
-          balanceScore?: number
-          warnings?: string[]
-        }
-        provider?: 'openai' | 'fallback'
-      } | null
+      lineup_needs_review: boolean
     } | null }
 
   if (!match) return notFound()
+
+  // The analysis of the last AI lineup (OD-6): match_ai_snapshots is readable
+  // by admins and captains only, so members never get it, whatever the UI does.
+  type AiSnapshot = {
+    output?: {
+      reasoning?: string
+      balanceScore?: number
+      warnings?: string[]
+    }
+    provider?: 'openai' | 'fallback'
+  }
+  let aiSnapshot: AiSnapshot | null = null
+  if (isAdminOrCaptain) {
+    const { data: snapshotRow } = await supabase
+      .from('match_ai_snapshots')
+      .select('snapshot')
+      .eq('match_id', matchId)
+      .maybeSingle() as { data: { snapshot: AiSnapshot } | null }
+    aiSnapshot = snapshotRow?.snapshot ?? null
+  }
 
   // Get confirmed signups with player info (registered + guests)
   type SignupResult = {
@@ -97,6 +112,7 @@ export default async function TeamsPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
+      preferred_positions: string[] | null
     } | null
   }
 
@@ -114,21 +130,33 @@ export default async function TeamsPage({ params }: PageProps) {
       ),
       guest_players (
         id,
-        display_name
+        display_name,
+        preferred_positions
       )
     `)
     .eq('match_id', matchId)
     .eq('status', 'confirmed') as { data: SignupResult[] | null }
 
+  // A guest's level is organizer-only (00035): members get the default.
+  const guestRatingById = new Map<string, number | null>()
+  if (isAdminOrCaptain && (signups || []).some((s) => s.guest_players)) {
+    const { data: guestRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+    for (const row of guestRows || []) {
+      guestRatingById.set(row.guest_player_id, row.estimated_rating === null ? null : Number(row.estimated_rating))
+    }
+  }
+
   // Scores: player_rating_summary is readable by admins/captains only, so members
   // simply get the default here (and the UI hides the numbers for them anyway).
+  // Ratings are per group (OD-9): this group's rows only.
   const ratedIds = (signups || [])
     .map((s) => s.player_profiles?.id)
     .filter((id): id is string => !!id)
   const { data: summaryRows } = ratedIds.length > 0
     ? await supabase
         .from('player_rating_summary')
-        .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+        .select(RATING_SUMMARY_COLUMNS)
+        .eq('group_id', group.id)
         .in('player_id', ratedIds) as { data: RatingSummary[] | null }
     : { data: [] as RatingSummary[] }
   const summaries = summariesById(summaryRows)
@@ -146,12 +174,19 @@ export default async function TeamsPage({ params }: PageProps) {
           isGuest: false,
         }
       }
-      return {
+      // Same rating and position the generator uses (guestPlayerDefaults)
+      const guest = guestPlayerDefaults({
         id: s.guest_players!.id,
         displayName: s.guest_players!.display_name,
+        preferredPositions: s.guest_players!.preferred_positions,
+        estimatedRating: guestRatingById.get(s.guest_players!.id) ?? null,
+      })
+      return {
+        id: guest.id,
+        displayName: guest.displayName,
         nickname: null,
-        mainPosition: 'CM',
-        overallRating: 2.5,
+        mainPosition: guest.mainPosition,
+        overallRating: guest.overallRating,
         isGuest: true,
       }
     })
@@ -204,6 +239,27 @@ export default async function TeamsPage({ params }: PageProps) {
     }
   }
 
+  // Pair rules for the manual builder's warnings (organizers only; same
+  // sources as the generator: group rules plus this match's rules).
+  let pairRules: PairRule[] = []
+  if (isAdminOrCaptain) {
+    const { data: ruleRows } = await supabase
+      .from('rule_sets')
+      .select('rule_type, data')
+      .or(`group_id.eq.${group.id},match_id.eq.${matchId}`)
+      .eq('is_active', true) as { data: { rule_type: string; data: { player_ids?: unknown } | null }[] | null }
+    pairRules = (ruleRows || []).flatMap((r): PairRule[] => {
+      const ids = r.data?.player_ids
+      if ((r.rule_type !== 'avoid_pair' && r.rule_type !== 'force_pair') || !Array.isArray(ids) || ids.length !== 2) return []
+      if (typeof ids[0] !== 'string' || typeof ids[1] !== 'string') return []
+      return [{ type: r.rule_type, playerIds: [ids[0], ids[1]] }]
+    })
+  }
+
+  // The AI analysis and warnings are written from private ratings and the
+  // member score: organizers only, so members never get them in the payload.
+  const aiOutput = isAdminOrCaptain ? aiSnapshot?.output : undefined
+
   // Dates are formatted here, in the group's timezone, so the client never
   // touches the visitor's clock (src/lib/utils/datetime.ts).
   const dateLabel = `${formatMatchDateShort(match.date_time, timeZone)} · ${formatMatchTime(match.date_time, timeZone)}`
@@ -227,13 +283,15 @@ export default async function TeamsPage({ params }: PageProps) {
           id: teams?.find((t) => t.name === 'light')?.id || null,
           assignments: lightTeamAssignments,
         }}
-        aiReasoning={match.ai_input_snapshot?.output?.reasoning}
-        balanceScore={match.ai_input_snapshot?.output?.balanceScore}
-        warnings={match.ai_input_snapshot?.output?.warnings}
-        provider={match.ai_input_snapshot?.provider}
+        aiReasoning={aiOutput?.reasoning}
+        balanceScore={aiOutput?.balanceScore}
+        warnings={aiOutput?.warnings}
+        provider={isAdminOrCaptain ? aiSnapshot?.provider : undefined}
+        pairRules={pairRules}
         isAdminOrCaptain={isAdminOrCaptain}
         hasTeams={teams !== null && teams.length > 0}
         matchStatus={match.status}
+        lineupStale={match.status === 'teams_created' && !!match.lineup_needs_review}
       />
     </>
   )

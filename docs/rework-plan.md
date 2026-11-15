@@ -7,7 +7,8 @@ exactly; other tracks depend on them.
 Product decisions taken by the owner (2026-09-05):
 
 1. **One-time guests can sign up from the public match link** with just a name, no account.
-2. **Only admins** can add or remove guests from inside the app.
+2. **Only admins** can add or remove guests from inside the app. *(Superseded 2026-11-15 by
+   OD-7: captains are co-organizers and add or remove guests too; see `init-prompt.md` §4.2.)*
 3. **"Close signups" is a real state** (`signup_closed`): the list freezes but stays visible.
 
 Verification available on this machine: `npm run type-check`, `npm run lint`,
@@ -127,7 +128,15 @@ rules manager, the generate route, and the generator read/write only these shape
 - Rotation: call `get_recent_match_history(group_id, 5)` and pass teammate-pair counts
   so the model rotates combinations.
 - `matches.ai_input_snapshot` stores `{ input, output, provider, model, generatedAt }`
-  with the full payload sent and received.
+  with the full payload sent and received. `input` carries the players summary,
+  rules, teammate-pair history, the previous lineup (on "Regenerar"), the output
+  language and the last prompt text (null when the fallback ran without calling
+  the model). A manual publish sets the snapshot to NULL on purpose: the
+  analysis describes the generated lineup, not a hand-edited one.
+- Goalkeeper minimum (Sep 24): "GK-willing" means `goalkeeper_willingness >= 1`.
+  The minimum (min_goalkeepers value, default 1 per team) is a hard constraint
+  only when at least 2 × that many players are GK-willing; otherwise it is a
+  soft preference and a warning says so. Guests default to not GK-willing.
 - Team generation sets match status to `teams_created` (a direct update in the route
   is fine in wave 1; T1's `admin_set_match_status` lands in the same wave).
 - Manual editing (`draggable-teams.tsx`): must support guests (keep
