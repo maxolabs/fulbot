@@ -12,6 +12,8 @@ import {
 
 // Score displays. Only render these for admins and captains: player_rating_summary
 // is not readable by anyone else, so a member would only ever see defaults here.
+// A summary is one group's row (OD-9): pass the row of the group on screen, never
+// a row from another group the player is also in.
 
 function fmt(value: number | null | undefined): string {
   return value === null || value === undefined ? '–' : value.toFixed(1)

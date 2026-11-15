@@ -288,11 +288,13 @@ export default async function GroupDetailPage({ params }: PageProps) {
     for (const m of finished) { if (m.mvp_player_id) { const row = rowFor(m.mvp_player_id); if (row) row.mvp += 1 } }
 
     // Scores are visible to admins and captains only (RLS on player_rating_summary
-    // enforces it; this just avoids a pointless query for members).
+    // enforces it; this just avoids a pointless query for members). Ratings are
+    // per group (OD-9): this group's rows only.
     if (isAdminOrCaptain && tableById.size > 0) {
       const { data: summaryRows } = await supabase
         .from('player_rating_summary')
         .select('player_id, overall')
+        .eq('group_id', group.id)
         .in('player_id', Array.from(tableById.keys())) as { data: { player_id: string; overall: number }[] | null }
       for (const s of summaryRows || []) { const row = tableById.get(s.player_id); if (row) row.rating = s.overall }
     }
@@ -461,7 +463,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
       <TopBarConfig
         title={<GroupSwitcherTitle fallback={group.name} />}
         action={
-          isAdmin ? (
+          isAdminOrCaptain ? (
             <TopBarAction href={`/groups/${groupSlug}/settings`} label={t('ui.shell.groupSettings')}>
               <Settings className="h-5 w-5" strokeWidth={1.75} />
             </TopBarAction>

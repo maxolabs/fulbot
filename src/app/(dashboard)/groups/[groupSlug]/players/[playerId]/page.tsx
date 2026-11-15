@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { SkillSummaryCard } from '@/components/player-skills'
 import { MemberScoreBreakdown, MemberScoreStars } from '@/components/member-score'
 import { MemberEventDeleteButton, MemberScoreAdjust } from '@/components/member-score-adjust'
-import type { RatingSummary } from '@/lib/ratings'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Eyebrow } from '@/components/ui/eyebrow'
@@ -194,7 +194,8 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   if (isAdminOrCaptain) {
     const { data: summaryRow } = await supabase
       .from('player_rating_summary')
-      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .select(RATING_SUMMARY_COLUMNS)
+      .eq('group_id', group.id)
       .eq('player_id', playerId)
       .maybeSingle() as { data: RatingSummary | null }
     ratingSummary = summaryRow
@@ -255,11 +256,14 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       ...(s.matches as { id: string; date_time: string; location: string | null; status: string }),
     }))
 
+  // Post-match ratings received in this group's matches only, like every
+  // rating on this page (OD-9).
   type RatingAgg = { rating: number }
   const { data: ratingsReceived } = await supabase
     .from('match_ratings')
-    .select('rating')
-    .eq('rated_player_id', playerId) as { data: RatingAgg[] | null }
+    .select('rating, matches!inner(group_id)')
+    .eq('rated_player_id', playerId)
+    .eq('matches.group_id', group.id) as unknown as { data: RatingAgg[] | null }
 
   const avgRating = ratingsReceived && ratingsReceived.length > 0
     ? ratingsReceived.reduce((sum, r) => sum + r.rating, 0) / ratingsReceived.length
@@ -515,6 +519,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>{t('ui.screens.player.groupRating')}</CardTitle>
+                <CardDescription className="text-pretty">{t('ui.teamsPrivacy.ratingScope')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <SkillSummaryCard summary={ratingSummary} language={language} />

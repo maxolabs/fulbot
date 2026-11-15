@@ -1082,6 +1082,16 @@
       "removeError": "Couldn't remove the rule. Try again.",
       "unknownPlayer": "Unknown player"
     },
+    "groupRules": {
+      "title": "Group rules",
+      "hint": "They apply to every match of the group when teams are made. Each match's own rules add to these.",
+      "empty": "No group rules yet. Teams are balanced by level and position.",
+      "captainNote": "Admins manage the rest of the group settings."
+    },
+    "teamsPrivacy": {
+      "ratingScope": "Built from this group's ratings and matches only. Only admins and captains see it.",
+      "analysisPrivate": "Only admins and captains see it."
+    },
     "workflow": {
       "title": "Match organization",
       "signupStep": "Registration",

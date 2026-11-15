@@ -170,6 +170,35 @@ export type Database = {
           },
         ]
       }
+      match_ai_snapshots: {
+        Row: {
+          created_at: string
+          match_id: string
+          snapshot: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          match_id: string
+          snapshot: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          match_id?: string
+          snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_ai_snapshots_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: true
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       match_events: {
         Row: {
           created_at: string
@@ -532,7 +561,6 @@ export type Database = {
       }
       matches: {
         Row: {
-          ai_input_snapshot: Json | null
           created_at: string | null
           date_time: string
           duration_minutes: number
@@ -556,7 +584,6 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
-          ai_input_snapshot?: Json | null
           created_at?: string | null
           date_time: string
           duration_minutes?: number
@@ -580,7 +607,6 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
-          ai_input_snapshot?: Json | null
           created_at?: string | null
           date_time?: string
           duration_minutes?: number
@@ -1104,6 +1130,7 @@ export type Database = {
           attack: number | null
           defense: number | null
           goalkeeping: number | null
+          group_id: string
           matches_rated: number
           overall: number
           peer_votes: number
@@ -1116,6 +1143,7 @@ export type Database = {
           attack?: number | null
           defense?: number | null
           goalkeeping?: number | null
+          group_id: string
           matches_rated?: number
           overall?: number
           peer_votes?: number
@@ -1128,6 +1156,7 @@ export type Database = {
           attack?: number | null
           defense?: number | null
           goalkeeping?: number | null
+          group_id?: string
           matches_rated?: number
           overall?: number
           peer_votes?: number
@@ -1138,9 +1167,16 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "player_rating_summary_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "player_rating_summary_player_id_fkey"
             columns: ["player_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "player_profiles"
             referencedColumns: ["id"]
           },
@@ -1672,7 +1708,6 @@ export type Database = {
       admin_set_match_max_players: {
         Args: { p_match_id: string; p_max_players: number }
         Returns: {
-          ai_input_snapshot: Json | null
           created_at: string | null
           date_time: string
           duration_minutes: number
@@ -1718,7 +1753,6 @@ export type Database = {
           p_status: Database["public"]["Enums"]["match_status"]
         }
         Returns: {
-          ai_input_snapshot: Json | null
           created_at: string | null
           date_time: string
           duration_minutes: number
@@ -1759,6 +1793,7 @@ export type Database = {
         Args: { p_match_id: string }
         Returns: undefined
       }
+      ai_snapshot_for_storage: { Args: { p_snapshot: Json }; Returns: Json }
       auto_finish_match: { Args: { p_match_id: string }; Returns: boolean }
       award_badges_for_match: {
         Args: { p_match_id: string }
@@ -1868,6 +1903,14 @@ export type Database = {
         Returns: number
       }
       get_current_player_id: { Args: never; Returns: string }
+      get_match_guest_ratings: {
+        Args: { p_match_id: string }
+        Returns: {
+          estimated_rating: number
+          guest_player_id: string
+          notes: string
+        }[]
+      }
       get_match_join_info: { Args: { p_match_id: string }; Returns: Json }
       get_match_mvp: { Args: { p_match_id: string }; Returns: string }
       get_member_scores: {
@@ -2017,7 +2060,7 @@ export type Database = {
         Returns: undefined
       }
       recompute_player_rating: {
-        Args: { p_player_id: string }
+        Args: { p_group_id: string; p_player_id: string }
         Returns: undefined
       }
       recompute_player_stats: {

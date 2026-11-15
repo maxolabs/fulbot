@@ -102,7 +102,8 @@ export interface PairCountSummary {
 export interface GenerateTeamsResult extends GeneratedTeams {
   provider: Provider
   model?: string
-  /** Last prompt sent to the model (null when none was), for ai_input_snapshot. */
+  /** Last prompt sent to the model (null when none was). For debugging only: it
+   * carries ratings and member scores, so it is never stored (OD-6). */
   prompt: string | null
   /** Teammate-pair counts among this match's players, as given to the model. */
   pairHistory: PairCountSummary[]

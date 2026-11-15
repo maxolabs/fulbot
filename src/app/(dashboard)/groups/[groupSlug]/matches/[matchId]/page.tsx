@@ -17,7 +17,7 @@ import { MatchWorkflow } from './match-workflow'
 import { LineupStaleNotice } from './teams/lineup-stale-notice'
 import { AddGuestForm } from './add-guest-form'
 import { PostMatchVoting } from './post-match-voting'
-import { RulesManager } from './rules-manager'
+import { RulesManager } from '@/components/rules-manager'
 import { RealtimeWrapper } from './realtime-wrapper'
 import { ShareActions } from '@/components/share-actions'
 import { MatchResults } from './match-results'
@@ -148,8 +148,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
     guest_players: {
       id: string
       display_name: string
-      notes: string | null
-      estimated_rating: number | null
       preferred_positions: string[]
     } | null
   }
@@ -175,8 +173,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
       guest_players (
         id,
         display_name,
-        notes,
-        estimated_rating,
         preferred_positions
       )
     `)
@@ -184,11 +180,29 @@ export default async function MatchDetailPage({ params }: PageProps) {
     .in('status', ['confirmed', 'waitlist', 'did_not_show'])
     .order('signup_time') as { data: SignupResult[] | null }
 
-  // A guest's estimated level is for organizers only (TS-4): members don't
-  // get it in the page payload at all.
-  const signups = isAdminOrCaptain
-    ? signupRows
-    : (signupRows || []).map((s) => s.guest_players ? { ...s, guest_players: { ...s.guest_players, estimated_rating: null } } : s)
+  // A guest's estimated level and notes are for organizers only (TS-4): the
+  // columns are not selectable (00035), get_match_guest_ratings returns them
+  // to admins and captains, and members never get them in the payload.
+  const guestLevels = new Map<string, { estimated_rating: number | null; notes: string | null }>()
+  if (isAdminOrCaptain && (signupRows || []).some((s) => s.guest_players)) {
+    const { data: levelRows } = await supabase.rpc('get_match_guest_ratings', { p_match_id: matchId })
+    for (const row of levelRows || []) {
+      guestLevels.set(row.guest_player_id, {
+        estimated_rating: row.estimated_rating === null ? null : Number(row.estimated_rating),
+        notes: row.notes,
+      })
+    }
+  }
+  const signups = (signupRows || []).map((s) => s.guest_players
+    ? {
+        ...s,
+        guest_players: {
+          ...s.guest_players,
+          estimated_rating: guestLevels.get(s.guest_players.id)?.estimated_rating ?? null,
+          notes: guestLevels.get(s.guest_players.id)?.notes ?? null,
+        },
+      }
+    : s)
 
   const confirmedSignups = (signups || []).filter(s => s.status === 'confirmed')
   const noShowSignups = (signups || []).filter(s => s.status === 'did_not_show')
@@ -209,12 +223,14 @@ export default async function MatchDetailPage({ params }: PageProps) {
   ))
 
   // Scores are visible to admins and captains only (RLS on player_rating_summary
-  // enforces it; this just avoids a pointless query for members).
+  // enforces it; this just avoids a pointless query for members). Ratings are
+  // per group (OD-9): this group's row only.
   const ratingsById: Record<string, number> = {}
   if (isAdminOrCaptain && listedPlayerIds.length > 0) {
     const { data: summaryRows } = await supabase
       .from('player_rating_summary')
       .select('player_id, overall')
+      .eq('group_id', group.id)
       .in('player_id', listedPlayerIds) as { data: { player_id: string; overall: number }[] | null }
     for (const row of summaryRows || []) {
       ratingsById[row.player_id] = row.overall

@@ -9,7 +9,7 @@ import { PlayerRow, PositionChip } from '@/components/ui/player-row'
 import { MemberScoreStars } from '@/components/member-score'
 import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
-import { overallOf, summariesById, type RatingSummary } from '@/lib/ratings'
+import { overallOf, summariesById, RATING_SUMMARY_COLUMNS, type RatingSummary } from '@/lib/ratings'
 import { getT } from '@/i18n/server'
 import type { Language } from '@/i18n/core'
 import type { MemberScoringSettings } from '@/types/database'
@@ -149,7 +149,8 @@ export default async function GroupPlayersPage({ params, searchParams }: PagePro
   if (isAdminOrCaptain && players.length > 0) {
     const { data: summaryRows } = await supabase
       .from('player_rating_summary')
-      .select('player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated')
+      .select(RATING_SUMMARY_COLUMNS)
+      .eq('group_id', group.id)
       .in('player_id', players.map((p) => p.id)) as { data: RatingSummary[] | null }
     summaries = summariesById(summaryRows)
   }

@@ -1,9 +1,13 @@
-// Initial scoring: shared vocabulary for peer ratings (see migration 00018_peer_ratings.sql).
+// Initial scoring: shared vocabulary for peer ratings (see migrations 00018_peer_ratings.sql
+// and 00035_teams_ratings_privacy.sql).
 //
 // Peers rate each other per group on four 1-5 dimensions plus structured tags. The
-// database aggregates everything into player_rating_summary, which only admins and
-// captains can read; the pieces below are what the rating form, the score displays
-// and the team generator agree on.
+// database aggregates everything into player_rating_summary, one row per (group, player)
+// built from that group's peer ratings and post-match ratings only (OD-9), readable only
+// by the group's admins and captains. Every reader filters on the current group
+// (`.eq('group_id', groupId)`): a player in two groups has two independent rows. The
+// pieces below are what the rating form, the score displays and the team generator
+// agree on.
 
 export const RATING_DIMENSIONS = ['goalkeeping', 'defense', 'attack', 'physical'] as const
 export type RatingDimension = (typeof RATING_DIMENSIONS)[number]
@@ -105,7 +109,12 @@ export interface PlayerSkills {
   physical: number
 }
 
-// Row shape of player_rating_summary as the app reads it.
+// Columns every reader selects from player_rating_summary (always with
+// `.eq('group_id', …)`, see the header).
+export const RATING_SUMMARY_COLUMNS =
+  'player_id, goalkeeping, defense, attack, physical, overall, tags, peer_votes, matches_rated' as const
+
+// Row shape of player_rating_summary as the app reads it (one group's row).
 export interface RatingSummary {
   player_id: string
   goalkeeping: number | null

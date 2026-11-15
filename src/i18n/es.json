@@ -1082,6 +1082,16 @@
       "removeError": "No se pudo quitar la regla. Probá de nuevo.",
       "unknownPlayer": "Jugador desconocido"
     },
+    "groupRules": {
+      "title": "Reglas del grupo",
+      "hint": "Se aplican en todos los partidos del grupo al armar los equipos. Las reglas de cada partido se suman a estas.",
+      "empty": "Todavía no hay reglas del grupo. Los equipos se balancean por nivel y posición.",
+      "captainNote": "El resto de los ajustes del grupo los manejan los admins."
+    },
+    "teamsPrivacy": {
+      "ratingScope": "Sale de las calificaciones y los partidos de este grupo. Solo la ven los admins y capitanes.",
+      "analysisPrivate": "Solo la ven los admins y capitanes."
+    },
     "workflow": {
       "title": "Organización del partido",
       "signupStep": "Inscripciones",
