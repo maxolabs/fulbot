@@ -16,6 +16,7 @@ import { useT } from '@/i18n/provider'
 import { cn } from '@/lib/utils/cn'
 import type { Database } from '@/types/database'
 import { signupErrorKey } from '@/app/(dashboard)/groups/[groupSlug]/matches/[matchId]/use-signup-action'
+import { isRemovedByAdminError } from '@/lib/membership-errors'
 
 // The visitor's signup state on /m/[matchId] (docs/ui-rework/03-screens.md
 // §12). One component owns every RPC and renders two things from the same
@@ -44,6 +45,8 @@ interface PublicMatchActionsProps {
   memberSignup: MemberSignup | null
   guestSignup: GuestSignup | null
   inviteCode: string | null
+  /** An admin removed the signed-in visitor from the group: no join path (OD-1). */
+  removedByAdmin?: boolean
   children?: ReactNode
 }
 
@@ -73,6 +76,7 @@ export function PublicMatchActions({
   memberSignup,
   guestSignup,
   inviteCode,
+  removedByAdmin = false,
   children,
 }: PublicMatchActionsProps) {
   const t = useT()
@@ -166,6 +170,10 @@ export function PublicMatchActions({
       router.refresh()
     } catch (err) {
       console.error('Error joining and signing up:', err)
+      if (isRemovedByAdminError(err)) {
+        setError(t('ui.membership.removedByAdmin'))
+        return
+      }
       fail(err, 'ui.screens.publicMatch.joinSignupError')
     } finally {
       setLoading(false)
@@ -267,6 +275,9 @@ export function PublicMatchActions({
         </>
       )
     }
+  } else if (isLoggedIn && !isMember && removedByAdmin) {
+    // Signed in but removed by an admin: the invite path is closed for them.
+    inline = <p role="status" className="text-sm text-muted-foreground text-pretty">{t('ui.membership.removedByAdmin')}</p>
   } else if (isLoggedIn && !isMember) {
     // Case 4: signed in, not a member yet -- join then sign up in one step
     inline = isClosed ? <p className="text-sm text-muted-foreground">{t('ui.screens.publicMatch.closed')}</p> : null

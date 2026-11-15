@@ -32,8 +32,10 @@ interface PublicGroup {
   default_match_time: string | null
   timezone: string | null
   member_count: number
-  // The visitor's own membership: a removed member's row is invisible to them under RLS
-  viewer_membership: 'active' | 'inactive' | null
+  // The visitor's own membership: a former member's row is invisible to them under
+  // RLS. 'inactive' left on their own (can rejoin); 'removed' was removed by an
+  // admin and cannot rejoin until re-added (OD-1, 00033).
+  viewer_membership: 'active' | 'inactive' | 'removed' | null
   next_match: {
     id: string
     date_time: string
@@ -147,6 +149,16 @@ export default async function InvitePage({ params }: PageProps) {
 
     if (group.viewer_membership === 'active') {
       redirect(`/groups/${group.slug}`)
+    }
+
+    if (group.viewer_membership === 'removed') {
+      return (
+        <Message
+          title={t('ui.membership.removedTitle', { group: group.name })}
+          body={t('ui.membership.removedByAdmin')}
+          cta={{ href: '/groups', label: t('ui.shell.myGroups') }}
+        />
+      )
     }
   }
 

@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
@@ -7,9 +6,9 @@ import type { Language } from '@/i18n/core'
 import type { ThemePreference } from './actions'
 import { DeviceNotifications } from '@/components/device-notifications'
 import { SettingsForm } from './settings-form'
+import { AccountSection } from './account-section'
 import { PageHeader } from '@/components/layout/page-header'
 import { TopBarConfig } from '@/components/layout/top-bar'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Preferences (docs/ui-rework/03-screens.md §10): one column max-w-xl.
@@ -55,6 +54,13 @@ export default async function SettingsPage() {
     : { data: [] as { role: string }[] }
   const isStaff = (staffRoles ?? []).length > 0
 
+  // "Borrar mi cuenta" is disabled, with the reason, while the user is the only
+  // admin of a group that has other members (00033 refuses it as well).
+  const { data: blockerRows } = playerProfile
+    ? await supabase.rpc('account_deletion_blockers') as { data: { group_name: string }[] | null }
+    : { data: [] as { group_name: string }[] }
+  const deletionBlockers = (blockerRows ?? []).map((b) => b.group_name)
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <TopBarConfig title={t('ui.shell.preferences')} back="/profile" />
@@ -86,17 +92,11 @@ export default async function SettingsPage() {
           <CardDescription>{t('ui.screens.preferences.accountDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="[&>li:last-child]:border-b-0">
-            <li className="flex min-h-11 items-center justify-between gap-4 border-b border-border py-3">
-              <span className="text-sm font-medium">{t('ui.screens.preferences.accountEmail')}</span>
-              <span className="min-w-0 truncate text-sm text-muted-foreground">{user.email}</span>
-            </li>
-            <li className="flex min-h-11 items-center justify-end border-b border-border py-3">
-              <Button asChild variant="outline" size="sm">
-                <Link href="/update-password?redirect=/settings">{t('ui.screens.preferences.changePassword')}</Link>
-              </Button>
-            </li>
-          </ul>
+          <AccountSection
+            email={user.email ?? ''}
+            pendingEmail={user.new_email ?? null}
+            deletionBlockers={deletionBlockers}
+          />
         </CardContent>
       </Card>
     </div>
