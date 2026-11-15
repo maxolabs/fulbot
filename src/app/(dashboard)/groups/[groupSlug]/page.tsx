@@ -253,6 +253,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
   }
   const recent = finished.slice(0, 3)
   const lastResultMatch = finished.find(m => scoreOf(m) !== null) ?? finished[0] ?? null
+  // Finished without teams (00034, OD-3): attendance only, there is no score to load.
+  const isAttendanceOnly = (m: FinishedRow) => (m.teams?.length ?? 0) === 0
+  const noScoreLabel = (m: FinishedRow) =>
+    isAttendanceOnly(m) ? t('ui.lifecycle.attendanceOnly.badge') : t('ui.matchScreens.dashboard.noScore')
 
   // Table · últimos 10 (PJ, G, MVP; rating for admin/captain). Members only.
   type TableRow = { id: string; name: string; played: number; goals: number; mvp: number; rating: number | null }
@@ -341,7 +345,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
     const endMs = (m: NudgeCandidate) => m.finished_at
       ? new Date(m.finished_at).getTime()
       : new Date(m.date_time).getTime() + (m.duration_minutes ?? 60) * 60 * 1000
-    const candidates = (candidateRows || []).filter(m => now - endMs(m) < windowMs)
+    // Attendance-only matches (no teams) have nothing to report.
+    const withTeams = new Set(finished.filter(m => !isAttendanceOnly(m)).map(m => m.id))
+    const candidates = (candidateRows || []).filter(m => withTeams.has(m.id) && now - endMs(m) < windowMs)
     if (candidates.length > 0) {
       const ids = candidates.map(m => m.id)
       const [{ data: mySignups }, { data: myReports }] = await Promise.all([
@@ -674,7 +680,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                   <ScoreText dark={lastScore.dark} light={lastScore.light} className="text-lg leading-none" />
                 ) : (
                   <span className="truncate text-sm text-muted-foreground">
-                    {lastResultMatch ? t('ui.matchScreens.dashboard.noScore') : t('ui.matchScreens.dashboard.lastResultEmpty')}
+                    {lastResultMatch ? noScoreLabel(lastResultMatch) : t('ui.matchScreens.dashboard.lastResultEmpty')}
                   </span>
                 )}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
@@ -743,7 +749,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
                           score ? (
                             <ScoreText dark={score.dark} light={score.light} className="text-base" />
                           ) : (
-                            <MatchStatusBadge status={m.status} label={t(`matches.status.${m.status}`)} />
+                            <MatchStatusBadge
+                              status={m.status}
+                              label={isAttendanceOnly(m) ? t('ui.lifecycle.attendanceOnly.badge') : t(`matches.status.${m.status}`)}
+                            />
                           )
                         }
                       />
@@ -846,7 +855,7 @@ export default async function GroupDetailPage({ params }: PageProps) {
                         <span>{t('ui.matchScreens.dashboard.light')}</span>
                       </span>
                     ) : (
-                      <span className="text-sm text-muted-foreground">{t('ui.matchScreens.dashboard.noScore')}</span>
+                      <span className="text-sm text-muted-foreground">{noScoreLabel(lastResultMatch)}</span>
                     )}
                   </Link>
                   <p className="text-xs text-muted-foreground">

@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { Database } from '@/types/database'
+import type { Database, GuestPriorityHold, WaitlistReason } from '@/types/database'
 import Link from 'next/link'
 import { PublicFrame } from '@/components/layout/public-frame'
 import { Button } from '@/components/ui/button'
@@ -226,7 +226,23 @@ export default async function PublicMatchPage({ params }: PageProps) {
   // guest_players/match_signups aren't readable by anon, so this lookup goes
   // through the service-role client -- never trusting anything besides the
   // opaque token itself.
-  let guestSignup: { status: 'confirmed' | 'waitlist'; waitlistPosition: number | null } | null = null
+  let guestSignup: {
+    status: 'confirmed' | 'waitlist'
+    waitlistPosition: number | null
+    waitlistReason: WaitlistReason | null
+  } | null = null
+  // Members first while the group's priority policy runs (00034, OD-8): a
+  // guest signing up now may land on the waitlist, and the page says so.
+  let guestHold: GuestPriorityHold | null = null
+
+  if (!isMember && !isPast) {
+    try {
+      const { data: hold } = await createAdminClient().rpc('guest_priority_hold', { p_match_id: matchId })
+      guestHold = (hold as GuestPriorityHold | null) ?? null
+    } catch (err) {
+      console.error('Error reading the guest priority policy:', err)
+    }
+  }
 
   if (!isMember) {
     const guestToken = cookieStore.get(`fulbot_guest_${matchId}`)?.value
@@ -243,16 +259,19 @@ export default async function PublicMatchPage({ params }: PageProps) {
         if (guestRow) {
           const { data: signupRow } = await admin
             .from('match_signups')
-            .select('status, waitlist_position')
+            .select('status, waitlist_position, waitlist_reason')
             .eq('match_id', matchId)
             .eq('guest_player_id', guestRow.id)
             .in('status', ['confirmed', 'waitlist'])
-            .maybeSingle() as { data: { status: string; waitlist_position: number | null } | null }
+            .maybeSingle() as {
+              data: { status: string; waitlist_position: number | null; waitlist_reason: string | null } | null
+            }
 
           if (signupRow) {
             guestSignup = {
               status: signupRow.status as 'confirmed' | 'waitlist',
               waitlistPosition: signupRow.waitlist_position,
+              waitlistReason: (signupRow.waitlist_reason as WaitlistReason | null) ?? null,
             }
           }
         }
@@ -302,7 +321,7 @@ export default async function PublicMatchPage({ params }: PageProps) {
       </header>
 
       <div className="mt-6">
-        {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests unaffected */}
+        {/* Member scoring policy notice for logged-in members (docs/member-scoring.md §6); guests get theirs in PublicMatchActions (00034, OD-8) */}
         {!isPast && isMember && !memberSignup && match.status === 'signup_open' && groupId && profileId && (
           <div className="mb-6">
             <SignupPolicyNotice
@@ -323,6 +342,8 @@ export default async function PublicMatchPage({ params }: PageProps) {
           isMember={isMember}
           memberSignup={memberSignup}
           guestSignup={guestSignup}
+          guestHold={guestHold}
+          timeZone={timeZone}
           inviteCode={inviteCode}
         >
           <section className="space-y-2">
