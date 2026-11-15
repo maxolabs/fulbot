@@ -157,7 +157,8 @@ changes the consensus double-counts.
    `now() > date_time + duration` for matches in `teams_created` (the only state the
    transition table allows). Admin's manual "Finalizar" stays as an early exit.
    Matches that never got teams stay where they are and the admin sees a
-   "sin equipos, no se puede cerrar" hint.
+   "sin equipos, no se puede cerrar" hint. *(Superseded by OD-3 / 00034: they finish
+   with attendance only, by the ticker or "Finalizar sin equipos".)*
 2. **T + delay.** `results_request` notification: in-app for every confirmed player
    (deep link `/groups/[slug]/matches/[id]#reportar`) and one WhatsApp group
    message ("¿Cómo salió? Cargá el resultado: <link>"). Respect
