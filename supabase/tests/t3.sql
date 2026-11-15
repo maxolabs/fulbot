@@ -508,7 +508,16 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM public.match_ratings mr
                       WHERE mr.match_id = m.id AND mr.rated_player_id = pg_temp.pid('fede@test.local'))
     ORDER BY m.date_time DESC LIMIT 1;
-    IF v_finished IS NULL THEN RAISE EXCEPTION 'T3-4 fixture: no finished lunes match without fede ratings'; END IF;
+    IF v_finished IS NULL THEN
+        -- A fresh seed rates everyone in every finished match: free one up
+        -- (the whole script runs inside a transaction that is rolled back).
+        SELECT m.id INTO v_finished FROM public.matches m
+        WHERE m.group_id = pg_temp.ctx('lunes')::UUID AND m.status = 'finished'
+        ORDER BY m.date_time DESC LIMIT 1;
+        IF v_finished IS NULL THEN RAISE EXCEPTION 'T3-4 fixture: no finished lunes match'; END IF;
+        DELETE FROM public.match_ratings
+        WHERE match_id = v_finished AND rated_player_id = pg_temp.pid('fede@test.local');
+    END IF;
 
     SELECT matches_rated INTO v_lunes_before FROM public.player_rating_summary
     WHERE group_id = pg_temp.ctx('lunes')::UUID AND player_id = pg_temp.pid('fede@test.local');
