@@ -257,16 +257,13 @@ export default async function PlayerProfilePage({ params }: PageProps) {
     }))
 
   // Post-match ratings received in this group's matches only, like every
-  // rating on this page (OD-9).
-  type RatingAgg = { rating: number }
-  const { data: ratingsReceived } = await supabase
-    .from('match_ratings')
-    .select('rating, matches!inner(group_id)')
-    .eq('rated_player_id', playerId)
-    .eq('matches.group_id', group.id) as unknown as { data: RatingAgg[] | null }
-
-  const avgRating = ratingsReceived && ratingsReceived.length > 0
-    ? ratingsReceived.reduce((sum, r) => sum + r.rating, 0) / ratingsReceived.length
+  // rating on this page (OD-9). Individual ratings are private to their voter
+  // (00037), so the average comes from a members-only RPC.
+  const { data: ratingAvgRows } = await supabase
+    .rpc('get_player_match_rating_avg', { p_group_id: group.id, p_player_id: playerId })
+  const ratingAvgRow = ratingAvgRows?.[0]
+  const avgRating = ratingAvgRow && ratingAvgRow.ratings > 0 && ratingAvgRow.avg_rating != null
+    ? Number(ratingAvgRow.avg_rating)
     : null
 
   const positionLabel = (code: string) => {

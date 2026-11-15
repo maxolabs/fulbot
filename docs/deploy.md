@@ -30,7 +30,7 @@ Later: [future migrations](#7-future-migrations), [monitoring](#8-monitoring),
 ## 1. Database
 
 The hosted database is built only from `supabase/migrations`
-(`00001_…` to `00036_…`), applied in order by the Supabase CLI. The CLI
+(`00001_…` to `00037_…`), applied in order by the Supabase CLI. The CLI
 records each applied version in `supabase_migrations.schema_migrations`, so
 `supabase db push` only ever applies what is missing. Nothing is pasted into
 the SQL editor by hand.
@@ -44,7 +44,7 @@ Create the project (Postgres 17, like `[db] major_version` in
 supabase login                              # once per machine
 supabase link --project-ref <project-ref>   # asks for the database password
 supabase migration list                     # fresh project: the Remote column is empty
-supabase db push --dry-run                  # lists 00001 … 00036
+supabase db push --dry-run                  # lists 00001 … 00037
 supabase db push                            # applies them in order
 supabase migration list                     # every row now has Local = Remote
 ```
@@ -144,7 +144,9 @@ The links:
   `/api/auth/confirm` unwraps the `?next=` inside `RedirectTo` to send the
   player back to the invite or page they came from.
 - email change: `…&type=email_change&next=/settings`. Each of the two links
-  (current and new address) verifies its own token and lands on `/settings`.
+  (current and new address) verifies its own token and lands on `/settings`
+  (or on `/login?redirect=/settings` when opened in a browser that is not
+  signed in; the change is applied either way).
   With the default template the first click would end on `/login?error`.
 
 A link that fails (expired, already used) lands on `/login` with a message
@@ -193,8 +195,9 @@ curl -sS -X PATCH "https://api.supabase.com/v1/projects/<project-ref>/config/aut
   --data @/tmp/fulbot-auth.json | jq '{site_url, uri_allow_list, mailer_subjects_email_change}'
 ```
 
-`uri_allow_list` is comma-separated; append the preview pattern if you use
-one. SMTP goes in the same endpoint (`smtp_host`, `smtp_port`, `smtp_user`,
+`uri_allow_list` is comma-separated and the call **replaces** the whole
+list: include every entry you want to keep (preview pattern, localhost) in
+`$allow`, e.g. `--arg allow "$APP_URL/api/auth/**,http://localhost:3000/api/auth/**"`. SMTP goes in the same endpoint (`smtp_host`, `smtp_port`, `smtp_user`,
 `smtp_pass`, `smtp_admin_email`, `smtp_sender_name`) or in the dashboard;
 raise `rate_limit_email_sent` to 30 once SMTP is set. Check the result in the
 dashboard (Templates shows the Spanish HTML).
@@ -202,13 +205,15 @@ dashboard (Templates shows the Spanish HTML).
 ## 3. Vercel
 
 Project → Settings → Environment Variables, for Production (and Preview if
-you use previews). `NEXT_PUBLIC_*` values are inlined at build time: redeploy
-after changing one. Mark the server-only secrets as Sensitive.
+you use previews). Vercel applies environment changes only to new
+deployments: redeploy after changing **any** variable (`NEXT_PUBLIC_*` values
+are also inlined at build time). In particular, set `CRON_SECRET` and
+redeploy before storing the Vault secrets of step 4, or every tick gets 401. Mark the server-only secrets as Sensitive.
 
 | Variable | Required | What it does · how to get it |
 |----------|----------|------------------------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL, `https://<ref>.supabase.co` (Project Settings → Data API). Browser and server clients. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | The `anon` key (Project Settings → API Keys, the JWT-based keys, like the local stack). Browser and server clients under RLS. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | The `anon` key (Project Settings → API Keys, the JWT-based "legacy" keys, like the local stack). Browser and server clients under RLS. The app has not been tested with the newer `sb_publishable_…` / `sb_secret_…` keys; keep the legacy keys enabled until it is. |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | The `service_role` key, same page. **Server only.** Used by the admin client: the scheduler tick and cron routes, guest sign-up on `/m`, push delivery, `/api/health`, and account deletion (`/api/account/delete`), which needs it to delete the Auth user. |
 | `NEXT_PUBLIC_APP_URL` | yes | The canonical production URL, no trailing slash, e.g. `https://fulbot.app`. Invite, share and WhatsApp links, Open Graph. Use the same value for the Supabase Site URL and the Vault secret `fulbot_app_url`. Falls back to `https://$VERCEL_PROJECT_PRODUCTION_URL` on Vercel. |
 | `CRON_SECRET` | yes | `openssl rand -hex 32`. Every `/api/cron/*` route and the detailed `/api/health` require `Authorization: Bearer $CRON_SECRET`. The same value goes into the Vault secret `fulbot_cron_secret`; Vercel Cron sends it to `/api/cron/daily` by itself. |
@@ -315,6 +320,10 @@ curl -s -H "Authorization: Bearer $CRON_SECRET" https://fulbot.app/api/health | 
 # driver.job.active true, driver.secrets.app_url/cron_secret true,
 # driver.last_run.status "succeeded", driver.last_response.status_code 200
 ```
+
+`driver.last_response` is the newest row in pg_net's response table, whoever
+queued the request. The ticker is the only pg_net caller today; if another
+feature starts using pg_net, read that field with care (or filter by URL).
 
 The same from SQL:
 

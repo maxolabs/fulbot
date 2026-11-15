@@ -27,7 +27,7 @@ test('lineup_changed: the promoted player took the slot, no review asked (OD-2)'
     TZ,
     { channel: 'inapp' }
   )
-  assert.match(text, /^Se bajó Agus del partido/)
+  assert.match(text, /^Agus ya no está en el partido/)
   assert.match(text, /Gonza entra de la lista de espera y ocupa su lugar en Oscuro\./)
   assert.match(text, /No hace falta tocar los equipos\./)
   assert.doesNotMatch(text, /Revisá los equipos/)

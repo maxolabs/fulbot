@@ -1977,6 +1977,13 @@ export type Database = {
           signup_cooldown: boolean
         }[]
       }
+      get_player_match_rating_avg: {
+        Args: { p_group_id: string; p_player_id: string }
+        Returns: {
+          avg_rating: number
+          ratings: number
+        }[]
+      }
       get_public_group_by_invite: {
         Args: { p_invite_code: string }
         Returns: Json

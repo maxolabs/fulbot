@@ -1168,8 +1168,8 @@
         "locked": "This match no longer accepts changes to the list."
       },
       "notifications": {
-        "lateLeftOne": "{names} dropped out of the match on {date} {time} ({group}), a few hours before kickoff.",
-        "lateLeftMany": "{names} dropped out of the match on {date} {time} ({group}), a few hours before kickoff.",
+        "lateLeftOne": "{names} is no longer in the match on {date} {time} ({group}), a few hours before kickoff.",
+        "lateLeftMany": "{names} are no longer in the match on {date} {time} ({group}), a few hours before kickoff.",
         "latePromoted": "{names} comes in from the waitlist.",
         "lateNoPromotedOne": "Nobody is on the waitlist: 1 spot is open.",
         "lateNoPromotedMany": "Nobody is on the waitlist: {count} spots are open.",
@@ -1487,8 +1487,8 @@
       "matchCancelled": "The match on {date} {time}{location} -- {group} was cancelled.",
       "matchUpdatedWhen": "The {group} match moved: it was {oldDate} {oldTime}, now it is {date} {time}{location}.",
       "matchUpdatedWhere": "The match on {date} {time} ({group}) changed place: it is now at {place}.",
-      "lineupLeftOne": "{names} dropped out of the match on {date} {time} ({group}) after teams were published.",
-      "lineupLeftMany": "{names} dropped out of the match on {date} {time} ({group}) after teams were published.",
+      "lineupLeftOne": "{names} is no longer in the match on {date} {time} ({group}) after teams were published.",
+      "lineupLeftMany": "{names} are no longer in the match on {date} {time} ({group}) after teams were published.",
       "lineupPromoted": "{names} comes in from the waitlist. Check the teams.",
       "lineupNoPromotedOne": "Nobody is on the waitlist: 1 spot is open. Check the teams.",
       "lineupNoPromotedMany": "Nobody is on the waitlist: {count} spots are open. Check the teams.",

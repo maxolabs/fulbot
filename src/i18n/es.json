@@ -1168,8 +1168,8 @@
         "locked": "Este partido ya no admite cambios en la lista."
       },
       "notifications": {
-        "lateLeftOne": "Se bajó {names} del partido del {date} {time}hs ({group}), a pocas horas de jugar.",
-        "lateLeftMany": "Se bajaron {names} del partido del {date} {time}hs ({group}), a pocas horas de jugar.",
+        "lateLeftOne": "{names} ya no está en el partido del {date} {time}hs ({group}), a pocas horas de jugar.",
+        "lateLeftMany": "{names} ya no están en el partido del {date} {time}hs ({group}), a pocas horas de jugar.",
         "latePromoted": "Entra {names} de la lista de espera.",
         "lateNoPromotedOne": "No hay nadie en espera: queda 1 lugar libre.",
         "lateNoPromotedMany": "No hay nadie en espera: quedan {count} lugares libres.",
@@ -1487,8 +1487,8 @@
       "matchCancelled": "Se suspendió el partido del {date} {time}hs{location} -- {group}.",
       "matchUpdatedWhen": "Cambió el horario del partido de {group}: era el {oldDate} {oldTime}hs, ahora es el {date} {time}hs{location}.",
       "matchUpdatedWhere": "Cambió el lugar del partido del {date} {time}hs ({group}): ahora es en {place}.",
-      "lineupLeftOne": "Se bajó {names} del partido del {date} {time}hs ({group}) con los equipos ya armados.",
-      "lineupLeftMany": "Se bajaron {names} del partido del {date} {time}hs ({group}) con los equipos ya armados.",
+      "lineupLeftOne": "{names} ya no está en el partido del {date} {time}hs ({group}) con los equipos ya armados.",
+      "lineupLeftMany": "{names} ya no están en el partido del {date} {time}hs ({group}) con los equipos ya armados.",
       "lineupPromoted": "Entra {names} de la lista de espera. Revisá los equipos.",
       "lineupNoPromotedOne": "No hay nadie en espera: queda 1 lugar libre. Revisá los equipos.",
       "lineupNoPromotedMany": "No hay nadie en espera: quedan {count} lugares libres. Revisá los equipos.",

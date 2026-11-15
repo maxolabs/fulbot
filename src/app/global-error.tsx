@@ -9,7 +9,9 @@ import './globals.css'
 // <body>. The root layout is gone, so this reads the same cookies it does:
 // fulbot_lang for the language and fulbot_theme ('light' | 'dark' | 'system',
 // dark when absent) for the palette, and puts the app's font variables on
-// <html>.
+// <html>. ErrorScreen draws the dark chalkboard frame (PublicFrame), like
+// not-found and the route error pages, so the screen itself always looks the
+// same; the theme class only matters for anything rendered outside that frame.
 //
 // Rendered on the client the class is right from the first render. If it is
 // ever server-rendered there are no cookies to read here, so the inline script
