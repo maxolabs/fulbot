@@ -10,6 +10,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitMatchReminders } from '@/lib/notifications/reminders'
 
+// Next 14 serves GET fetches from its Data Cache in a route handler that only
+// exports GET, and supabase-js reads are GET fetches: without these, a query
+// with a constant URL would return its first answer forever.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

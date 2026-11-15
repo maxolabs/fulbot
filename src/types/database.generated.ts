@@ -1863,6 +1863,7 @@ export type Database = {
         Args: { p_match_id: string }
         Returns: undefined
       }
+      fulbot_cron_tick: { Args: never; Returns: number }
       generate_recurring_matches: {
         Args: { p_group_id?: string }
         Returns: number
@@ -1903,6 +1904,7 @@ export type Database = {
           results_window_days: number
         }[]
       }
+      get_ticker_status: { Args: never; Returns: Json }
       get_unread_notification_count: { Args: never; Returns: number }
       insert_member_event: {
         Args: {

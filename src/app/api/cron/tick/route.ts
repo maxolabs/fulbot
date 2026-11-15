@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runTick } from '@/lib/notifications/tick'
 
 export const dynamic = 'force-dynamic'
+// Explicit, like the other scheduler routes: never serve a supabase-js read
+// from Next's Data Cache (today the POST export already prevents it).
+export const fetchCache = 'force-no-store'
 
 function isAuthorized(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization')

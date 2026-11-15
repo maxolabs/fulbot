@@ -26,6 +26,12 @@ import { drainOutbox } from '@/lib/notifications/dispatch'
 import { emitMatchReminders } from '@/lib/notifications/reminders'
 import { runTick, type TickResult } from '@/lib/notifications/tick'
 
+// Next 14 serves GET fetches from its Data Cache in a route handler that only
+// exports GET, and supabase-js reads are GET fetches: without these, a query
+// with a constant URL would return its first answer forever.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Error desconocido'
 }
